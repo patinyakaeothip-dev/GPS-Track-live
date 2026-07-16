@@ -3,61 +3,43 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Trail Run Tracker</title>
+  <meta name="theme-color" content="#2d6a4f"/>
+  <title>Rayong Trail Running · GPS Tracker</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&family=Noto+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js"></script>
+
   <style>
-    body { font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
-      background: #f5f1e8; color: #1f2a1c; padding: 48px 20px;
-      max-width: 540px; margin: 0 auto; }
-    h1 { font-size: 28px; margin: 0 0 6px; letter-spacing: -0.02em; color: #1f4d39; }
-    .sub { color: #5d6b59; font-size: 14px; margin-bottom: 32px; }
-    .card { background: #fff; border: 1px solid #d8d2c2; border-radius: 8px;
-      padding: 20px; margin-bottom: 16px; }
-    .card h2 { margin: 0 0 6px; font-size: 17px; color: #1f4d39; }
-    .card p { margin: 0 0 12px; font-size: 14px; color: #5d6b59; line-height: 1.5; }
-    .card a { display: inline-block; padding: 10px 16px; background: #2d6a4f;
-      color: #fff; text-decoration: none; border-radius: 6px; font-weight: 600;
-      font-size: 14px; }
-    .card .secondary { background: transparent; color: #2d6a4f;
-      border: 1px solid #2d6a4f; margin-left: 8px; }
-    code { background: #f5f1e8; padding: 2px 6px; border-radius: 4px;
-      font-family: ui-monospace, monospace; font-size: 13px; }
+    html, body { margin: 0; background: #efe9dc; font-family: 'Plus Jakarta Sans','Noto Sans Thai',ui-sans-serif,system-ui,sans-serif; }
+    * { box-sizing: border-box; }
+    #stage { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; gap: 14px; }
+    #phone { width: 402px; max-width: 100%; height: 850px; max-height: 90vh; border-radius: 40px; overflow: hidden;
+      box-shadow: 0 30px 70px rgba(31,42,28,0.25), 0 0 0 10px #1a1a1a; position: relative; background: #efe9dc; }
+    #root { height: 100%; }
+    .rd-link { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; color: #5d6b59; text-decoration: none;
+      padding: 8px 14px; border: 1px solid #d8d2c2; border-radius: 999px; background: #fff; }
+    .rd-link:hover { border-color: #2d6a4f; color: #2d6a4f; }
   </style>
 </head>
 <body>
-  <h1>🌲 Trail Run Tracker</h1>
-  <div class="sub">Rayong Trail Running 2026</div>
-
-  <div class="card">
-    <h2>📱 สำหรับนักวิ่ง</h2>
-    <p>สแกน QR ที่จุด Start/A1/A2/Finish · หรือเปิดลิงก์โดยตรง:</p>
-    <a href="runner/?cp=start">Start</a>
-    <a class="secondary" href="runner/?cp=a1">A1</a>
-    <a class="secondary" href="runner/?cp=a2">A2</a>
-    <a class="secondary" href="runner/?cp=finish">Finish</a>
+  <div id="stage">
+    <div id="phone"><div id="root"></div></div>
+    <a class="rd-link" href="monitor.html">🖥 สำหรับ Race Director · เปิด Live Monitor →</a>
+    <a class="rd-link" href="results/">📊 ดูผลการวิ่งทั้งหมด →</a>
   </div>
 
-  <div class="card">
-    <h2>📊 ผลการวิ่งทั้งหมด · ดูลำดับของคุณ</h2>
-    <p>หลังเข้าเส้นชัย · ดูเวลา / ลำดับ / เพซเฉลี่ย ของทุกคน · กรองตามระยะ</p>
-    <a href="results/">เปิดผลการวิ่ง →</a>
-  </div>
-
-  <div class="card">
-    <h2>🖥 สำหรับ Race Director · Live Monitor</h2>
-    <p>ติดตามนักวิ่ง 150 คนแบบ real-time · กราฟ Ascend + roster + alert feed · poll ทุก 10s</p>
-    <a href="monitor.html">เปิด Live Monitor →</a>
-    <a class="secondary" href="dashboard.html">Design canvas</a>
-  </div>
-
-  <div class="card">
-    <h2>🖨 พิมพ์ poster A4</h2>
-    <p>เปิดหน้านี้บน laptop · ใส่ base URL · กด Print</p>
-    <a href="posters/qr-posters.html">เปิดหน้าพิมพ์ poster →</a>
-  </div>
-
-  <div class="card">
-    <h2>ℹ️ Setup ครั้งแรก</h2>
-    <p>แก้ <code>runner/index.html</code> · paste <code>TRT_API_URL</code> จาก Apps Script Web App · upload ใหม่</p>
-  </div>
+  <script src="src/api.js"></script>
+  <script type="text/babel" src="src/data.jsx"></script>
+  <script type="text/babel" src="src/i18n.jsx"></script>
+  <script type="text/babel" src="src/mobile-app.jsx"></script>
+  <script type="text/babel">
+    ReactDOM.createRoot(document.getElementById('root')).render(<MobileApp/>);
+  </script>
 </body>
 </html>
