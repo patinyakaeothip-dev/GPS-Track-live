@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Rayong Trail · ใบประกาศ</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&family=Geist+Mono:wght@400;500;600&family=Noto+Sans+Thai:wght@400;500;600;700;800&family=Playfair+Display:ital,wght@1,700;1,800;1,900&display=swap" rel="stylesheet">
+  <style>
+    @page { size: A4 portrait; margin: 0; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0;
+      font-family: 'Geist', 'Noto Sans Thai', ui-sans-serif, system-ui, sans-serif;
+      background: #d8d2c2; color: #1f2a1c; }
+
+    .toolbar { padding: 12px 20px; background: #1f4d39; color: #fff;
+      display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+      font-size: 14px; }
+    .toolbar button { padding: 8px 16px; background: #fff; color: #1f4d39;
+      border: none; border-radius: 4px; font-weight: 600; cursor: pointer;
+      font-family: inherit; font-size: 14px; }
+    .toolbar button.alt { background: transparent; color: #fff;
+      border: 1px solid rgba(255,255,255,0.4); }
+    .stage { padding: 24px; display: flex; justify-content: center; }
+
+    /* A4 portrait = 210mm × 297mm */
+    .cert {
+      width: 210mm; height: 297mm;
+      position: relative; background: #fff;
+      page-break-after: always;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.18);
+      display: flex; flex-direction: column;
+      padding: 14mm 14mm 12mm;
+    }
+
+    /* ── Top: logo + brand ────────────────────────────────── */
+    .top {
+      display: flex; align-items: center; gap: 12px;
+      padding-bottom: 8mm; border-bottom: 2px solid #2d6a4f;
+    }
+    .top img { width: 52px; height: auto; border-radius: 4px; }
+    .top .name {
+      font-family: 'Playfair Display','Geist',serif;
+      font-style: italic; font-weight: 800;
+      font-size: 19pt; letter-spacing: -0.01em;
+      line-height: 1; color: #1f4d39;
+    }
+    .top .sub {
+      font-family: 'Geist Mono',monospace;
+      font-size: 8pt; letter-spacing: 0.22em;
+      text-transform: uppercase; color: #5d6b59;
+      margin-top: 4px;
+    }
+    .top .badge {
+      margin-left: auto;
+      font-family: 'Geist Mono',monospace;
+      font-size: 8pt; letter-spacing: 0.24em;
+      text-transform: uppercase; color: #1f4d39;
+      padding: 5px 12px; border: 1.5px solid #2d6a4f;
+      border-radius: 999px;
+    }
+
+    /* ── Center: SQUARE photo with overlaid name/stats ────── */
+    .photo-wrap {
+      margin-top: 10mm;
+      width: 100%; aspect-ratio: 1 / 1;
+      position: relative; overflow: hidden; border-radius: 4px;
+      color: #fff;
+      /* fallback gradient + SVG mountain if the custom image is missing */
+      background:
+        url('assets/certificate-bg.jpg') center/cover no-repeat,
+        linear-gradient(180deg, #4a7c5e 0%, #2d6a4f 45%, #1f4d39 100%);
+    }
+    .photo-wrap::before {
+      /* default mountain silhouette behind any uploaded photo;
+         hidden under the photo when it loads (no-op visually). */
+      content: ''; position: absolute; left: 0; right: 0; bottom: 0;
+      height: 55%; z-index: 0;
+      background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 400' preserveAspectRatio='none'><path d='M0 400 L0 280 L120 220 L210 260 L330 180 L420 240 L520 150 L640 200 L760 130 L880 200 L1000 170 L1100 240 L1200 200 L1200 400 Z' fill='%231a3d2f' opacity='0.55'/><path d='M0 400 L0 320 L160 290 L290 320 L410 270 L540 300 L680 260 L820 290 L960 250 L1080 290 L1200 270 L1200 400 Z' fill='%23163528' opacity='0.7'/></svg>") center bottom / 100% 100% no-repeat;
+    }
+    /* Bottom-fade overlay so the overlaid text is always readable */
+    .photo-wrap::after {
+      content: ''; position: absolute; inset: 0;
+      background: linear-gradient(180deg,
+        rgba(0,0,0,0) 0%, rgba(0,0,0,0) 38%,
+        rgba(31,77,57,0.15) 52%,
+        rgba(0,0,0,0.65) 78%, rgba(0,0,0,0.85) 100%);
+      pointer-events: none; z-index: 1;
+    }
+
+    /* Top-right finisher pill on the photo */
+    .photo-pill {
+      position: absolute; top: 8mm; right: 8mm; z-index: 3;
+      font-family: 'Geist Mono',monospace; font-size: 8pt;
+      letter-spacing: 0.24em; text-transform: uppercase;
+      padding: 6px 14px; background: rgba(255,255,255,0.15);
+      border: 1px solid rgba(255,255,255,0.5);
+      border-radius: 999px;
+      backdrop-filter: blur(8px);
+    }
+
+    /* Overlay box: name + tagline + stats — anchored to the bottom of the photo */
+    .overlay-info {
+      position: absolute; left: 0; right: 0; bottom: 0;
+      padding: 10mm 12mm 12mm; z-index: 2;
+    }
+    .kicker {
+      font-family: 'Geist Mono',monospace;
+      font-size: 8pt; letter-spacing: 0.36em;
+      text-transform: uppercase; opacity: 0.85;
+      margin-bottom: 4mm;
+    }
+    .runner-name {
+      font-family: 'Playfair Display','Noto Sans Thai',serif; font-style: italic;
+      font-size: 36pt; font-weight: 800; line-height: 1;
+      letter-spacing: -0.025em;
+      text-shadow: 0 2px 14px rgba(0,0,0,0.45);
+    }
+    .achievement {
+      font-family: 'Noto Sans Thai','Geist',sans-serif;
+      font-size: 12pt; margin-top: 4mm; opacity: 0.95;
+      line-height: 1.4;
+    }
+    .achievement b { font-weight: 700; }
+    .adjusted {
+      display: inline-block; margin-left: 6mm;
+      padding: 2px 8px; font-family: 'Geist Mono',monospace;
+      font-size: 7pt; letter-spacing: 0.14em; text-transform: uppercase;
+      border: 1px solid rgba(255,255,255,0.5); border-radius: 3px;
+    }
+
+    .stats {
+      display: grid; grid-template-columns: 1fr 1fr 1fr;
+      gap: 0; margin-top: 8mm; padding-top: 6mm;
+      border-top: 1px solid rgba(255,255,255,0.35);
+    }
+    .stat { text-align: center;
+      border-right: 1px solid rgba(255,255,255,0.2); padding: 0 6px; }
+    .stat:last-child { border-right: none; }
+    .stat-label {
+      font-family: 'Geist Mono',monospace;
+      font-size: 8pt; letter-spacing: 0.18em;
+      opacity: 0.8; text-transform: uppercase;
+    }
+    .stat-value {
+      font-family: 'Playfair Display','Geist',serif; font-style: italic;
+      font-size: 24pt; font-weight: 800;
+      margin-top: 2mm; font-variant-numeric: tabular-nums;
+      text-shadow: 0 1px 8px rgba(0,0,0,0.3);
+    }
+
+    /* ── Footer below the photo ──────────────────────────── */
+    .footer {
+      margin-top: auto;  /* push to bottom of the page */
+      padding-top: 8mm;
+      display: flex; justify-content: space-between; align-items: end;
+    }
+    .signature {
+      flex: 0 0 auto; text-align: center;
+    }
+    .signature .line {
+      border-top: 1px solid #5d6b59; padding-top: 4px;
+      min-width: 56mm;
+      font-family: 'Geist Mono',monospace; font-size: 8pt;
+      letter-spacing: 0.18em; text-transform: uppercase; color: #5d6b59;
+    }
+    .meta {
+      text-align: right; font-family: 'Geist Mono',monospace;
+      font-size: 9pt; color: #5d6b59;
+    }
+    .meta .when { font-weight: 600; color: #1f4d39;
+      font-size: 11pt; letter-spacing: 0; }
+    .meta .web { margin-top: 2px; font-size: 8pt;
+      letter-spacing: 0.14em; opacity: 0.8; }
+
+    @media print {
+      body { background: #fff; }
+      .toolbar, .stage { padding: 0 !important; background: #fff; }
+      .cert { box-shadow: none; }
+      .no-print { display: none !important; }
+      * { -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="toolbar no-print">
+    <span>📜 ใบประกาศ · กด Print เพื่อ Save as PDF</span>
+    <button onclick="window.print()">🖨 Print / Save as PDF</button>
+    <button class="alt" onclick="window.history.back()">← กลับ</button>
+    <span style="margin-left:auto;opacity:.7;font-family:monospace;font-size:11px;">
+      เปลี่ยนรูป: ทับไฟล์ <code style="color:#fff;">assets/certificate-bg.jpg</code>
+    </span>
+  </div>
+
+  <div class="stage">
+    <div class="cert">
+      <!-- Top: logo + brand -->
+      <div class="top">
+        <img src="assets/rayong-trail-logo.jpg" alt=""/>
+        <div>
+          <div class="name">Rayong Trail Running</div>
+          <div class="sub" id="year">2026 · Trail Run Tracker</div>
+        </div>
+        <div class="badge">Certificate</div>
+      </div>
+
+      <!-- Center: square photo with overlaid info -->
+      <div class="photo-wrap">
+        <div class="photo-pill" id="badge">FINISHER</div>
+        <div class="overlay-info">
+          <div class="kicker">ใบประกาศ · Certificate of Finisher</div>
+          <div class="runner-name" id="name">ธีระ ศรีสุข</div>
+          <div class="achievement">
+            เข้าเส้นชัยระยะ <b id="distance">29K</b> ในเวลา <b id="time">3:45:12</b>
+            <span class="adjusted" id="adjusted" style="display:none;">
+              จาก <span id="orig-dist">22K</span>
+            </span>
+          </div>
+          <div class="stats">
+            <div class="stat">
+              <div class="stat-label">เวลา · Time</div>
+              <div class="stat-value" id="s-time">3:45:12</div>
+            </div>
+            <div class="stat">
+              <div class="stat-label">เพซ · Pace</div>
+              <div class="stat-value" id="s-pace">7'46"</div>
+            </div>
+            <div class="stat">
+              <div class="stat-label">ลำดับ · Rank</div>
+              <div class="stat-value" id="s-rank">#12</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bottom: signature + date -->
+      <div class="footer">
+        <div class="signature">
+          <div class="line">Race Director</div>
+        </div>
+        <div class="meta">
+          <div class="when" id="date">14 มิถุนายน 2569</div>
+          <div class="web">RAYONGTRAIL · 2026</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const STORAGE_KEY = 'trt.finish.result';
+    const TH_MONTHS = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.',
+                       'ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+
+    function fmtElapsed(ms) {
+      if (!ms || ms < 0) return '—';
+      const s = Math.floor(ms / 1000);
+      const h = Math.floor(s / 3600);
+      const m = Math.floor((s % 3600) / 60);
+      const r = s % 60;
+      return (h > 0 ? h + ':' + String(m).padStart(2,'0') : m) + ':' + String(r).padStart(2,'0');
+    }
+    function fmtPace(ms, km) {
+      if (!ms || !km) return '—';
+      const min = ms / 60000 / km;
+      const mm = Math.floor(min);
+      const ss = Math.round((min - mm) * 60);
+      return `${mm}'${String(ss).padStart(2,'0')}"`;
+    }
+    function thaiDate(ts) {
+      const d = ts ? new Date(Number(ts)) : new Date();
+      return d.getDate() + ' ' + TH_MONTHS[d.getMonth()] + ' ' + (d.getFullYear() + 543);
+    }
+    function set(id, v) { const el = document.getElementById(id); if (el) el.textContent = v; }
+
+    function render(data) {
+      if (!data || !data.runner) {
+        const ov = document.querySelector('.overlay-info');
+        ov.innerHTML = '<div class="kicker">ยังไม่มีข้อมูลการเข้าเส้นชัย · ' +
+          'เปิดหน้านี้ผ่านปุ่ม "บันทึกใบประกาศ" หลังเข้าเส้นชัย</div>';
+        return;
+      }
+      const r = data.runner;
+      const distKm = parseInt(r.distance_current) || data.distance_km || 0;
+      set('name', r.name || '—');
+      set('distance', r.distance_current || '—');
+      set('time', fmtElapsed(data.total_time_ms));
+      set('s-time', fmtElapsed(data.total_time_ms));
+      set('s-pace', fmtPace(data.total_time_ms, distKm));
+      set('s-rank', data.rank ? '#' + data.rank : '—');
+      set('date', thaiDate(data.finish_at));
+      const yr = data.finish_at ? new Date(Number(data.finish_at)).getFullYear() : new Date().getFullYear();
+      set('year', (yr + 543) + ' · Certificate of Achievement');
+      if (r.distance_original && r.distance_original !== r.distance_current) {
+        set('orig-dist', r.distance_original);
+        document.getElementById('adjusted').style.display = 'inline-block';
+      }
+      if (data.rank && data.rank <= 3) {
+        const medals = { 1: 'GOLD · #1', 2: 'SILVER · #2', 3: 'BRONZE · #3' };
+        set('badge', medals[data.rank]);
+      }
+    }
+
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      render(raw ? JSON.parse(raw) : null);
+    } catch (e) { console.error('[trt] cert load error', e); }
+  </script>
+</body>
+</html>

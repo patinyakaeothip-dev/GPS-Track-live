@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#2d6a4f"/>
+  <title>Rayong Trail · เช็คอิน</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&family=Noto+Sans+Thai:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
+
+  <style>
+    html, body, #root { margin: 0; padding: 0; height: 100%; }
+    body {
+      font-family: 'Geist', 'Noto Sans Thai', ui-sans-serif, system-ui, sans-serif;
+      color: #1f2a1c; background: #fafaf8;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+    * { box-sizing: border-box; }
+    /* Print-as-certificate styling — keeps brand colors, removes the
+       Save/Share buttons and the medal-pickup banner. */
+    @media print {
+      @page { size: A4 portrait; margin: 12mm; }
+      body { background: #fff !important; }
+      body.trt-print-cert button { display: none !important; }
+    }
+    @media print {
+      * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+    }
+  </style>
+</head>
+<body>
+  <!-- ──────────────────────────────────────────────────────────────────────
+       Backend URL — paste the Apps Script Web App URL deployed from
+       backend/Code.gs. The CP id is read from ?cp=… in the URL, so a
+       single HTML works for every poster.
+       ────────────────────────────────────────────────────────────────────── -->
+  <script>
+    window.TRT_API_URL = 'https://script.google.com/macros/s/AKfycbxIaYNeW3DkIbIEGmWYL93eL903qyi409Mrlf1NUqMld6dEQDOq9YQEvExjitgVQGp0Zw/exec'; // ← paste here
+  </script>
+
+  <div id="root"></div>
+
+  <!-- Shared API client + RA palette + helpers · ?v cache-busts CDN -->
+  <script src="../src/api.js?v=13"></script>
+  <script type="text/babel" src="../src/runner-app.jsx?v=13"></script>
+  <script type="text/babel" src="../src/runner-live.jsx?v=13"></script>
+
+  <script type="text/babel">
+    function readParam(name, fallback) {
+      try { return new URL(window.location.href).searchParams.get(name) || fallback; }
+      catch (_) { return fallback; }
+    }
+    const cp   = readParam('cp', 'a1').toLowerCase();
+    const lang = readParam('lang', 'th');
+
+    function App() {
+      return <LiveRunnerApp cp={cp} lang={lang} showChrome={false}/>;
+    }
+    ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+  </script>
+</body>
+</html>

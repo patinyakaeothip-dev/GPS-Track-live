@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#2d6a4f"/>
+  <meta name="robots" content="noindex,nofollow"/>
+  <title>Trail Run Tracker · Admin</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&family=Noto+Sans+Thai:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js"></script>
+
+  <style>
+    html, body, #root { margin:0; padding:0; min-height:100%; }
+    body { font-family: 'Geist', 'Noto Sans Thai', ui-sans-serif, system-ui, sans-serif;
+      color:#1f2a1c; background:#f5f1e8;
+      -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+    * { box-sizing: border-box; }
+  </style>
+</head>
+<body>
+  <script>
+    window.TRT_API_URL = 'https://script.google.com/macros/s/AKfycbxIaYNeW3DkIbIEGmWYL93eL903qyi409Mrlf1NUqMld6dEQDOq9YQEvExjitgVQGp0Zw/exec';
+  </script>
+
+  <div id="root"></div>
+
+  <script src="../src/api.js?v=10"></script>
+
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+    const BRAND = '#2d6a4f', BRAND_DK = '#1f4d39', TEXT = '#1f2a1c', MUTED = '#5d6b59';
+    const BORDER = '#d8d2c2', ALERT = '#b91c1c';
+    const MONO = '"Geist Mono", ui-monospace, "SF Mono", monospace';
+
+    const TOKEN_KEY = 'trt.admin.key';
+
+    function AdminPage() {
+      const [key, setKey] = useState(() => { try { return sessionStorage.getItem(TOKEN_KEY) || ''; } catch (_) { return ''; } });
+      const [status, setStatus] = useState(null);
+      const [err, setErr] = useState(null);
+      const [busy, setBusy] = useState(false);
+      const [resetTyping, setResetTyping] = useState('');
+      const [editingMsg, setEditingMsg] = useState(false);
+      const [msgTh, setMsgTh] = useState('');
+      const [msgEn, setMsgEn] = useState('');
+      const [toast, setToast] = useState(null);
+
+      async function call(op, extra) {
+        setBusy(true); setErr(null);
+        try {
+          const res = await window.api('admin', Object.assign({ op: op, key: key }, extra || {}));
+          return res;
+        } catch (e) {
+          setErr(e.code || e.message || 'error');
+          throw e;
+        } finally {
+          setBusy(false);
+        }
+      }
+
+      async function login(k) {
+        const trial = k != null ? k : key;
+        if (!trial) { setErr('กรอกรหัสผ่านก่อน'); return; }
+        setBusy(true); setErr(null);
+        try {
+          const res = await window.api('admin', { op: 'status', key: trial });
+          setStatus(res);
+          setKey(trial);
+          try { sessionStorage.setItem(TOKEN_KEY, trial); } catch (_) {}
+          setMsgTh(res.messages?.th || ''); setMsgEn(res.messages?.en || '');
+        } catch (e) {
+          setErr(e.code === 'unauthorized' ? 'รหัสผ่านไม่ถูก' : (e.code === 'admin_not_configured' ? 'ยังไม่ได้ตั้ง ADMIN_KEY ใน Apps Script' : (e.code || e.message)));
+        } finally {
+          setBusy(false);
+        }
+      }
+
+      async function refresh() {
+        try { const res = await call('status'); setStatus(res); } catch (_) {}
+      }
+
+      async function toggleState() {
+        const newState = status.state === 'open' ? 'closed' : 'open';
+        try {
+          await call('set_state', { state: newState });
+          setToast(newState === 'open' ? '✅ เปิดระบบแล้ว' : '🔒 ปิดระบบแล้ว · นักวิ่งจะเห็นข้อความว่าระบบยังไม่เปิด');
+          await refresh();
+        } catch (_) {}
+        setTimeout(() => setToast(null), 3000);
+      }
+
+      async function doReset() {
+        if (resetTyping !== 'RESET') return;
+        try {
+          const res = await call('reset', { confirm: 'YES' });
+          setToast(`🗑 Reset เรียบร้อย · backup ที่ tab _archive_${res.archived?.timestamp}`);
+          setResetTyping('');
+          await refresh();
+        } catch (_) {}
+        setTimeout(() => setToast(null), 6000);
+      }
+
+      async function saveMessages() {
+        try {
+          await call('set_messages', { message_th: msgTh, message_en: msgEn });
+          setEditingMsg(false);
+          setToast('✅ บันทึกข้อความแล้ว');
+          await refresh();
+        } catch (_) {}
+        setTimeout(() => setToast(null), 3000);
+      }
+
+      function logout() {
+        try { sessionStorage.removeItem(TOKEN_KEY); } catch (_) {}
+        setKey(''); setStatus(null); setErr(null);
+      }
+
+      // Auto-login if we have a saved key
+      useEffect(() => { if (key && !status) login(key); /* eslint-disable-line */ }, []);
+
+      // ── Login screen ────────────────────────────────────────────────
+      if (!status) {
+        return (
+          <div style={{ maxWidth: 380, margin: '80px auto', padding: '0 20px' }}>
+            <div style={{ background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 10,
+              padding: 24 }}>
+              <h1 style={{ margin: 0, fontSize: 22, color: BRAND_DK, letterSpacing: '-0.02em' }}>
+                🔐 Admin
+              </h1>
+              <div style={{ marginTop: 4, fontSize: 13, color: MUTED }}>Trail Run Tracker</div>
+
+              <div style={{ marginTop: 22 }}>
+                <label style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '0.08em',
+                  textTransform: 'uppercase', color: MUTED, display: 'block', marginBottom: 6 }}>
+                  ADMIN KEY
+                </label>
+                <input type="password" value={key}
+                  onChange={e => setKey(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') login(); }}
+                  placeholder="รหัสผ่านที่ตั้งไว้ใน Script Properties"
+                  style={{ width: '100%', padding: '12px 14px', border: `1px solid ${BORDER}`,
+                    borderRadius: 6, fontFamily: MONO, fontSize: 14, outline: 'none' }}
+                  autoFocus/>
+              </div>
+              {err && (
+                <div style={{ marginTop: 12, padding: '8px 12px', background: '#fee2e2',
+                  border: '1px solid #fca5a5', borderRadius: 6,
+                  fontFamily: MONO, fontSize: 11, color: '#7f1d1d' }}>⚠ {err}</div>
+              )}
+              <button onClick={() => login()} disabled={busy} style={{
+                width: '100%', marginTop: 14, padding: '14px',
+                background: busy ? '#a8b1a3' : BRAND, color: '#fff', border: 'none',
+                borderRadius: 6, fontSize: 15, fontWeight: 600,
+                cursor: busy ? 'wait' : 'pointer',
+              }}>{busy ? '...' : 'เข้าระบบ'}</button>
+
+              <div style={{ marginTop: 18, fontFamily: MONO, fontSize: 10,
+                color: MUTED, lineHeight: 1.5, background: '#fafaf8',
+                padding: 10, borderRadius: 6 }}>
+                ตั้งรหัสผ่านที่ Apps Script → Script Properties → Add property
+                key: <b>ADMIN_KEY</b> · value: รหัสที่คุณตั้ง
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      // ── Authenticated dashboard ─────────────────────────────────────
+      const isOpen = status.state === 'open';
+      return (
+        <div style={{ maxWidth: 640, margin: '0 auto', padding: '24px 20px 60px' }}>
+          {toast && (
+            <div style={{ position: 'fixed', top: 12, left: '50%', transform: 'translateX(-50%)',
+              padding: '10px 16px', background: BRAND_DK, color: '#fff',
+              borderRadius: 6, fontSize: 13, zIndex: 100,
+              boxShadow: '0 6px 20px rgba(0,0,0,0.2)' }}>{toast}</div>
+          )}
+
+          {/* Header */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, paddingBottom: 16,
+            borderBottom: `2px solid ${BRAND}` }}>
+            <div style={{ flex: 1 }}>
+              <h1 style={{ margin: 0, fontSize: 22, color: BRAND_DK, letterSpacing: '-0.02em' }}>
+                🔐 Admin
+              </h1>
+              <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '0.14em',
+                textTransform: 'uppercase', color: MUTED, marginTop: 2 }}>
+                Rayong Trail · Control panel
+              </div>
+            </div>
+            <button onClick={logout} style={{
+              padding: '6px 12px', background: 'transparent', color: MUTED,
+              border: `1px solid ${BORDER}`, borderRadius: 6,
+              fontFamily: MONO, fontSize: 11, cursor: 'pointer',
+            }}>← ออก</button>
+          </div>
+
+          {/* State card */}
+          <div style={{ marginTop: 20, background: '#fff', border: `1px solid ${BORDER}`,
+            borderRadius: 10, padding: 20 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '0.08em',
+                  textTransform: 'uppercase', color: MUTED }}>สถานะระบบ</div>
+                <div style={{ fontSize: 24, fontWeight: 700, marginTop: 4,
+                  color: isOpen ? BRAND : ALERT, letterSpacing: '-0.02em' }}>
+                  {isOpen ? '🟢 เปิด' : '🔒 ปิด'}
+                </div>
+                <div style={{ fontSize: 12, color: MUTED, marginTop: 4, lineHeight: 1.5 }}>
+                  {isOpen
+                    ? 'นักวิ่ง register / checkin / DNF ได้ปกติ'
+                    : 'นักวิ่งจะเห็นข้อความที่ตั้งไว้แทน · ไม่มีข้อมูลใหม่เข้าระบบ'}
+                </div>
+              </div>
+              <button onClick={toggleState} disabled={busy} style={{
+                padding: '14px 20px',
+                background: isOpen ? '#fff' : BRAND,
+                color: isOpen ? ALERT : '#fff',
+                border: `2px solid ${isOpen ? ALERT : BRAND}`,
+                borderRadius: 8, fontSize: 15, fontWeight: 700,
+                cursor: busy ? 'wait' : 'pointer', minWidth: 120,
+              }}>{isOpen ? 'ปิดระบบ' : 'เปิดระบบ'}</button>
+            </div>
+          </div>
+
+          {/* Counts */}
+          <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: 'repeat(4,1fr)',
+            gap: 8 }}>
+            <Stat label="นักวิ่ง" value={status.counts.runners}/>
+            <Stat label="Checkins" value={status.counts.checkins}/>
+            <Stat label="เข้าเส้น" value={status.counts.finished} accent={BRAND}/>
+            <Stat label="DNF" value={status.counts.dnf_runners} accent={ALERT}/>
+          </div>
+
+          <button onClick={refresh} disabled={busy} style={{
+            marginTop: 12, padding: '8px 14px', background: 'transparent',
+            color: MUTED, border: `1px solid ${BORDER}`, borderRadius: 6,
+            fontFamily: MONO, fontSize: 11, cursor: busy ? 'wait' : 'pointer',
+          }}>↻ refresh</button>
+
+          {/* Closed message editor */}
+          <div style={{ marginTop: 24, background: '#fff', border: `1px solid ${BORDER}`,
+            borderRadius: 10, padding: 20 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 600, color: TEXT }}>ข้อความตอนปิดระบบ</div>
+                <div style={{ fontSize: 12, color: MUTED, marginTop: 2 }}>
+                  นักวิ่งเห็นเมื่อ scan QR ตอนระบบปิด
+                </div>
+              </div>
+              <button onClick={() => setEditingMsg(!editingMsg)} style={{
+                padding: '6px 12px', background: 'transparent',
+                color: BRAND, border: `1px solid ${BRAND}`, borderRadius: 6,
+                fontFamily: MONO, fontSize: 11, fontWeight: 600, cursor: 'pointer',
+              }}>{editingMsg ? 'ยกเลิก' : 'แก้ไข'}</button>
+            </div>
+            {editingMsg ? (
+              <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <textarea value={msgTh} onChange={e => setMsgTh(e.target.value)}
+                  placeholder="ข้อความภาษาไทย"
+                  rows={2} style={textareaStyle()}/>
+                <textarea value={msgEn} onChange={e => setMsgEn(e.target.value)}
+                  placeholder="Message in English"
+                  rows={2} style={textareaStyle()}/>
+                <button onClick={saveMessages} disabled={busy} style={{
+                  padding: '10px', background: BRAND, color: '#fff', border: 'none',
+                  borderRadius: 6, fontSize: 14, fontWeight: 600,
+                  cursor: busy ? 'wait' : 'pointer',
+                }}>บันทึก</button>
+              </div>
+            ) : (
+              <div style={{ marginTop: 10, padding: 12, background: '#fafaf8',
+                borderRadius: 6, fontSize: 13, color: TEXT, lineHeight: 1.6 }}>
+                <div>{status.messages?.th || '(ใช้ค่า default)'}</div>
+                <div style={{ marginTop: 4, color: MUTED, fontStyle: 'italic' }}>
+                  {status.messages?.en || '(using default)'}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Danger zone */}
+          <div style={{ marginTop: 24, background: '#fff7f7', border: `2px solid #fca5a5`,
+            borderRadius: 10, padding: 20 }}>
+            <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '0.12em',
+              textTransform: 'uppercase', color: ALERT, fontWeight: 700 }}>
+              ⚠ Danger zone
+            </div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: TEXT, marginTop: 6 }}>
+              Reset ข้อมูลทั้งหมด
+            </div>
+            <div style={{ fontSize: 13, color: '#7f1d1d', marginTop: 6, lineHeight: 1.6 }}>
+              ลบ runner / checkin / DNF ทั้งหมด · ใช้ก่อนเริ่มงานจริง<br/>
+              <b>ข้อมูลปัจจุบันจะ archive ไปที่ tab `*_archive_YYYYMMDD_HHMM`</b> ใน Google Sheet · กู้คืนได้
+            </div>
+            <div style={{ marginTop: 14 }}>
+              <label style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '0.08em',
+                textTransform: 'uppercase', color: MUTED, display: 'block', marginBottom: 6 }}>
+                พิมพ์ <code style={{ background:'#fff', padding:'1px 6px', borderRadius:3, color:ALERT }}>RESET</code> เพื่อยืนยัน
+              </label>
+              <input value={resetTyping}
+                onChange={e => setResetTyping(e.target.value)}
+                placeholder="RESET"
+                style={{ width: '100%', padding: '10px 12px', border: `1px solid ${BORDER}`,
+                  borderRadius: 6, fontFamily: MONO, fontSize: 14, background:'#fff', outline:'none' }}/>
+              <button onClick={doReset} disabled={busy || resetTyping !== 'RESET'} style={{
+                width: '100%', marginTop: 10, padding: '14px',
+                background: resetTyping === 'RESET' && !busy ? ALERT : '#e5e5e5',
+                color: '#fff', border: 'none', borderRadius: 6,
+                fontSize: 15, fontWeight: 700,
+                cursor: resetTyping === 'RESET' && !busy ? 'pointer' : 'not-allowed',
+              }}>🗑 Reset · archive + ล้างข้อมูล</button>
+            </div>
+          </div>
+
+          {err && (
+            <div style={{ marginTop: 16, padding: '8px 12px', background: '#fee2e2',
+              border: '1px solid #fca5a5', borderRadius: 6,
+              fontFamily: MONO, fontSize: 11, color: '#7f1d1d' }}>⚠ {err}</div>
+          )}
+        </div>
+      );
+    }
+
+    function Stat({ label, value, accent }) {
+      return (
+        <div style={{ background: '#fff', border: `1px solid ${BORDER}`,
+          borderRadius: 8, padding: '10px 12px' }}>
+          <div style={{ fontFamily: MONO, fontSize: 9, letterSpacing: '0.08em',
+            textTransform: 'uppercase', color: MUTED }}>{label}</div>
+          <div style={{ fontSize: 22, fontWeight: 700, color: accent || TEXT,
+            marginTop: 2, letterSpacing: '-0.01em' }}>{value}</div>
+        </div>
+      );
+    }
+
+    function textareaStyle() {
+      return { width: '100%', padding: '10px 12px', border: `1px solid ${BORDER}`,
+        borderRadius: 6, fontFamily: 'inherit', fontSize: 14, color: TEXT,
+        resize: 'vertical', outline: 'none' };
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<AdminPage/>);
+  </script>
+</body>
+</html>

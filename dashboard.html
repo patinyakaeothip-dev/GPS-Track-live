@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Trail Run Tracker · Race Director Dashboard + Runner App</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;600&family=Noto+Sans+Thai:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <style>
+    html, body, #root { margin: 0; padding: 0; height: 100%; }
+    body {
+      font-family: 'Geist', 'Noto Sans Thai', ui-sans-serif, system-ui, sans-serif;
+      color: #0a0a0a;
+      background: #f0eee9;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+    /* Thai text fallback */
+    :lang(th), [lang="th"] { font-family: 'Geist', 'Noto Sans Thai', ui-sans-serif, system-ui, sans-serif; }
+    /* pulse for GPS dot */
+    @keyframes pulse {
+      0%   { transform: scale(0.6); opacity: 1; }
+      100% { transform: scale(1.8); opacity: 0; }
+    }
+    * { box-sizing: border-box; }
+  </style>
+</head>
+<body style="font-family: &quot;Noto Sans Thai&quot;">
+  <div id="root"></div>
+
+  <!-- Backend wiring · paste the Apps Script Web App URL to go live.
+       Leave commented to keep the mock-data design canvas behaviour.
+       TRT_DASHBOARD_KEY only matters if STATE_KEY is set in Script Properties. -->
+  <script>
+    window.TRT_API_URL = 'https://script.google.com/macros/s/AKfycbxIaYNeW3DkIbIEGmWYL93eL903qyi409Mrlf1NUqMld6dEQDOq9YQEvExjitgVQGp0Zw/exec';
+    // window.TRT_DASHBOARD_KEY = 'a-shared-secret-only-the-RD-knows';
+  </script>
+
+  <!-- Starter components -->
+  <script type="text/babel" src="design-canvas.jsx"></script>
+  <script type="text/babel" src="ios-frame.jsx"></script>
+  <script type="text/babel" src="tweaks-panel.jsx"></script>
+
+  <!-- App -->
+  <script src="src/api.js"></script>
+  <script type="text/babel" src="src/data.jsx"></script>
+  <script type="text/babel" src="src/i18n.jsx"></script>
+  <script type="text/babel" src="src/dashboard.jsx"></script>
+  <script type="text/babel" src="src/runner-app.jsx"></script>
+  <script type="text/babel" src="src/runner-live.jsx"></script>
+
+  <script type="text/babel">
+    const { useState, useMemo, useEffect } = React;
+
+    const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+      "scenario": "live",
+      "lang": "th",
+      "checkpoint_method": "all",
+      "cutoff_29k": 360,
+      "cutoff_22k": 270,
+      "cutoff_11k": 150
+    }/*EDITMODE-END*/;
+
+    // ──── Pick a sample runner per distance for the mobile screens ────────
+    function pickRunner(snap, distance) {
+      const candidates = snap.runners.filter(r => r.distance === distance);
+      // pick someone mid-progress (most representative for the scenario)
+      return candidates.sort((a, b) =>
+        Math.abs((a.progressKm / a.course.distance) - 0.5) -
+        Math.abs((b.progressKm / b.course.distance) - 0.5)
+      )[0];
+    }
+
+    function App() {
+      const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
+      const tr = useMemo(() => tFn(t.lang), [t.lang]);
+
+      // Snapshot — mock for canned scenarios; polled live state when scenario === 'live'.
+      const [snap, setSnap] = useState(() => buildSnapshot(t.scenario === 'live' ? 'mid' : t.scenario));
+      const [liveErr, setLiveErr] = useState(null);
+      useEffect(() => {
+        if (t.scenario !== 'live') {
+          setLiveErr(null);
+          setSnap(buildSnapshot(t.scenario));
+          return;
+        }
+        let cancelled = false;
+        const tick = async () => {
+          try {
+            const live = await fetchSnapshot();
+            if (cancelled) return;
+            if (live) { setSnap(live); setLiveErr(null); }
+            else { setLiveErr('not_configured'); }
+          } catch (err) {
+            if (!cancelled) setLiveErr(err.code || 'fetch_failed');
+          }
+        };
+        tick();
+        const id = setInterval(tick, 10000);
+        return () => { cancelled = true; clearInterval(id); };
+      }, [t.scenario]);
+
+      // Sample runners for mobile flow demos (use 22K mid runner)
+      // Live snapshots can be empty before registrations exist — fall back to
+      // the mock roster so the runner-app artboards always have something to render.
+      const demoSnap = useMemo(() =>
+        (t.scenario === 'live' && (!snap.runners || snap.runners.length === 0))
+          ? buildSnapshot('mid') : snap,
+        [snap, t.scenario]);
+      const sampleRunner = useMemo(() => pickRunner(demoSnap, '22K') || demoSnap.runners[0], [demoSnap]);
+      const sample29K = useMemo(() => pickRunner(demoSnap, '29K') || demoSnap.runners[0], [demoSnap]);
+      const sample11K = useMemo(() => pickRunner(demoSnap, '11K') || demoSnap.runners[0], [demoSnap]);
+
+      const showCheckin = (id) => t.checkpoint_method === 'all' || t.checkpoint_method === id;
+
+      return (
+        <div style={{ width: '100%', height: '100%' }} lang={t.lang}>
+          {t.scenario === 'live' && liveErr && (
+            <div style={{
+              position: 'fixed', top: 12, left: 12, zIndex: 50,
+              padding: '8px 12px', borderRadius: 6,
+              background: '#fef3c7', border: '1px solid #f59e0b',
+              fontFamily: '"Geist Mono", ui-monospace, monospace',
+              fontSize: 11, color: '#78350f', maxWidth: 360,
+            }}>
+              {liveErr === 'not_configured'
+                ? (t.lang === 'th'
+                    ? '⚠ Live mode · ยังไม่ได้ตั้ง window.TRT_API_URL · ดู backend/README.md'
+                    : '⚠ Live mode · window.TRT_API_URL is not set · see backend/README.md')
+                : `⚠ Live fetch failed · ${liveErr}`}
+            </div>
+          )}
+          <DesignCanvas>
+            {/* ──────── Race Director Dashboard ──────── */}
+            <DCSection
+              id="dashboard"
+              title={t.lang === 'th' ? 'หน้า Race Director · Dashboard' : 'Race Director · Dashboard'}
+              subtitle={t.lang === 'th'
+                ? 'จอแม่ของ race director · เห็นนักวิ่ง 150 คนแบบ real-time'
+                : 'Race-director command view · 150 runners in real-time'}>
+              <DCArtboard id="hybrid" label="Hybrid · map + table + alerts" width={1440} height={900}>
+                <Dashboard scenario={t.scenario} t={tr} lang={t.lang} layout="hybrid"/>
+              </DCArtboard>
+              <DCArtboard id="map-first" label="Map-first · big course view" width={1440} height={900}>
+                <Dashboard scenario={t.scenario} t={tr} lang={t.lang} layout="map"/>
+              </DCArtboard>
+              <DCArtboard id="table-first" label="Table-first · data dense" width={1440} height={900}>
+                <Dashboard scenario={t.scenario} t={tr} lang={t.lang} layout="table"/>
+              </DCArtboard>
+            </DCSection>
+
+            {/* ──────── Runner mobile · check-in flow variations ──────── */}
+            {showCheckin('web') && (
+            <DCSection
+              id="runner-web"
+              title={t.lang === 'th' ? '⭐ วิธีที่แนะนำ · ไม่ต้องลงแอพ (กล้องมือถือ + เว็บ)' : '⭐ Recommended · No app (phone camera + web)'}
+              subtitle={t.lang === 'th'
+                ? 'จุดสตาร์ท: ลงทะเบียนครั้งเดียว · จุดถัดไป: กดยืนยัน · ✨ ระบบปรับระยะอัตโนมัติตาม CP ที่ผ่านจริง (11K↔22K↔29K) · กันสแกนซ้ำ: A1/A2 รอ 60 นาที · ไม่ต้องลงแอพ'
+                : 'Start: register once · next CPs: one-tap confirm · ✨ Auto-adjust distance based on actual CPs hit (11K↔22K↔29K) · double-scan guard: 60min · no app'}>
+              <DCArtboard id="live-app" label="⚡ Live · ใช้งานจริง (wired to backend)" width={420} height={900}>
+                <IOSDevice width={402} height={874} title="Safari · Live">
+                  <LiveRunnerApp lang={t.lang} cp="a1"/>
+                </IOSDevice>
+              </DCArtboard>
+              <DCArtboard id="live-start" label="⚡ Live · จุดสตาร์ท (register form)" width={420} height={900}>
+                <IOSDevice width={402} height={874} title="Safari · Live">
+                  <LiveRunnerApp lang={t.lang} cp="start"/>
+                </IOSDevice>
+              </DCArtboard>
+              <DCArtboard id="web-1" label="1 · Camera sees QR poster" width={420} height={900}>
+                <IOSDevice width={402} height={874} title="Camera">
+                  <RunnerWebFlow runner={sample29K} t={tr} lang={t.lang} step="camera"/>
+                </IOSDevice>
+              </DCArtboard>
+              <DCArtboard id="web-register" label="2 · First time · ลงทะเบียนชื่อ+เบอร์ (ที่ Start)" width={420} height={900}>
+                <IOSDevice width={402} height={874} title="Safari">
+                  <RunnerWebFlow runner={sample29K} t={tr} lang={t.lang} step="register"/>
+                </IOSDevice>
+              </DCArtboard>
+              <DCArtboard id="web-recognized" label="3 · Next CP · เบราว์เซอร์จำได้ · กดปุ่มเดียวจบ" width={420} height={900}>
+                <IOSDevice width={402} height={874} title="Safari">
+                  <RunnerWebFlow runner={sample29K} t={tr} lang={t.lang} step="recognized"/>
+                </IOSDevice>
+              </DCArtboard>
+              <DCArtboard id="web-upgrade-22" label="✨ Auto-upgrade · 11K → 22K (เช็คอินที่ A2 ครั้งแรก)" width={420} height={900}>
+                <IOSDevice width={402} height={874} title="Safari">
+                  <RunnerWebFlow runner={sample11K} t={tr} lang={t.lang} step="upgrade"/>
+                </IOSDevice>
+              </DCArtboard>
+              <DCArtboard id="web-upgrade-29" label="✨ Auto-upgrade · 22K → 29K (A2 ครั้งที่ 2 · ลงเขา)" width={420} height={900}>
+                <IOSDevice width={402} height={874} title="Safari">
+                  <RunnerWebFlow runner={sampleRunner} t={tr} lang={t.lang} step="upgrade29"/>
+                </IOSDevice>
+              </DCArtboard>
+              <DCArtboard id="web-downgrade-22" label="🛡 Auto-adjust · 29K → 22K (ข้ามรอบเขา · กลับมา A1)" width={420} height={900}>
+                <IOSDevice width={402} height={874} title="Safari">
+                  <RunnerWebFlow runner={sample29K} t={tr} lang={t.lang} step="downgrade22"/>
+                </IOSDevice>
+              </DCArtboard>
+              <DCArtboard id="web-dnf" label="✋ DNF · 2-step confirm · พิมพ์เหตุผล + ขอรถรับ" width={420} height={900}>
+                <IOSDevice width={402} height={874} title="Safari">
+                  <RunnerWebFlow runner={sample29K} t={tr} lang={t.lang} step="dnf"/>
+                </IOSDevice>
+              </DCArtboard>
+              <DCArtboard id="web-finish" label="🏁 Finish · หน้าฉลอง + เวลาทางการ + ไปรับเหรียญ" width={420} height={900}>
+                <IOSDevice width={402} height={874} title="Safari">
+                  <RunnerWebFlow runner={sample29K} t={tr} lang={t.lang} step="finish"/>
+                </IOSDevice>
+              </DCArtboard>
+              <DCArtboard id="web-finish-adj" label="🏁 Finish · auto-adjusted (29K→22K · ข้ามรอบเขา)" width={420} height={900}>
+                <IOSDevice width={402} height={874} title="Safari">
+                  <RunnerWebFlow runner={sample29K} t={tr} lang={t.lang} step="finish-adj"/>
+                </IOSDevice>
+              </DCArtboard>
+              <DCArtboard id="web-success" label="4 · ยืนยันสำเร็จ · เห็นสถานะตัวเอง" width={420} height={900}>
+                <IOSDevice width={402} height={874} title="Safari">
+                  <RunnerWebFlow runner={sample29K} t={tr} lang={t.lang} step="success"/>
+                </IOSDevice>
+              </DCArtboard>
+              <DCArtboard id="web-duplicate" label="⚠ Edge case · กันสแกนซ้ำ (ต้องรอ 60 นาที)" width={420} height={900}>
+                <IOSDevice width={402} height={874} title="Safari">
+                  <RunnerWebFlow runner={sample29K} t={tr} lang={t.lang} step="duplicate"/>
+                </IOSDevice>
+              </DCArtboard>
+              <DCArtboard id="web-search" label="↻ Fallback · มือถือเพื่อน/เครื่องใหม่ · ค้นหาตัวเอง" width={420} height={900}>
+                <IOSDevice width={402} height={874} title="Safari">
+                  <RunnerWebFlow runner={sample29K} t={tr} lang={t.lang} step="picker" allRunners={snap.runners}/>
+                </IOSDevice>
+              </DCArtboard>
+            </DCSection>
+            )}
+
+            {/* ──────── Other check-in variations ──────── */}
+            <DCSection
+              id="runner"
+              title={t.lang === 'th' ? 'แนวทางอื่น · ถ้าอยากลงทุนทำแอพหรือใช้สตาฟ' : 'Other approaches · with app or with staff'}
+              subtitle={t.lang === 'th'
+                ? '3 แนวทางเปรียบเทียบ · A สตาฟแสกน · B/C/D ถ้ามีแอพ'
+                : '3 alternative paths · A staff-led · B/C/D require an installed app'}>
+              {showCheckin('staff_scan') && (
+                <DCArtboard id="m-staff" label="A · Staff scans BIB QR" width={420} height={900}>
+                  <IOSDevice width={402} height={874} title={t.lang === 'th' ? 'บัตรนักวิ่ง' : 'Runner Pass'}>
+                    <RunnerStaffScan runner={sampleRunner} t={tr}/>
+                  </IOSDevice>
+                </DCArtboard>
+              )}
+              {showCheckin('self_scan') && (
+                <DCArtboard id="m-self" label="B · Runner scans CP QR" width={420} height={900}>
+                  <IOSDevice width={402} height={874} title={t.lang === 'th' ? 'แสกนจุดพัก' : 'Scan checkpoint'}>
+                    <RunnerSelfScan runner={sample29K} t={tr}/>
+                  </IOSDevice>
+                </DCArtboard>
+              )}
+              {showCheckin('gps_auto') && (
+                <DCArtboard id="m-gps" label="C · GPS auto-detect" width={420} height={900}>
+                  <IOSDevice width={402} height={874} title="GPS">
+                    <RunnerGPSAuto runner={sample29K} t={tr}/>
+                  </IOSDevice>
+                </DCArtboard>
+              )}
+              {showCheckin('manual') && (
+                <DCArtboard id="m-manual" label="D · Manual “I'm here” tap" width={420} height={900}>
+                  <IOSDevice width={402} height={874} title={t.lang === 'th' ? 'ฉันถึงแล้ว' : 'Check in'}>
+                    <RunnerManual runner={sample11K} t={tr}/>
+                  </IOSDevice>
+                </DCArtboard>
+              )}
+            </DCSection>
+
+            {/* ──────── Notes panel ──────── */}
+            <DCSection
+              id="notes"
+              title={t.lang === 'th' ? 'หมายเหตุการออกแบบ' : 'Design notes'}
+              subtitle={t.lang === 'th' ? 'สรุปสั้นๆ · เปรียบเทียบวิธี check-in' : 'Short summary · comparing check-in methods'}>
+              <DCArtboard id="notes-card" label="Comparison" width={900} height={620}>
+                <NotesCard lang={t.lang}/>
+              </DCArtboard>
+            </DCSection>
+          </DesignCanvas>
+
+          {/* Tweaks panel — floats over canvas */}
+          <TweaksPanel title="Tweaks">
+            <TweakSection label={t.lang === 'th' ? 'สถานการณ์ที่จำลอง' : 'Scenario'}/>
+            <TweakSelect
+              label={t.lang === 'th' ? 'ช่วงเวลาในการแข่ง' : 'Race state'}
+              value={t.scenario}
+              options={[
+                ['pre',    t.lang === 'th' ? 'ก่อนเริ่ม · 05:45'      : 'Pre-race · 05:45'],
+                ['start',  t.lang === 'th' ? 'ออกตัว · 06:05'         : 'Start · 06:05'],
+                ['mid',    t.lang === 'th' ? 'กลางแข่ง · 08:00'        : 'Mid · 08:00'],
+                ['late',   t.lang === 'th' ? 'มีคนหาย · 09:30'         : 'Late · alerts · 09:30'],
+                ['finish', t.lang === 'th' ? 'ทยอยเข้าเส้นชัย · 11:00' : 'Finish surge · 11:00'],
+                ['live',   t.lang === 'th' ? '🛰 Live · backend จริง'   : '🛰 Live · real backend'],
+              ]}
+              onChange={(v) => setTweak('scenario', v)}
+            />
+
+            <TweakSection label={t.lang === 'th' ? 'ภาษา' : 'Language'}/>
+            <TweakRadio
+              label={t.lang === 'th' ? 'ภาษา' : 'Language'}
+              value={t.lang}
+              options={[['th','ไทย'],['en','EN']]}
+              onChange={(v) => setTweak('lang', v)}
+            />
+
+            <TweakSection label={t.lang === 'th' ? 'วิธีเช็คอินที่จุดพัก' : 'Check-in method'}/>
+            <TweakSelect
+              label={t.lang === 'th' ? 'โชว์เฉพาะ' : 'Show only'}
+              value={t.checkpoint_method}
+              options={[
+                ['all',         t.lang === 'th' ? 'ดูทั้ง 5 แบบ'      : 'All 5 options'],
+                ['web',         t.lang === 'th' ? '⭐ No app · แสกนเข้าเว็บ' : '⭐ No app · web flow'],
+                ['staff_scan',  t.lang === 'th' ? 'A · สตาฟแสกน'      : 'A · Staff scans BIB'],
+                ['self_scan',   t.lang === 'th' ? 'B · นักวิ่งแสกน'    : 'B · Runner scans CP'],
+                ['gps_auto',    t.lang === 'th' ? 'C · GPS อัตโนมัติ'  : 'C · GPS auto'],
+                ['manual',      t.lang === 'th' ? 'D · กดปุ่ม manual'  : 'D · Manual tap'],
+              ]}
+              onChange={(v) => setTweak('checkpoint_method', v)}
+            />
+
+            <TweakSection label={t.lang === 'th' ? 'เวลา cut-off (นาที)' : 'Cut-off times (min)'}/>
+            <TweakSlider
+              label="29K" value={t.cutoff_29k} min={240} max={480} step={10} unit="m"
+              onChange={(v) => setTweak('cutoff_29k', v)}
+            />
+            <TweakSlider
+              label="22K" value={t.cutoff_22k} min={180} max={360} step={10} unit="m"
+              onChange={(v) => setTweak('cutoff_22k', v)}
+            />
+            <TweakSlider
+              label="11K" value={t.cutoff_11k} min={90}  max={210} step={10} unit="m"
+              onChange={(v) => setTweak('cutoff_11k', v)}
+            />
+          </TweaksPanel>
+        </div>
+      );
+    }
+
+    function NotesCard({ lang }) {
+      const en = lang === 'en';
+      const rows = en ? [
+        ['⭐ No app · phone camera → web',
+          'Each CP has a printed QR poster. Runner uses the BUILT-IN iOS / Android camera, taps the URL banner, browser opens, picks BIB, confirms.',
+          'Zero install · zero sign-up · works on any phone · needs cell signal at each spot · tiniest infra (a printer, a few posters, a server endpoint).'],
+        ['A · Staff scans BIB QR',
+          'Each runner gets a printed BIB with QR. Staff at each CP scans it as runners arrive.',
+          'Most reliable in crowded waves · needs staff + scan-phone at every CP · works even if runner has no signal.'],
+        ['B · Runner self-scans CP QR (in-app)',
+          'Same as the web flow but inside a dedicated app you publish.',
+          'Adds friction (download) for 150 people · only worth it if you need offline-cache or push alerts.'],
+        ['C · GPS auto-detect',
+          'App watches location · enters 80m geofence → prompts to confirm.',
+          'Lowest cognitive load · battery hungry · GPS flakey on the loop · still needs an installed app.'],
+        ['D · Manual “I’m here” tap',
+          'Big black button in the app. Runner taps on arrival.',
+          'Trivially simple · trust-based (taps can come from anywhere) · fine for training.'],
+      ] : [
+        ['⭐ ไม่ต้องลงแอพ · กล้องมือถือ + เว็บ',
+          'แต่ละจุดพักมีป้าย QR ติดอยู่ · นักวิ่งบิดกล้องมือถือ · ขึ้น banner URL · เปิดเว็บ · เลือก BIB · ยืนยัน',
+          'ไม่ต้องสมัครอะไร · ไม่ต้องโหลดแอพ · ใช้ได้ทุกมือถือ · ต้องมีสัญญาณที่จุด · ลงทุนน้อยมาก (ปริ้นเตอร์ · ป้าย · endpoint).'],
+        ['A · สตาฟแสกน BIB',
+          'นักวิ่งมีป้าย BIB มี QR พิมพ์ไว้ · สตาฟถือมือถือแสกนตอนนักวิ่งถึง',
+          'แข็งแรงตอนคนมาเยอะ · ต้องมีสตาฟ+มือถือสตาฟทุกจุด · ใช้ได้ตอนนักวิ่งไม่มีสัญญาณ.'],
+        ['B · นักวิ่งแสกน QR จุดพัก (ในแอพ)',
+          'เหมือนวิธีเว็บ แต่อยู่ในแอพที่ต้องลงเอง',
+          'นักวิ่ง 150 คนต้องโหลดแอพก่อน — ไม่คุ้ม จะคุ้มถ้าต้องการ offline cache หรือ push notification.'],
+        ['C · GPS อัตโนมัติ',
+          'แอพดู location · เข้า geofence 80m → เด้งยืนยัน',
+          'นักวิ่งไม่ต้องคิด · เปลืองแบต · GPS บนยอดเขาอาจหลุด · ยังต้องลงแอพอยู่ดี.'],
+        ['D · กดปุ่ม manual',
+          'ปุ่มดำใหญ่ๆ · กดเมื่อถึงจุดพัก',
+          'ง่ายสุด · จะกดจากไหนก็ได้ (บนความชื่อใจ) · ใช้ได้สำหรับงานซ้อม.'],
+      ];
+      return (
+        <div style={{
+          background: '#fff', width: '100%', height: '100%',
+          padding: '32px 36px',
+          fontFamily: '"Geist", "Noto Sans Thai", ui-sans-serif, system-ui, sans-serif',
+          display: 'flex', flexDirection: 'column', gap: 16,
+        }}>
+          <div>
+            <div style={{ fontFamily: '"Geist Mono"', fontSize: 10,
+              letterSpacing: '0.12em', textTransform: 'uppercase',
+              color: '#737373' }}>
+              {en ? 'Decision frame' : 'แนวทางตัดสินใจ'}
+            </div>
+            <div style={{ fontSize: 22, fontWeight: 500, marginTop: 4,
+              letterSpacing: '-0.01em' }}>
+              {en ? '4 ways for a runner to check in at a stop' : '4 วิธีให้นักวิ่งเช็คอินที่จุดพัก'}
+            </div>
+            <div style={{ fontSize: 13, color: '#525252', marginTop: 6 }}>
+              {en
+                ? 'For ~150 runners with phones, pick by checkpoint staffing and cell signal at each spot.'
+                : 'นักวิ่ง 150 คนพร้อมมือถือ · เลือกตามจำนวนสตาฟและสัญญาณมือถือของแต่ละจุด'}
+            </div>
+          </div>
+          <table style={{ borderCollapse: 'collapse', flex: 1 }}>
+            <thead>
+              <tr>
+                {[
+                  en ? 'Method' : 'วิธี',
+                  en ? 'How it works' : 'วิธีใช้',
+                  en ? 'Trade-offs' : 'ข้อดี / ข้อเสีย'
+                ].map((h, i) => (
+                  <th key={i} style={{
+                    textAlign: 'left', padding: '12px 14px',
+                    fontFamily: '"Geist Mono"', fontSize: 10,
+                    letterSpacing: '0.08em', textTransform: 'uppercase',
+                    color: '#737373', fontWeight: 500,
+                    borderBottom: '1px solid #e5e4df',
+                    width: i === 0 ? 200 : i === 1 ? 280 : 'auto',
+                  }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r, i) => (
+                <tr key={i} style={{ borderBottom: '1px solid #f4f3ef' }}>
+                  <td style={{ padding: '14px', fontWeight: 500, fontSize: 14,
+                    verticalAlign: 'top' }}>{r[0]}</td>
+                  <td style={{ padding: '14px', color: '#404040', fontSize: 13,
+                    lineHeight: 1.5, verticalAlign: 'top' }}>{r[1]}</td>
+                  <td style={{ padding: '14px', color: '#404040', fontSize: 13,
+                    lineHeight: 1.5, verticalAlign: 'top' }}>{r[2]}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div style={{ marginTop: 8, padding: '14px 16px', background: '#fafaf8',
+            border: '1px solid #e5e4df', borderRadius: 4, fontSize: 13,
+            color: '#262626', lineHeight: 1.55 }}>
+            <span style={{ fontFamily: '"Geist Mono"', fontSize: 10,
+              letterSpacing: '0.1em', textTransform: 'uppercase',
+              color: '#737373', marginRight: 8 }}>
+              {en ? 'RECOMMENDATION' : 'แนะนำ'}
+            </span>
+            {en
+              ? 'For 150 runners at a training run, the no-app web flow wins: nobody downloads anything, the only infra is printed QR posters + a small server. Pair it with A (staff scans BIB) at Start/Finish so you don’t miss anyone in the bib-pickup chaos.'
+              : 'งานซ้อม 150 คน · ใช้ “ไม่ต้องลงแอพ” ดีที่สุด · ไม่มีใครต้องโหลดแอพ · ระบบมีแค่ป้าย QR ของแต่ละจุด + server เล็กๆ · ติด A (สตาฟแสกน BIB) ไว้ที่สตาร์ท/ฟินิช กันพลาดตอนรับ BIB'}
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

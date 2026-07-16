@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <title>Rayong Trail · QR Posters (A4)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;700&family=Geist+Mono:wght@400;500;600&family=Noto+Sans+Thai:wght@400;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
+
+  <style>
+    @page { size: A4 portrait; margin: 12mm; }
+    html, body { margin: 0; padding: 0; background: #d8d2c2;
+      font-family: 'Geist', 'Noto Sans Thai', ui-sans-serif, system-ui, sans-serif;
+      color: #1f2a1c; }
+    .controls { padding: 16px 20px; background: #fff; border-bottom: 1px solid #d8d2c2;
+      display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+      position: sticky; top: 0; z-index: 10; }
+    .controls input { padding: 8px 12px; border: 1px solid #bdb6a4; border-radius: 6px;
+      font-family: "Geist Mono", ui-monospace, monospace; font-size: 13px;
+      flex: 1; min-width: 280px; }
+    .controls button { padding: 8px 16px; background: #2d6a4f; color: #fff;
+      border: none; border-radius: 6px; font-weight: 600; cursor: pointer; }
+    .controls label { font-family: "Geist Mono"; font-size: 11px; letter-spacing: 0.08em;
+      text-transform: uppercase; color: #5d6b59; }
+    .sheets { padding: 24px; display: flex; flex-direction: column; gap: 24px;
+      align-items: center; }
+
+    /* A4 ≈ 210 × 297 mm */
+    .poster {
+      width: 210mm; height: 297mm;
+      background: #fff; padding: 18mm 16mm 14mm;
+      display: flex; flex-direction: column; align-items: center;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.12);
+      page-break-after: always;
+      border: 1px solid #d8d2c2;
+      position: relative;
+      overflow: hidden;
+    }
+    .brand { display: flex; align-items: center; gap: 14px; align-self: stretch;
+      padding-bottom: 14px; border-bottom: 2px solid #2d6a4f; }
+    .brand img { width: 56px; height: auto; }
+    .brand .name { font-family: 'Geist'; font-weight: 700; font-size: 22px;
+      letter-spacing: -0.01em; color: #1f4d39; }
+    .brand .sub { font-family: 'Geist Mono'; font-size: 11px; letter-spacing: 0.16em;
+      text-transform: uppercase; color: #5d6b59; margin-top: 2px; }
+
+    .cp-block { margin-top: 28px; text-align: center; }
+    .cp-kicker { font-family: 'Geist Mono'; font-size: 14px; letter-spacing: 0.2em;
+      text-transform: uppercase; color: #5d6b59; }
+    .cp-title { font-family: 'Geist'; font-weight: 700; font-size: 120px;
+      letter-spacing: -0.04em; line-height: 0.95; color: #2d6a4f; margin-top: 6px; }
+    .cp-place { font-family: 'Noto Sans Thai', "Geist"; font-weight: 700; font-size: 30px;
+      color: #1f2a1c; margin-top: 8px; letter-spacing: -0.01em; }
+    .cp-km { font-family: 'Geist Mono'; font-size: 16px; letter-spacing: 0.12em;
+      color: #5d6b59; margin-top: 6px; }
+
+    .qr-wrap { margin-top: 24px; padding: 14px; background: #fff;
+      border: 2px solid #1f4d39; border-radius: 8px; }
+    .qr-wrap img { display: block; width: 95mm; height: 95mm; image-rendering: pixelated; }
+
+    .instructions { margin-top: 22px; align-self: stretch; text-align: center;
+      font-family: 'Noto Sans Thai'; font-size: 19px; line-height: 1.5;
+      color: #1f2a1c; max-width: 170mm; }
+    .instructions .en { color: #5d6b59; font-family: 'Geist'; font-size: 14px;
+      margin-top: 4px; letter-spacing: 0.01em; }
+    .url { margin-top: 18px; padding: 10px 16px; background: #f5f1e8;
+      border: 1px dashed #1f4d39; border-radius: 6px;
+      font-family: 'Geist Mono'; font-size: 14px; letter-spacing: 0.04em;
+      color: #1f4d39; word-break: break-all; max-width: 170mm; }
+
+    .footer { margin-top: auto; padding-top: 14px; align-self: stretch;
+      display: flex; justify-content: space-between; align-items: end;
+      border-top: 1px solid #d8d2c2; font-family: 'Geist Mono'; font-size: 10px;
+      letter-spacing: 0.12em; text-transform: uppercase; color: #5d6b59; }
+
+    .cp-finish .cp-title { color: #1f4d39; font-size: 96px; }
+    .cp-finish .cp-kicker { color: #1f4d39; }
+
+    @media print {
+      body { background: #fff; }
+      .controls { display: none; }
+      .sheets { padding: 0; gap: 0; }
+      .poster { box-shadow: none; border: none; margin: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="controls">
+    <label>Base URL</label>
+    <input id="base" type="url" value="https://rayong-trail.pages.dev/runner/" placeholder="https://your-domain.example/runner/"/>
+    <button id="apply">Update QR</button>
+    <button onclick="window.print()">🖨 Print</button>
+  </div>
+  <div class="sheets" id="sheets"></div>
+
+  <script>
+    const CPS = [
+      { id: 'start',  letter: 'START',  th: 'จุดสตาร์ท · ลงทะเบียน',     en: 'Start · Register',
+        km: 'KM 0',     instructTh: 'แสกนด้วยกล้องมือถือ · กรอกชื่อกับเบอร์ ครั้งเดียว',
+        instructEn: 'Scan with your phone camera · register once', cls: '' },
+      { id: 'a1',     letter: 'A1',     th: 'เขามะเข้ม',                  en: 'Khao Ma Khaem',
+        km: 'KM 5.6 / KM 23.5', instructTh: 'แสกนด้วยกล้องมือถือ · กดปุ่ม "ยืนยันเข้าจุดพัก"',
+        instructEn: 'Scan with your phone camera · tap "Confirm arrival"', cls: '' },
+      { id: 'a2',     letter: 'A2',     th: 'Green Mountain',             en: 'Green Mountain',
+        km: 'KM 11.6 / KM 19.0', instructTh: 'แสกนด้วยกล้องมือถือ · กดปุ่ม "ยืนยันเข้าจุดพัก"',
+        instructEn: 'Scan with your phone camera · tap "Confirm arrival"', cls: '' },
+      { id: 'finish', letter: 'FINISH', th: 'เส้นชัย · ยินดีด้วย!',         en: 'Finish · Congrats!',
+        km: 'KM 11 / 22 / 29',  instructTh: 'แสกนเพื่อบันทึกเวลาทางการ · รับเหรียญที่โต๊ะข้างเส้นชัย',
+        instructEn: 'Scan to record official time · medals at the desk', cls: 'cp-finish' },
+    ];
+
+    function makeQrSvg(text, size = 360) {
+      const qr = qrcode(0, 'M');
+      qr.addData(text); qr.make();
+      // qrcode-generator can emit an SVG-ish data: URL or an <img> tag —
+      // we use the cell grid directly so we control the rendering.
+      const count = qr.getModuleCount();
+      const cell = size / count;
+      let rects = '';
+      for (let y = 0; y < count; y++)
+        for (let x = 0; x < count; x++)
+          if (qr.isDark(y, x))
+            rects += `<rect x="${x * cell}" y="${y * cell}" width="${cell}" height="${cell}"/>`;
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}" shape-rendering="crispEdges"><rect width="${size}" height="${size}" fill="#fff"/><g fill="#1f4d39">${rects}</g></svg>`;
+      return 'data:image/svg+xml;base64,' + btoa(svg);
+    }
+
+    function render(base) {
+      const root = document.getElementById('sheets');
+      root.innerHTML = '';
+      for (const cp of CPS) {
+        const url = base ? `${base.replace(/\/$/, '')}${base.includes('?') ? '&' : '?'}cp=${cp.id}` : `https://your-domain.example/runner/?cp=${cp.id}`;
+        const qrSrc = makeQrSvg(url);
+        const html = `
+          <section class="poster ${cp.cls}">
+            <div class="brand">
+              <img src="../assets/rayong-trail-logo.jpg" alt=""/>
+              <div>
+                <div class="name">Rayong Trail Running</div>
+                <div class="sub">2026 · Trail Run Tracker</div>
+              </div>
+            </div>
+            <div class="cp-block">
+              <div class="cp-kicker">${cp.id === 'start' || cp.id === 'finish' ? 'CHECKPOINT' : 'AID STATION'}</div>
+              <div class="cp-title">${cp.letter}</div>
+              <div class="cp-place">${cp.th}</div>
+              <div class="cp-km">${cp.km}</div>
+            </div>
+            <div class="qr-wrap"><img src="${qrSrc}" alt="QR for ${cp.id}"/></div>
+            <div class="instructions">
+              ${cp.instructTh}
+              <div class="en">${cp.instructEn}</div>
+            </div>
+            <div class="url">${url}</div>
+            <div class="footer">
+              <span>${cp.id.toUpperCase()} · POSTER</span>
+              <span>print · A4</span>
+            </div>
+          </section>
+        `;
+        root.insertAdjacentHTML('beforeend', html);
+      }
+    }
+
+    document.getElementById('apply').addEventListener('click', () => {
+      const base = document.getElementById('base').value.trim();
+      render(base);
+    });
+    // Initial render — uses the value baked into the input by deploy bundle
+    render(document.getElementById('base').value.trim());
+  </script>
+</body>
+</html>
