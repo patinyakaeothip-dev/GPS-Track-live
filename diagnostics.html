@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Trail Run Tracker · Diagnostics</title>
+  <style>
+    body { font-family: ui-monospace, "SF Mono", monospace; background: #fafaf8;
+      color: #1f2a1c; padding: 24px; max-width: 720px; margin: 0 auto;
+      line-height: 1.5; font-size: 14px; }
+    h1 { font-family: ui-sans-serif, system-ui, sans-serif; color: #1f4d39;
+      margin-bottom: 4px; }
+    .sub { color: #5d6b59; font-size: 13px; margin-bottom: 24px; }
+    button { padding: 10px 16px; background: #2d6a4f; color: #fff; border: none;
+      border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 14px;
+      margin: 4px 4px 4px 0; }
+    button.alt { background: #fff; color: #2d6a4f; border: 1px solid #2d6a4f; }
+    .row { margin: 14px 0; }
+    pre { background: #fff; border: 1px solid #d8d2c2; border-radius: 6px;
+      padding: 14px; overflow-x: auto; white-space: pre-wrap; word-break: break-word;
+      font-size: 12px; min-height: 60px; }
+    .ok  { color: #2d6a4f; font-weight: 600; }
+    .err { color: #b91c1c; font-weight: 600; }
+    .warn{ color: #b45309; font-weight: 600; }
+    input { width: 100%; padding: 10px; border: 1px solid #d8d2c2; border-radius: 6px;
+      font-family: inherit; font-size: 13px; box-sizing: border-box; }
+    label { font-weight: 600; color: #5d6b59; font-size: 12px; letter-spacing: 0.06em;
+      text-transform: uppercase; display: block; margin-bottom: 4px; }
+  </style>
+</head>
+<body>
+  <h1>🔬 Diagnostics</h1>
+  <div class="sub">ทดสอบการเชื่อมต่อ Apps Script backend ทีละแบบ · ดูว่าตัวไหนล้มเหลว</div>
+
+  <div class="row">
+    <label>WEBAPP URL</label>
+    <input id="url" value="https://script.google.com/macros/s/AKfycbxIaYNeW3DkIbIEGmWYL93eL903qyi409Mrlf1NUqMld6dEQDOq9YQEvExjitgVQGp0Zw/exec"/>
+  </div>
+
+  <div class="row">
+    <button onclick="test('ping_get')">1. Ping (GET)</button>
+    <button onclick="test('register_post_form')">2. Register · POST form-urlencoded</button>
+    <button onclick="test('register_post_text')">3. Register · POST text/plain JSON</button>
+    <button onclick="test('register_get')">4. Register · GET</button>
+    <button class="alt" onclick="document.getElementById('out').textContent=''">Clear</button>
+  </div>
+
+  <pre id="out">รอผลทดสอบ…</pre>
+
+  <script>
+  const $ = (id) => document.getElementById(id);
+  function log(s, cls) {
+    const out = $('out');
+    const line = document.createElement('div');
+    if (cls) line.className = cls;
+    line.textContent = s;
+    out.appendChild(line);
+  }
+
+  async function test(which) {
+    $('out').textContent = '';
+    const URL = $('url').value.trim();
+    const name = 'diag-' + Date.now().toString(36);
+    const phone = '0999' + Math.floor(Math.random()*9000000+1000000);
+    log(`▶ ${which} · ${new Date().toISOString()}`, 'warn');
+    log(`URL: ${URL}`);
+    if (which !== 'ping_get') log(`payload: { name: "${name}", phone: "${phone}", distance: "22K" }`);
+    log('');
+
+    try {
+      let res, body, init = {};
+      let target = URL;
+      if (which === 'ping_get') {
+        target = URL + '?action=ping';
+      } else if (which === 'register_get') {
+        target = URL + `?action=register&name=${encodeURIComponent(name)}&phone=${phone}&distance=22K`;
+      } else if (which === 'register_post_form') {
+        target = URL + '?action=register';
+        const fd = new URLSearchParams({ name, phone, distance: '22K' });
+        init = {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+          body: fd.toString(),
+        };
+      } else if (which === 'register_post_text') {
+        target = URL + '?action=register';
+        init = {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({ name, phone, distance: '22K' }),
+        };
+      }
+
+      log(`fetching ${init.method || 'GET'} ${target}`);
+      const t0 = performance.now();
+      res = await fetch(target, init);
+      const ms = Math.round(performance.now() - t0);
+      log(`response in ${ms}ms · status ${res.status} ${res.statusText} · type ${res.type}`);
+      const text = await res.text();
+      log(`body (${text.length} chars):`);
+      log(text);
+      try {
+        body = JSON.parse(text);
+        if (body.ok) log('✓ parsed OK · success', 'ok');
+        else log('✗ parsed OK · server error: ' + body.error, 'err');
+      } catch (e) {
+        log('✗ not JSON: ' + e.message, 'err');
+      }
+    } catch (e) {
+      log(`✗ FETCH ERROR · ${e.name}: ${e.message}`, 'err');
+      log('Likely CORS · check DevTools Network tab for the failed request');
+    }
+  }
+  </script>
+</body>
+</html>

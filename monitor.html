@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#2d6a4f"/>
+  <title>Rayong Trail · Live Monitor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;600&family=Noto+Sans+Thai:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js"></script>
+
+  <style>
+    html, body, #root { margin: 0; padding: 0; height: 100%; }
+    body { font-family: 'Geist', 'Noto Sans Thai', ui-sans-serif, system-ui, sans-serif;
+      color: #1f2a1c; background: #f5f1e8;
+      -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+    * { box-sizing: border-box; }
+    .banner { position: fixed; top: 12px; left: 12px; z-index: 100;
+      padding: 8px 14px; border-radius: 6px;
+      font-family: "Geist Mono", ui-monospace, monospace;
+      font-size: 12px; max-width: 380px; }
+    .banner.warn { background: #fef3c7; border: 1px solid #f59e0b; color: #78350f; }
+    .banner.ok   { background: #ecfdf5; border: 1px solid #6ee7b7; color: #065f46;
+                   font-size: 10px; opacity: 0.7; }
+    .banner.closed { background: #fee2e2; border: 1px solid #fca5a5; color: #7f1d1d;
+                     font-size: 12px; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <!-- Backend wiring · pre-filled by deploy bundle -->
+  <script>
+    window.TRT_API_URL = 'https://script.google.com/macros/s/AKfycbxIaYNeW3DkIbIEGmWYL93eL903qyi409Mrlf1NUqMld6dEQDOq9YQEvExjitgVQGp0Zw/exec';
+    // window.TRT_DASHBOARD_KEY = '...'; // only needed if STATE_KEY is set
+  </script>
+
+  <div id="root"></div>
+
+  <script src="src/api.js?v=6"></script>
+  <script type="text/babel" src="src/data.jsx?v=6"></script>
+  <script type="text/babel" src="src/i18n.jsx?v=6"></script>
+  <script type="text/babel" src="src/dashboard.jsx?v=6"></script>
+
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+    const POLL_MS = 10000;
+
+    function LiveMonitor() {
+      const [snap, setSnap] = useState(null);
+      const [err, setErr] = useState(null);
+      const [lastFetchAt, setLastFetchAt] = useState(null);
+
+      useEffect(() => {
+        let cancelled = false;
+        const tick = async () => {
+          try {
+            const live = await fetchSnapshot();
+            if (cancelled) return;
+            if (live) { setSnap(live); setErr(null); setLastFetchAt(Date.now()); }
+            else { setErr('not_configured'); }
+          } catch (e) {
+            if (!cancelled) setErr(e.code || 'fetch_failed');
+          }
+        };
+        tick();
+        const id = setInterval(tick, POLL_MS);
+        return () => { cancelled = true; clearInterval(id); };
+      }, []);
+
+      const tr = tFn('th');
+
+      // Loading state — first fetch in flight, no error yet
+      if (!snap && !err) {
+        return (
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'center',
+            height:'100vh', fontFamily:'"Geist Mono"', color:'#5d6b59' }}>
+            กำลังโหลดข้อมูลนักวิ่ง…
+          </div>
+        );
+      }
+
+      // Hard error state — first fetch failed, nothing to show
+      if (!snap && err) {
+        return (
+          <div style={{ padding:24, fontFamily:'"Geist Mono"', color:'#7f1d1d' }}>
+            <h2>⚠ ไม่สามารถดึงข้อมูลจาก backend</h2>
+            <p>error: <code>{err}</code></p>
+            <p>ตรวจสอบ <code>window.TRT_API_URL</code> ในไฟล์ <code>monitor.html</code></p>
+          </div>
+        );
+      }
+
+      const ago = lastFetchAt ? Math.floor((Date.now() - lastFetchAt)/1000) : null;
+      const sysClosed = snap && snap._systemState === 'closed';
+      return (
+        <div style={{ width:'100%', minHeight:'100vh' }}>
+          {err ? (
+            <div className="banner warn">⚠ live fetch failed · {err} · จะลองอีกครั้งใน {POLL_MS/1000}s</div>
+          ) : sysClosed ? (
+            <div className="banner closed">🔒 ระบบปิด · ข้อมูลแช่แข็ง · เปิดระบบที่ /admin/ เพื่อให้นักวิ่ง register/checkin ได้</div>
+          ) : (
+            <div className="banner ok">🛰 live · อัปเดตล่าสุด {ago != null ? `${ago}s` : '—'} · poll ทุก {POLL_MS/1000}s</div>
+          )}
+          <Dashboard scenario="live" snap={snap} t={tr} lang="th" layout="hybrid" />
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<LiveMonitor/>);
+  </script>
+</body>
+</html>

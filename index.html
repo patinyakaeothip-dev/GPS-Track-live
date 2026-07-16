@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Trail Run Tracker</title>
+  <style>
+    body { font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+      background: #f5f1e8; color: #1f2a1c; padding: 48px 20px;
+      max-width: 540px; margin: 0 auto; }
+    h1 { font-size: 28px; margin: 0 0 6px; letter-spacing: -0.02em; color: #1f4d39; }
+    .sub { color: #5d6b59; font-size: 14px; margin-bottom: 32px; }
+    .card { background: #fff; border: 1px solid #d8d2c2; border-radius: 8px;
+      padding: 20px; margin-bottom: 16px; }
+    .card h2 { margin: 0 0 6px; font-size: 17px; color: #1f4d39; }
+    .card p { margin: 0 0 12px; font-size: 14px; color: #5d6b59; line-height: 1.5; }
+    .card a { display: inline-block; padding: 10px 16px; background: #2d6a4f;
+      color: #fff; text-decoration: none; border-radius: 6px; font-weight: 600;
+      font-size: 14px; }
+    .card .secondary { background: transparent; color: #2d6a4f;
+      border: 1px solid #2d6a4f; margin-left: 8px; }
+    code { background: #f5f1e8; padding: 2px 6px; border-radius: 4px;
+      font-family: ui-monospace, monospace; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <h1>🌲 Trail Run Tracker</h1>
+  <div class="sub">Rayong Trail Running 2026</div>
+
+  <div class="card">
+    <h2>📱 สำหรับนักวิ่ง</h2>
+    <p>สแกน QR ที่จุด Start/A1/A2/Finish · หรือเปิดลิงก์โดยตรง:</p>
+    <a href="runner/?cp=start">Start</a>
+    <a class="secondary" href="runner/?cp=a1">A1</a>
+    <a class="secondary" href="runner/?cp=a2">A2</a>
+    <a class="secondary" href="runner/?cp=finish">Finish</a>
+  </div>
+
+  <div class="card">
+    <h2>📊 ผลการวิ่งทั้งหมด · ดูลำดับของคุณ</h2>
+    <p>หลังเข้าเส้นชัย · ดูเวลา / ลำดับ / เพซเฉลี่ย ของทุกคน · กรองตามระยะ</p>
+    <a href="results/">เปิดผลการวิ่ง →</a>
+  </div>
+
+  <div class="card">
+    <h2>🖥 สำหรับ Race Director · Live Monitor</h2>
+    <p>ติดตามนักวิ่ง 150 คนแบบ real-time · กราฟ Ascend + roster + alert feed · poll ทุก 10s</p>
+    <a href="monitor.html">เปิด Live Monitor →</a>
+    <a class="secondary" href="dashboard.html">Design canvas</a>
+  </div>
+
+  <div class="card">
+    <h2>🖨 พิมพ์ poster A4</h2>
+    <p>เปิดหน้านี้บน laptop · ใส่ base URL · กด Print</p>
+    <a href="posters/qr-posters.html">เปิดหน้าพิมพ์ poster →</a>
+  </div>
+
+  <div class="card">
+    <h2>ℹ️ Setup ครั้งแรก</h2>
+    <p>แก้ <code>runner/index.html</code> · paste <code>TRT_API_URL</code> จาก Apps Script Web App · upload ใหม่</p>
+  </div>
+</body>
+</html>
