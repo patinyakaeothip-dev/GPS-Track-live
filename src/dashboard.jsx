@@ -721,7 +721,7 @@ function Dashboard({ scenario, snap: providedSnap, t, lang, layout = 'hybrid', c
               letterSpacing: '0.1em', textTransform: 'uppercase' }}>{t('elapsed')}</div>
             <div style={{ fontFamily: D.mono, fontSize: 22, fontWeight: 500,
               fontVariantNumeric: 'tabular-nums' }}>
-              {snap.raceMinutes < 0 ? `−${-snap.raceMinutes}m` : `+${Math.floor(snap.raceMinutes/60)}h${String(snap.raceMinutes%60).padStart(2,'0')}`}
+              {snap.raceMinutes < 0 ? `−${Math.round(-snap.raceMinutes)}m` : `+${Math.floor(snap.raceMinutes/60)}h${String(Math.floor(snap.raceMinutes)%60).padStart(2,'0')}`}
             </div>
           </div>
           <div style={{ width: 1, height: 30, background: D.border }}/>
