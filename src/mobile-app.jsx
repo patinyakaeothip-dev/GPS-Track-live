@@ -218,6 +218,51 @@ function EventPickerScreen({ user, onOpenApp, onFollow, onProfile }) {
   );
 }
 
+// ── Screen: Follow the race · pick a registered runner to follow ─────────
+function FollowPickerScreen({ onBack, onPick }) {
+  const [q, setQ] = uS('');
+  const snap = uM(() => (window.buildSnapshot ? window.buildSnapshot('mid') : null), []);
+  const runners = uM(() => {
+    if (!snap) return [];
+    const query = q.trim().toLowerCase();
+    return snap.runners
+      .filter(r => !query || r.bib.includes(query) || `${r.firstName} ${r.lastName}`.toLowerCase().includes(query))
+      .slice(0, 40);
+  }, [snap, q]);
+  return (
+    <div style={{ height: '100%', background: C.bg, fontFamily: C.font, display: 'flex', flexDirection: 'column' }}>
+      <div style={{ padding: '40px 20px 14px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+          <BackBtn onClick={onBack} inline/>
+          <Brand/>
+        </div>
+        <div style={{ fontSize: 21, fontWeight: 800, color: C.text }}>เลือกนักวิ่งที่จะติดตาม</div>
+        <div style={{ fontSize: 12.5, color: C.muted, marginTop: 4 }}>เลือกจากนักวิ่งที่ลงทะเบียนในงานนี้ · ค้นหาด้วยชื่อหรือเลข BIB</div>
+      </div>
+      <div style={{ padding: '0 18px 10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '11px 13px', background: '#fff', border: `1px solid ${C.border}`, borderRadius: 10, boxShadow: '0 1px 3px rgba(31,42,28,0.08)' }}>
+          <span style={{ fontSize: 13, color: C.mute2 }}>🔍</span>
+          <input value={q} onChange={e => setQ(e.target.value)} placeholder="ชื่อ หรือ BIB" style={{ border: 'none', outline: 'none', fontSize: 13, flex: 1, fontFamily: C.font, background: 'transparent' }}/>
+        </div>
+      </div>
+      <div style={{ flex: 1, overflow: 'auto', padding: '0 18px 18px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {!snap && <div style={{ textAlign: 'center', color: C.muted, fontSize: 13, padding: 30 }}>กำลังโหลดรายชื่อนักวิ่ง…</div>}
+        {snap && runners.length === 0 && <div style={{ textAlign: 'center', color: C.muted, fontSize: 13, padding: 30 }}>ไม่พบนักวิ่งที่ค้นหา</div>}
+        {runners.map(r => (
+          <div key={r.bib} onClick={() => onPick(r.bib)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 12, background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, boxShadow: '0 1px 3px rgba(31,42,28,0.08)', cursor: 'pointer' }}>
+            <div style={{ width: 36, height: 36, borderRadius: 999, background: C.orange, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 600, flexShrink: 0 }}>{r.firstName[0]}</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 14, fontWeight: 600 }}>{r.firstName} {r.lastName}</div>
+              <div style={{ fontFamily: C.mono, fontSize: 10.5, color: C.muted }}>bib {r.bib} · {r.distance}</div>
+            </div>
+            <span style={{ fontSize: 16, color: C.mute2 }}>›</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── Screen: Registration ─────────────────────────────────────────────────
 function RegisterScreen({ onDone, onBack }) {
   const [nick, setNick] = uS('');
@@ -632,14 +677,15 @@ function ProfileScreen({ user, onLogout, onClose, onSave, onboard }) {
 
 // ── App shell with bottom tabs ────────────────────────────────────────────
 function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome }) {
-  const [tab, setTab] = uS('track');
+  const isSpectator = !!session.spectator;
+  const [tab, setTab] = uS(isSpectator ? 'friends' : 'track');
   const [scanning, setScanning] = uS(false);
   const [scanned, setScanned] = uS(null);
   const course = useCourse();
   const snap = uM(() => (window.buildSnapshot ? window.buildSnapshot('mid') : null), []);
 
-  const seq = CP_SEQ[session.runner.dist];
-  const nextCp = seq[session.runner.checkins.length];
+  const seq = !isSpectator && CP_SEQ[session.runner.dist];
+  const nextCp = seq && seq[session.runner.checkins.length];
 
   function doScan() {
     setScanning(true);
@@ -655,10 +701,13 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
   if (scanning) return <QrScanScreen label={nextCp === 'start' ? 'จุดสตาร์ท' : CP_LABEL[nextCp]} onScanned={scanComplete}/>;
   if (scanned) return <ScanSuccessScreen cp={scanned.cp} km={scanned.km} onDone={() => setScanned(null)}/>;
 
+  const followedRunner = isSpectator && snap && snap.runners.find(r => r.bib === session.followBib);
+
   const TABS = [
-    ['track', '🏃', 'Track'], ['route', '🗺', 'Route'], ['ranking', '🏆', 'Ranking'], ['friends', '👥', 'Friends'],
+    !isSpectator && ['track', '🏃', 'Track'],
+    ['route', '🗺', 'Route'], ['ranking', '🏆', 'Ranking'], ['friends', '👥', 'Friends'],
     ['event', '📍', 'Event'],
-  ];
+  ].filter(Boolean);
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: C.bg, fontFamily: C.font, overflow: 'hidden' }}>
@@ -666,10 +715,10 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
         <Brand/>
         <div onClick={onProfile} style={{ width: 30, height: 30, borderRadius: 999, background: `linear-gradient(135deg,${C.brandLt},${C.brandDk})`, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>{user.name[0]}</div>
       </div>
-      {tab === 'track' && <TrackTab runner={{ ...session.runner, pace: "6'42\"/กม.", gradient: '+4.2%' }} onScan={doScan} onSos={onSos} onDnf={onDnf}/>}
-      {tab === 'route' && <RouteTab course={course} runner={session.runner}/>}
+      {!isSpectator && tab === 'track' && <TrackTab runner={{ ...session.runner, pace: "6'42\"/กม.", gradient: '+4.2%' }} onScan={doScan} onSos={onSos} onDnf={onDnf}/>}
+      {tab === 'route' && <RouteTab course={course} runner={isSpectator ? (followedRunner ? { dist: followedRunner.distance, progressKm: followedRunner.progressKm } : { dist: '22K', progressKm: 0 }) : session.runner}/>}
       {tab === 'ranking' && <RankingTab snap={snap}/>}
-      {tab === 'friends' && <FriendsTab snap={snap} followedBib={snap && snap.runners[10] && snap.runners[10].bib}/>}
+      {tab === 'friends' && <FriendsTab snap={snap} followedBib={isSpectator ? session.followBib : (snap && snap.runners[10] && snap.runners[10].bib)}/>}
       <div style={{ flexShrink: 0, display: 'flex', borderTop: `1px solid #d8d2c2`, background: '#fff', padding: '6px 4px 20px' }}>
         {TABS.map(([k, icon, label]) => (
           <div key={k} onClick={() => k === 'event' ? onHome() : setTab(k)} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, padding: '6px 0', color: tab === k ? C.brand : C.mute2, cursor: 'pointer' }}>
@@ -712,6 +761,7 @@ function MobileApp() {
       ...session,
       user: { ...session.user, nickname: session.user.nickname || data.nick, phone: session.user.phone || data.phone, emgPhone: session.user.emgPhone || data.emg },
       runner: { dist: data.dist, name: data.nick, checkins: [], progressKm: 0 },
+      spectator: false, followBib: null,
     });
     setScreen('gps');
   }
@@ -736,8 +786,12 @@ function MobileApp() {
   else if (screen === 'onboard') body = <ProfileScreen user={session.user} onboard onSave={finishOnboard}/>;
   else if (screen === 'events') body = <EventPickerScreen user={session.user}
     onOpenApp={openRunnerSpace}
-    onFollow={() => { persist({ ...session, runner: session.runner || { dist: '22K', checkins: [], progressKm: 0, spectator: true } }); setScreen('app'); }}
+    onFollow={() => setScreen('follow-picker')}
     onProfile={() => setModal('profile')}/>;
+  else if (screen === 'follow-picker') body = <FollowPickerScreen onBack={() => setScreen('events')} onPick={(bib) => {
+    persist({ ...session, spectator: true, followBib: bib, runner: null });
+    setScreen('app');
+  }}/>;
   else if (screen === 'register') body = <RegisterScreen onDone={afterRegister} onBack={() => setScreen('events')}/>;
   else if (screen === 'gps') body = <GpsPermissionScreen onAllow={() => setScreen('prerace')} onBack={() => setScreen('register')}/>;
   else if (screen === 'prerace') body = <PreRaceScreen dist={session.runner.dist} onBack={() => setScreen('events')} onScan={() => {
