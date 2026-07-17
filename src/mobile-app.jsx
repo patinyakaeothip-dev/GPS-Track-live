@@ -209,15 +209,16 @@ function EventPickerScreen({ user, onOpenApp, onFollow, onProfile }) {
 }
 
 // ── Screen: Registration ─────────────────────────────────────────────────
-function RegisterScreen({ onDone }) {
+function RegisterScreen({ onDone, onBack }) {
   const [nick, setNick] = uS('');
   const [phone, setPhone] = uS('');
   const [dist, setDist] = uS('22K');
   const [emg, setEmg] = uS('');
   const canSubmit = nick.trim() && phone.trim();
   return (
-    <div style={{ height: '100%', background: C.bg2, fontFamily: C.font, display: 'flex', flexDirection: 'column' }}>
-      <div style={{ padding: '40px 24px 18px', background: C.brand, color: '#fff' }}>
+    <div style={{ height: '100%', background: C.bg2, fontFamily: C.font, display: 'flex', flexDirection: 'column', position: 'relative' }}>
+      <div style={{ padding: '40px 24px 18px', background: C.brand, color: '#fff', position: 'relative' }}>
+        <BackBtn onClick={onBack} dark/>
         <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 10 }}><Logo/><span style={{ fontSize: 11.5, fontWeight: 700 }}>Rayong Trail Running</span></div>
         <Kicker><span style={{ color: 'rgba(255,255,255,0.65)' }}>RAYONG TRAIL · ลงทะเบียน</span></Kicker>
         <div style={{ fontSize: 22, fontWeight: 800, marginTop: 8 }}>สวัสดี! กรอกข้อมูลก่อนเริ่มวิ่ง</div>
@@ -244,15 +245,23 @@ function RegisterScreen({ onDone }) {
     </div>
   );
 }
+function BackBtn({ onClick, dark }) {
+  return (
+    <div onClick={onClick} style={{ position: 'absolute', top: 40, left: 18, zIndex: 5, width: 32, height: 32, borderRadius: 999,
+      background: dark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.06)', color: dark ? '#fff' : C.text,
+      display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, cursor: 'pointer' }}>←</div>
+  );
+}
 function Field({ label, children }) {
   return <div><div style={{ fontFamily: C.mono, fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted, marginBottom: 5 }}>{label}</div>{children}</div>;
 }
 function fieldStyle() { return { width: '100%', padding: '12px 14px', background: '#fff', border: '1px solid #bdb6a4', borderRadius: 10, fontSize: 14, outline: 'none', fontFamily: C.font, boxSizing: 'border-box' }; }
 
 // ── Screen: GPS permission ────────────────────────────────────────────────
-function GpsPermissionScreen({ onAllow }) {
+function GpsPermissionScreen({ onAllow, onBack }) {
   return (
-    <div style={{ height: '100%', background: C.bg2, fontFamily: C.font, display: 'flex', flexDirection: 'column', padding: '28px 24px 30px' }}>
+    <div style={{ height: '100%', background: C.bg2, fontFamily: C.font, display: 'flex', flexDirection: 'column', padding: '28px 24px 30px', position: 'relative' }}>
+      <BackBtn onClick={onBack}/>
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', gap: 16 }}>
         <div style={{ width: 64, height: 64, borderRadius: 999, background: 'oklch(0.94 0.06 145)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28 }}>📍</div>
         <div style={{ fontSize: 19, fontWeight: 600, color: C.text }}>อนุญาตแชร์ตำแหน่งระหว่างวิ่ง</div>
@@ -269,14 +278,15 @@ function GpsPermissionScreen({ onAllow }) {
 }
 
 // ── Screen: Pre-race waiting + QR scan (simulated) ───────────────────────
-function PreRaceScreen({ dist, onScan }) {
+function PreRaceScreen({ dist, onScan, onBack }) {
   const [secs, setSecs] = uS(2538);
   uE(() => { const id = setInterval(() => setSecs(s => Math.max(0, s - 1)), 1000); return () => clearInterval(id); }, []);
   const h = String(Math.floor(secs / 3600)).padStart(2, '0');
   const m = String(Math.floor((secs % 3600) / 60)).padStart(2, '0');
   const s = String(secs % 60).padStart(2, '0');
   return (
-    <div style={{ height: '100%', background: `linear-gradient(180deg,${C.brandDk} 0%,#152f24 100%)`, color: '#fff', fontFamily: C.font, display: 'flex', flexDirection: 'column', padding: '40px 24px 30px' }}>
+    <div style={{ height: '100%', background: `linear-gradient(180deg,${C.brandDk} 0%,#152f24 100%)`, color: '#fff', fontFamily: C.font, display: 'flex', flexDirection: 'column', padding: '40px 24px 30px', position: 'relative' }}>
+      <BackBtn onClick={onBack} dark/>
       <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 10 }}><Logo/><span style={{ fontSize: 11.5, fontWeight: 700 }}>Rayong Trail Running</span></div>
       <Kicker><span style={{ color: 'rgba(255,255,255,0.65)' }}>RAYONG TRAIL · WAVE {dist}</span></Kicker>
       <div style={{ fontSize: 20, fontWeight: 600, marginTop: 8 }}>รอเวลาปล่อยตัว</div>
@@ -545,22 +555,57 @@ function DnfScreen({ onCancel, onConfirm }) {
   );
 }
 
-function ProfileScreen({ user, onLogout, onClose }) {
+function ProfileScreen({ user, onLogout, onClose, onSave }) {
+  const [nickname, setNickname] = uS(user.nickname || user.name || '');
+  const [gender, setGender] = uS(user.gender || '');
+  const [phone, setPhone] = uS(user.phone || '');
+  const [email, setEmail] = uS(user.email || '');
+  const [emgName, setEmgName] = uS(user.emgName || '');
+  const [emgPhone, setEmgPhone] = uS(user.emgPhone || '');
+  const [medical, setMedical] = uS(user.medical || '');
+  const [saved, setSaved] = uS(false);
+
+  function save() {
+    onSave({ ...user, nickname, gender, phone, email, emgName, emgPhone, medical });
+    setSaved(true);
+    setTimeout(() => setSaved(false), 1800);
+  }
+
   return (
-    <div style={{ height: '100%', background: C.bg2, fontFamily: C.font, display: 'flex', flexDirection: 'column', padding: '40px 24px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+    <div style={{ height: '100%', background: C.bg2, fontFamily: C.font, display: 'flex', flexDirection: 'column', padding: '40px 24px 24px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
         <div style={{ fontSize: 20, fontWeight: 800 }}>โปรไฟล์</div>
         <span onClick={onClose} style={{ cursor: 'pointer', fontSize: 20, color: C.muted }}>×</span>
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 24 }}>
-        <div style={{ width: 52, height: 52, borderRadius: 999, background: `linear-gradient(135deg,${C.brandLt},${C.brandDk})`, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, fontWeight: 700 }}>{user.name[0]}</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 20, flexShrink: 0 }}>
+        <div style={{ width: 52, height: 52, borderRadius: 999, background: `linear-gradient(135deg,${C.brandLt},${C.brandDk})`, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, fontWeight: 700 }}>{(nickname || user.name)[0]}</div>
         <div>
-          <div style={{ fontSize: 16, fontWeight: 700 }}>{user.name}</div>
+          <div style={{ fontSize: 16, fontWeight: 700 }}>{nickname || user.name}</div>
           <div style={{ fontFamily: C.mono, fontSize: 11, color: C.muted }}>{user.provider || 'google'} · เข้าสู่ระบบแล้ว</div>
         </div>
       </div>
-      <div style={{ flex: 1 }}/>
-      <Btn variant="ghost" onClick={onLogout}>ออกจากระบบ</Btn>
+
+      <div style={{ flex: 1, overflow: 'auto', marginTop: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <Field label="ชื่อเล่น"><input value={nickname} onChange={e => setNickname(e.target.value)} placeholder="เช่น ธีระ" style={fieldStyle()}/></Field>
+        <Field label="เพศ">
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+            {[['m', 'ชาย'], ['f', 'หญิง']].map(([v, l]) => (
+              <div key={v} onClick={() => setGender(v)} style={{ padding: 10, textAlign: 'center', borderRadius: 10, fontWeight: 600, cursor: 'pointer',
+                background: gender === v ? C.brand : '#fff', color: gender === v ? '#fff' : C.text, border: `1px solid ${gender === v ? C.brand : '#bdb6a4'}` }}>{l}</div>
+            ))}
+          </div>
+        </Field>
+        <Field label="เบอร์โทร"><input value={phone} onChange={e => setPhone(e.target.value)} placeholder="08X-XXX-XXXX" style={{ ...fieldStyle(), fontFamily: C.mono }}/></Field>
+        <Field label="อีเมล"><input value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" style={{ ...fieldStyle(), fontFamily: C.mono }}/></Field>
+        <Field label="ผู้ติดต่อฉุกเฉิน · ชื่อ"><input value={emgName} onChange={e => setEmgName(e.target.value)} placeholder="ชื่อคนใกล้ตัว" style={fieldStyle()}/></Field>
+        <Field label="ผู้ติดต่อฉุกเฉิน · เบอร์"><input value={emgPhone} onChange={e => setEmgPhone(e.target.value)} placeholder="08X-XXX-XXXX" style={{ ...fieldStyle(), fontFamily: C.mono }}/></Field>
+        <Field label="กรุ๊ปเลือด / โรคประจำตัว"><input value={medical} onChange={e => setMedical(e.target.value)} placeholder="เช่น O+ · หอบหืด" style={fieldStyle()}/></Field>
+      </div>
+
+      <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
+        <Btn onClick={save}>{saved ? '✓ บันทึกแล้ว' : 'บันทึกโปรไฟล์'}</Btn>
+        <Btn variant="ghost" onClick={onLogout}>ออกจากระบบ</Btn>
+      </div>
     </div>
   );
 }
@@ -635,11 +680,18 @@ function MobileApp() {
     setScreen('register');
   }
   function afterRegister(data) {
-    persist({ ...session, runner: { dist: data.dist, name: data.nick, checkins: [], progressKm: 0 } });
+    persist({
+      ...session,
+      user: { ...session.user, nickname: session.user.nickname || data.nick, phone: session.user.phone || data.phone, emgPhone: session.user.emgPhone || data.emg },
+      runner: { dist: data.dist, name: data.nick, checkins: [], progressKm: 0 },
+    });
     setScreen('gps');
   }
   function updateRunner(fn) {
     persist({ ...session, runner: fn(session.runner) });
+  }
+  function updateUser(nextUser) {
+    persist({ ...session, user: nextUser });
   }
 
   uE(() => { const id = 'trt-mobile-style'; if (document.getElementById(id)) return;
@@ -655,9 +707,9 @@ function MobileApp() {
     onOpenApp={openRunnerSpace}
     onFollow={() => { persist({ ...session, runner: session.runner || { dist: '22K', checkins: [], progressKm: 0, spectator: true } }); setScreen('app'); }}
     onProfile={() => setModal('profile')}/>;
-  else if (screen === 'register') body = <RegisterScreen onDone={afterRegister}/>;
-  else if (screen === 'gps') body = <GpsPermissionScreen onAllow={() => setScreen('prerace')}/>;
-  else if (screen === 'prerace') body = <PreRaceScreen dist={session.runner.dist} onScan={() => {
+  else if (screen === 'register') body = <RegisterScreen onDone={afterRegister} onBack={() => setScreen('events')}/>;
+  else if (screen === 'gps') body = <GpsPermissionScreen onAllow={() => setScreen('prerace')} onBack={() => setScreen('register')}/>;
+  else if (screen === 'prerace') body = <PreRaceScreen dist={session.runner.dist} onBack={() => setScreen('events')} onScan={() => {
     updateRunner(r => ({ ...r, checkins: [{ cp: 'start', t: '06:05' }], progressKm: 0 }));
     setScreen('app');
   }}/>;
@@ -668,6 +720,7 @@ function MobileApp() {
     <div style={{ height: '100%', position: 'relative' }}>
       {body}
       {modal === 'profile' && <Overlay><ProfileScreen user={session.user} onClose={() => setModal(null)}
+        onSave={updateUser}
         onLogout={() => { clearSession(); setSession(null); setModal(null); setScreen('login'); }}/></Overlay>}
       {modal === 'sos' && <Overlay><SosScreen onCancel={() => setModal(null)} onSent={() => setModal(null)}/></Overlay>}
       {modal === 'dnf' && <Overlay><DnfScreen onCancel={() => setModal(null)} onConfirm={() => setModal(null)}/></Overlay>}
