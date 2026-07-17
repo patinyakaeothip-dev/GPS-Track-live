@@ -227,9 +227,11 @@ function RegisterScreen({ onDone, onBack }) {
   const canSubmit = nick.trim() && phone.trim();
   return (
     <div style={{ height: '100%', background: C.bg2, fontFamily: C.font, display: 'flex', flexDirection: 'column', position: 'relative' }}>
-      <div style={{ padding: '40px 24px 18px', background: C.brand, color: '#fff', position: 'relative' }}>
-        <BackBtn onClick={onBack} dark/>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 10 }}><Logo/><span style={{ fontSize: 11.5, fontWeight: 700 }}>Rayong Trail Running</span></div>
+      <div style={{ padding: '40px 24px 18px', background: C.brand, color: '#fff' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+          <BackBtn onClick={onBack} dark inline/>
+          <Logo/><span style={{ fontSize: 11.5, fontWeight: 700 }}>Rayong Trail Running</span>
+        </div>
         <Kicker><span style={{ color: 'rgba(255,255,255,0.65)' }}>RAYONG TRAIL · ลงทะเบียน</span></Kicker>
         <div style={{ fontSize: 22, fontWeight: 800, marginTop: 8 }}>สวัสดี! กรอกข้อมูลก่อนเริ่มวิ่ง</div>
         <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.8)', marginTop: 6 }}>ใช้ครั้งเดียว · ระบบผูกเบอร์โทรกับอุปกรณ์นี้ให้อัตโนมัติ</div>
@@ -255,9 +257,10 @@ function RegisterScreen({ onDone, onBack }) {
     </div>
   );
 }
-function BackBtn({ onClick, dark }) {
+function BackBtn({ onClick, dark, inline }) {
   return (
-    <div onClick={onClick} style={{ position: 'absolute', top: 40, left: 18, zIndex: 5, width: 32, height: 32, borderRadius: 999,
+    <div onClick={onClick} style={{ ...(inline ? { flexShrink: 0 } : { position: 'absolute', top: 40, left: 18, zIndex: 5 }),
+      width: 32, height: 32, borderRadius: 999,
       background: dark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.06)', color: dark ? '#fff' : C.text,
       display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, cursor: 'pointer' }}>←</div>
   );
@@ -295,9 +298,11 @@ function PreRaceScreen({ dist, onScan, onBack }) {
   const m = String(Math.floor((secs % 3600) / 60)).padStart(2, '0');
   const s = String(secs % 60).padStart(2, '0');
   return (
-    <div style={{ height: '100%', background: `linear-gradient(180deg,${C.brandDk} 0%,#152f24 100%)`, color: '#fff', fontFamily: C.font, display: 'flex', flexDirection: 'column', padding: '40px 24px 30px', position: 'relative' }}>
-      <BackBtn onClick={onBack} dark/>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 10 }}><Logo/><span style={{ fontSize: 11.5, fontWeight: 700 }}>Rayong Trail Running</span></div>
+    <div style={{ height: '100%', background: `linear-gradient(180deg,${C.brandDk} 0%,#152f24 100%)`, color: '#fff', fontFamily: C.font, display: 'flex', flexDirection: 'column', padding: '40px 24px 30px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+        <BackBtn onClick={onBack} dark inline/>
+        <Logo/><span style={{ fontSize: 11.5, fontWeight: 700 }}>Rayong Trail Running</span>
+      </div>
       <Kicker><span style={{ color: 'rgba(255,255,255,0.65)' }}>RAYONG TRAIL · WAVE {dist}</span></Kicker>
       <div style={{ fontSize: 20, fontWeight: 600, marginTop: 8 }}>รอเวลาปล่อยตัว</div>
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
@@ -626,7 +631,7 @@ function ProfileScreen({ user, onLogout, onClose, onSave, onboard }) {
 }
 
 // ── App shell with bottom tabs ────────────────────────────────────────────
-function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile }) {
+function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome }) {
   const [tab, setTab] = uS('track');
   const [scanning, setScanning] = uS(false);
   const [scanned, setScanned] = uS(null);
@@ -652,6 +657,7 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile }) {
 
   const TABS = [
     ['track', '🏃', 'Track'], ['route', '🗺', 'Route'], ['ranking', '🏆', 'Ranking'], ['friends', '👥', 'Friends'],
+    ['event', '📍', 'Event'],
   ];
 
   return (
@@ -666,7 +672,7 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile }) {
       {tab === 'friends' && <FriendsTab snap={snap} followedBib={snap && snap.runners[10] && snap.runners[10].bib}/>}
       <div style={{ flexShrink: 0, display: 'flex', borderTop: `1px solid #d8d2c2`, background: '#fff', padding: '6px 4px 20px' }}>
         {TABS.map(([k, icon, label]) => (
-          <div key={k} onClick={() => setTab(k)} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, padding: '6px 0', color: tab === k ? C.brand : C.mute2, cursor: 'pointer' }}>
+          <div key={k} onClick={() => k === 'event' ? onHome() : setTab(k)} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, padding: '6px 0', color: tab === k ? C.brand : C.mute2, cursor: 'pointer' }}>
             <span style={{ fontSize: 19 }}>{icon}</span>
             <span style={{ fontFamily: C.mono, fontSize: 9.5, fontWeight: 600 }}>{label}</span>
           </div>
@@ -739,7 +745,7 @@ function MobileApp() {
     setScreen('app');
   }}/>;
   else if (screen === 'app') body = <AppShell user={session.user} session={session} updateRunner={updateRunner}
-    onSos={() => setModal('sos')} onDnf={() => setModal('dnf')} onProfile={() => setModal('profile')}/>;
+    onSos={() => setModal('sos')} onDnf={() => setModal('dnf')} onProfile={() => setModal('profile')} onHome={() => setScreen('events')}/>;
 
   return (
     <div style={{ height: '100%', position: 'relative' }}>
