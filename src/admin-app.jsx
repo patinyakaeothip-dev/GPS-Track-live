@@ -82,38 +82,41 @@ function EventList({ events, onEdit, onDelete, onCreate }) {
 }
 
 // ── Create/edit form ────────────────────────────────────────────────────
+function blankCpTimes(start, finish) {
+  return { start, a1_out: '', a2_in: '', a2_out: '', a1_in: '', finish };
+}
 function blankEvent() {
   return {
     id: window.eventStore.newEventId(),
     name: '', date: '', regClose: '', status: 'upcoming', closed: false, hotline: '',
-    waves: { '29K': '06:00', '22K': '06:05', '11K': '06:10' },
     distances: [
-      { id: 'd1', label: '11K', cutoff: '150', open: true, color: '#3a86c4' },
-      { id: 'd2', label: '22K', cutoff: '270', open: true, color: '#e07a3e' },
-      { id: 'd3', label: '29K', cutoff: '360', open: true, color: '#1f4d39' },
+      { id: 'd1', label: '11K', cutoff: '150', open: true, color: '#3a86c4', cpTimes: blankCpTimes('06:10', '08:40') },
+      { id: 'd2', label: '22K', cutoff: '270', open: true, color: '#e07a3e', cpTimes: blankCpTimes('06:05', '10:35') },
+      { id: 'd3', label: '29K', cutoff: '360', open: true, color: '#1f4d39', cpTimes: blankCpTimes('06:00', '12:00') },
     ],
   };
 }
 
 function EventForm({ initial, onCancel, onSave, onDelete }) {
   const isNew = !initial;
-  const [ev, setEv] = aS(() => initial ? { ...blankEvent(), ...initial, waves: initial.waves || blankEvent().waves } : blankEvent());
+  const [ev, setEv] = aS(() => initial ? { ...blankEvent(), ...initial, distances: (initial.distances || blankEvent().distances).map(d => ({ ...d, cpTimes: d.cpTimes || blankCpTimes('', '') })) } : blankEvent());
   const [gpx11k, setGpx11k] = aS(null);
   const [toast, setToast] = aS(null);
 
   function set(patch) { setEv(e => ({ ...e, ...patch })); }
   function updateDist(id, patch) { setEv(e => ({ ...e, distances: e.distances.map(d => d.id === id ? { ...d, ...patch } : d) })); }
+  function updateDistCp(id, key, val) { setEv(e => ({ ...e, distances: e.distances.map(d => d.id === id ? { ...d, cpTimes: { ...d.cpTimes, [key]: val } } : d) })); }
   function removeDist(id) { setEv(e => ({ ...e, distances: e.distances.filter(d => d.id !== id) })); }
   function addDist() {
     const colors = ['#3a86c4', '#e07a3e', '#1f4d39', '#7c4a03', '#9b1c10'];
-    setEv(e => ({ ...e, distances: [...e.distances, { id: 'd' + Date.now(), label: 'ใหม่', cutoff: '180', open: true, color: colors[e.distances.length % colors.length] }] }));
+    setEv(e => ({ ...e, distances: [...e.distances, { id: 'd' + Date.now(), label: 'ใหม่', cutoff: '180', open: true, color: colors[e.distances.length % colors.length], cpTimes: blankCpTimes('', '') }] }));
   }
 
   const cpEditor = [
-    { label: 'A1 ↗', km: CP_KMS.a1_out, desc: 'เขามะเข้ม · ขาไป' },
-    { label: 'A2 ↑', km: CP_KMS.a2_in, desc: 'Green Mountain · ขึ้นเขา' },
-    { label: 'A2 ↓', km: CP_KMS.a2_out, desc: 'Green Mountain · ลงเขา (29K เท่านั้น)' },
-    { label: 'A1 ↙', km: CP_KMS.a1_in, desc: 'เขามะเข้ม · ขากลับ' },
+    { key: 'a1_out', label: 'A1 ↗', km: CP_KMS.a1_out, desc: 'เขามะเข้ม · ขาไป' },
+    { key: 'a2_in', label: 'A2 ↑', km: CP_KMS.a2_in, desc: 'Green Mountain · ขึ้นเขา' },
+    { key: 'a2_out', label: 'A2 ↓', km: CP_KMS.a2_out, desc: 'Green Mountain · ลงเขา (29K เท่านั้น)' },
+    { key: 'a1_in', label: 'A1 ↙', km: CP_KMS.a1_in, desc: 'เขามะเข้ม · ขากลับ' },
   ];
 
   function save() {
@@ -157,14 +160,6 @@ function EventForm({ initial, onCancel, onSave, onDelete }) {
           </Field>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14, marginBottom: 16 }}>
-          {['29K', '22K', '11K'].map(d => (
-            <Field key={d} label={`ปล่อยตัว ${d}`}>
-              <input value={ev.waves[d]} onChange={e => set({ waves: { ...ev.waves, [d]: e.target.value } })} style={inputStyle({ fontFamily: A_MONO })}/>
-            </Field>
-          ))}
-        </div>
-
         <div style={{ marginBottom: 18 }}>
           <Field label="เบอร์สายด่วนทีมกู้ภัย (ใช้ในปุ่ม SOS ของนักวิ่ง)">
             <input value={ev.hotline} onChange={e => set({ hotline: e.target.value })} placeholder="เช่น 081-234-5678" style={inputStyle({ width: 280, fontFamily: A_MONO })}/>
@@ -181,13 +176,44 @@ function EventForm({ initial, onCancel, onSave, onDelete }) {
           แต่ละระยะมีเส้นทาง GPX แยกกัน (ไม่บังคับให้ใช้เส้นเดียวกัน) · รองรับ Suunto / Garmin / Strava export (.gpx)
         </div>
 
-        <div style={{ fontFamily: A_MONO, fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#5d6b59', marginBottom: 8 }}>จุดพัก / Water station (กม. บนเส้นทางที่อัปโหลด)</div>
+        <div style={{ fontFamily: A_MONO, fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#5d6b59', marginBottom: 4 }}>จุดพัก / Water station (กม. บนเส้นทางที่อัปโหลด)</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 18 }}>
           {cpEditor.map((cpe, i) => (
             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', background: '#fafaf8', border: '1px solid #ece7da', borderRadius: 10 }}>
               <span style={{ fontFamily: A_MONO, fontSize: 12, fontWeight: 600, width: 70 }}>{cpe.label}</span>
               <div style={{ padding: '6px 10px', background: '#fff', border: '1px solid #e5e0d3', borderRadius: 8, boxShadow: '0 1px 3px rgba(31,42,28,0.08)', fontFamily: A_MONO, fontSize: 12, width: 70 }}>{cpe.km} km</div>
               <span style={{ fontSize: 11.5, color: '#5d6b59' }}>{cpe.desc}</span>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ fontFamily: A_MONO, fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#5d6b59', marginBottom: 4 }}>เวลาสตาร์ท / cut-off แต่ละจุด (นาฬิกา, ต่อระยะ)</div>
+        <div style={{ fontFamily: A_MONO, fontSize: 10, color: '#5d6b59', marginBottom: 8, lineHeight: 1.5 }}>
+          เวลาสตาร์ทใช้คำนวณช่วงที่ RD เข้าดูแผนที่ล่วงหน้าได้ก่อนงานเริ่ม (Live Monitor) · เว้นว่างจุดที่ระยะนั้นไม่ผ่าน
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 18 }}>
+          {ev.distances.map(de => (
+            <div key={de.id} style={{ padding: '10px 12px', background: '#fafaf8', border: '1px solid #ece7da', borderRadius: 10 }}>
+              <div style={{ fontFamily: A_MONO, fontSize: 12, fontWeight: 700, color: de.color, marginBottom: 8 }}>{de.label}</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+                <div style={{ width: 84 }}>
+                  <div style={{ fontFamily: A_MONO, fontSize: 9, color: '#5d6b59', marginBottom: 3 }}>สตาร์ท</div>
+                  <input value={de.cpTimes.start} onChange={e => updateDistCp(de.id, 'start', e.target.value)} placeholder="06:00"
+                    style={{ width: '100%', padding: '7px 8px', background: '#fff', border: '1px solid #e5e0d3', borderRadius: 8, fontFamily: A_MONO, fontSize: 12, textAlign: 'center' }}/>
+                </div>
+                {cpEditor.map(cpe => (
+                  <div key={cpe.key} style={{ width: 84 }}>
+                    <div style={{ fontFamily: A_MONO, fontSize: 9, color: '#5d6b59', marginBottom: 3 }}>{cpe.label}</div>
+                    <input value={de.cpTimes[cpe.key]} onChange={e => updateDistCp(de.id, cpe.key, e.target.value)} placeholder="--:--"
+                      style={{ width: '100%', padding: '7px 8px', background: '#fff', border: '1px solid #e5e0d3', borderRadius: 8, fontFamily: A_MONO, fontSize: 12, textAlign: 'center' }}/>
+                  </div>
+                ))}
+                <div style={{ width: 84 }}>
+                  <div style={{ fontFamily: A_MONO, fontSize: 9, color: '#5d6b59', marginBottom: 3 }}>Finish cutoff</div>
+                  <input value={de.cpTimes.finish} onChange={e => updateDistCp(de.id, 'finish', e.target.value)} placeholder="12:00"
+                    style={{ width: '100%', padding: '7px 8px', background: '#fff', border: '1px solid #e5e0d3', borderRadius: 8, fontFamily: A_MONO, fontSize: 12, textAlign: 'center' }}/>
+                </div>
+              </div>
             </div>
           ))}
         </div>
