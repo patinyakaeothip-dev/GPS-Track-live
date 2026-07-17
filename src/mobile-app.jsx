@@ -213,10 +213,7 @@ function EventPickerScreen({ user, session, onOpenApp, onFollow, onProfile }) {
           <Kicker>GPS Trail Tracker</Kicker>
           <div style={{ fontSize: 21, fontWeight: 800, marginTop: 4, color: C.text }}>เลือกงานแข่งของคุณ</div>
         </div>
-        <div onClick={onProfile} style={{ width: 38, height: 38, borderRadius: 999, background: `linear-gradient(135deg,${C.brandLt},${C.brandDk})`,
-          color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 600, fontSize: 14, flexShrink: 0, cursor: 'pointer' }}>
-          {user.name[0]}
-        </div>
+        <PersonIcon size={38} onClick={onProfile}/>
       </div>
       <div style={{ display: 'flex', gap: 6, background: '#f4f1e8', borderRadius: 12, margin: '0 18px', padding: 4 }}>
         {[['past', 'ผ่านมาแล้ว'], ['live', 'กำลังแข่ง'], ['upcoming', 'กำลังจะมาถึง']].map(([k, l]) => (
@@ -336,6 +333,19 @@ function BackBtn({ onClick, dark, inline }) {
       display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
         <path d="M15 5L8 12L15 19" stroke={stroke} strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    </div>
+  );
+}
+function PersonIcon({ size = 38, onClick }) {
+  const iconSize = Math.round(size * 0.52);
+  return (
+    <div onClick={onClick} style={{ width: size, height: size, borderRadius: 999, background: '#fff',
+      border: `1.8px solid ${C.text}`, display: 'flex', alignItems: 'center', justifyContent: 'center',
+      flexShrink: 0, cursor: onClick ? 'pointer' : 'default' }}>
+      <svg width={iconSize} height={iconSize} viewBox="0 0 24 24" fill="none">
+        <circle cx="12" cy="8" r="3.6" stroke={C.text} strokeWidth="2"/>
+        <path d="M4.5 20c0-4.1 3.36-6.5 7.5-6.5s7.5 2.4 7.5 6.5" stroke={C.text} strokeWidth="2" strokeLinecap="round"/>
       </svg>
     </div>
   );
@@ -688,7 +698,7 @@ function ProfileScreen({ user, onLogout, onClose, onSave, onboard }) {
         {!onboard && <span onClick={onClose} style={{ cursor: 'pointer', fontSize: 20, color: C.muted }}>×</span>}
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 20, flexShrink: 0 }}>
-        <div style={{ width: 52, height: 52, borderRadius: 999, background: `linear-gradient(135deg,${C.brandLt},${C.brandDk})`, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, fontWeight: 700 }}>{(nickname || user.name)[0]}</div>
+        <PersonIcon size={52}/>
         <div>
           <div style={{ fontSize: 16, fontWeight: 700 }}>{nickname || user.name}</div>
           <div style={{ fontFamily: C.mono, fontSize: 11, color: C.muted }}>{user.provider || 'google'} · เข้าสู่ระบบแล้ว</div>
@@ -758,7 +768,7 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: C.bg, fontFamily: C.font, overflow: 'hidden' }}>
       <div style={{ padding: '40px 18px 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <Brand/>
-        <div onClick={onProfile} style={{ width: 30, height: 30, borderRadius: 999, background: `linear-gradient(135deg,${C.brandLt},${C.brandDk})`, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>{user.name[0]}</div>
+        <PersonIcon size={30} onClick={onProfile}/>
       </div>
       {!isSpectator && tab === 'track' && <TrackTab runner={{ ...session.runner, pace: "6'42\"/กม.", gradient: '+4.2%' }} onScan={doScan} onSos={onSos} onDnf={onDnf}/>}
       {tab === 'route' && <RouteTab course={course} runner={isSpectator ? (followedRunner ? { dist: followedRunner.distance, progressKm: followedRunner.progressKm } : { dist: '22K', progressKm: 0 }) : session.runner}/>}
