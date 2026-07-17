@@ -256,12 +256,37 @@ function LiveMonitorApp() {
             <span style={{ fontFamily: M_MONO, fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 600 }}>Live · {counts.total} นักวิ่ง</span>
           </div>
         </header>
-        {events.length > 1 && (
+        {events.length > 1 && selectedEvent && selectedEvent.status === 'live' && (
           <div style={{ padding: '8px 22px', borderBottom: '1px solid #d8d2c2', background: '#fdf6e3', fontFamily: M_MONO, fontSize: 10.5, color: '#7c4a03', lineHeight: 1.5 }}>
             ⚠ นักวิ่งที่เห็นเป็นข้อมูลจำลองชุดเดียว ยังไม่ได้แยกตามงานที่เลือก — ต้องต่อ backend จริงต่องานก่อนถึงจะกรองได้จริง
           </div>
         )}
 
+        {selectedEvent && selectedEvent.status === 'upcoming' && (
+          <div style={{ padding: '60px 24px', textAlign: 'center' }}>
+            <div style={{ fontSize: 34, marginBottom: 10 }}>🕓</div>
+            <div style={{ fontSize: 17, fontWeight: 700, color: '#1f2a1c' }}>ยังไม่เริ่มงาน</div>
+            <div style={{ fontFamily: M_MONO, fontSize: 12, color: '#5d6b59', marginTop: 8, lineHeight: 1.6 }}>
+              "{selectedEvent.name}" มีกำหนดแข่ง {selectedEvent.date}<br/>
+              แผนที่ GPS จะเริ่มแสดงตำแหน่งนักวิ่งเมื่องานเริ่มและมีคน scan QR ที่จุดสตาร์ทแล้ว
+            </div>
+          </div>
+        )}
+
+        {selectedEvent && selectedEvent.status === 'past' && (
+          <div style={{ padding: '60px 24px', textAlign: 'center' }}>
+            <div style={{ fontSize: 34, marginBottom: 10 }}>🏁</div>
+            <div style={{ fontSize: 17, fontWeight: 700, color: '#1f2a1c' }}>งานนี้จบไปแล้ว</div>
+            <div style={{ fontFamily: M_MONO, fontSize: 12, color: '#5d6b59', marginTop: 8, lineHeight: 1.6 }}>
+              "{selectedEvent.name}" · {selectedEvent.date}<br/>
+              Live Monitor มีไว้ดูระหว่างแข่งเท่านั้น — ดูผลอย่างเป็นทางการที่หน้า Results แทน
+            </div>
+            <a href="results/" style={{ display: 'inline-block', marginTop: 16, padding: '10px 18px', background: M_BRAND, color: '#fff', textDecoration: 'none', borderRadius: 8, fontFamily: M_MONO, fontSize: 12, fontWeight: 700 }}>📊 ไปหน้า Results →</a>
+          </div>
+        )}
+
+        {(!selectedEvent || selectedEvent.status === 'live') && (
+        <>
         <div style={{ display: 'flex', borderBottom: '1px solid #d8d2c2' }}>
           {[['ทั้งหมด', counts.total, '#1f2a1c'], ['กำลังวิ่ง', counts.on, '#1f2a1c'], ['เข้าเส้นชัย', counts.finished, M_BRAND], ['Alerts', counts.alert, counts.alert ? M_ALERT : '#1f2a1c']].map(([label, value, color], i) => (
             <div key={i} style={{ flex: 1, padding: '12px 18px', borderRight: '1px solid #d8d2c2' }}>
@@ -433,6 +458,8 @@ function LiveMonitorApp() {
               </table>
             </div>
           </div>
+        )}
+        </>
         )}
       </div>
     </div>
