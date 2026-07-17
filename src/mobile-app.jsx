@@ -36,12 +36,12 @@ function saveProfile(p) {
   try { localStorage.setItem(LS_PROFILE_KEY, JSON.stringify(p)); } catch (_) {}
 }
 
-const EVENTS = [
-  { id: 'rtr2026', name: 'Rayong Trail Running 2026', date: '18 เม.ย. 2026', status: 'live',
-    distances: ['11K', '22K', '29K'] },
-  { id: 'kk2026', name: 'Khao Kho Ultra 2026', date: '3 ส.ค. 2026', status: 'upcoming', closed: true },
-  { id: 'ky2025', name: 'Khao Yai Trail 2025', date: '2 พ.ย. 2025', status: 'past', bib: '114', distance: '29K' },
-];
+// Events come from src/event-store.js (shared with admin/index.html) so
+// events created/edited in Admin show up here — see that file's header for
+// why this only syncs within one browser until a real backend exists.
+function getEvents() {
+  return window.eventStore ? window.eventStore.loadEvents() : [];
+}
 
 function useCourse() {
   const [course, setCourse] = uS(null);
@@ -146,7 +146,7 @@ function EventCard({ ev, isRegistered, onRunnerSpace, onFollow, onSeeResult }) {
           <div style={{ width: 46, height: 46, borderRadius: 12, background: '#e5e4df', flexShrink: 0 }}/>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 14.5, fontWeight: 600, color: C.text }}>{ev.name}</div>
-            <div style={{ fontFamily: C.mono, fontSize: 10.5, color: C.muted, marginTop: 2 }}>{ev.date} · bib #{ev.bib} · {ev.distance} · จบแล้ว</div>
+            <div style={{ fontFamily: C.mono, fontSize: 10.5, color: C.muted, marginTop: 2 }}>{ev.date}{ev.bib ? ` · bib #${ev.bib}` : ''}{ev.distance ? ` · ${ev.distance}` : ''} · จบแล้ว</div>
           </div>
         </div>
         <button onClick={onSeeResult} style={{ width: '100%', padding: 13, background: C.bg, border: 'none', borderTop: `1px solid ${C.border}`, fontSize: 12.5, fontWeight: 700, color: C.brandDk, cursor: 'pointer' }}>🏅 See Result</button>
@@ -190,7 +190,9 @@ function EventPickerScreen({ user, session, onOpenApp, onFollow, onProfile }) {
   const [tab, setTab] = uS('live');
   const [q, setQ] = uS('');
   const [toast, setToast] = uS(null);
-  const filtered = EVENTS.filter(e => e.status === tab && (!q || e.name.toLowerCase().includes(q.toLowerCase())));
+  const [events, setEvents] = uS(() => getEvents());
+  uE(() => { setEvents(getEvents()); }, []);
+  const filtered = events.filter(e => e.status === tab && (!q || e.name.toLowerCase().includes(q.toLowerCase())));
 
   function handleRunnerSpace(ev) {
     const isRegistered = session.runner && session.runner.eventId === ev.id;
