@@ -77,6 +77,13 @@ function LiveMonitorApp() {
   const [selectedBib, setSelectedBib] = mS('103');
   const [dashView, setDashView] = mS('map'); // 'map' | 'ranking'
   const [distFilter, setDistFilter] = mS(null);
+  const [events] = mS(() => (window.eventStore ? window.eventStore.loadEvents() : []));
+  const [eventId, setEventId] = mS(() => {
+    const list = window.eventStore ? window.eventStore.loadEvents() : [];
+    const live = list.find(e => e.status === 'live');
+    return (live || list[0] || {}).id || null;
+  });
+  const selectedEvent = events.find(e => e.id === eventId) || null;
   const [rankGender, setRankGender] = mS(null);
   const [search, setSearch] = mS('');
   const [focusBib, setFocusBib] = mS(null);
@@ -231,15 +238,29 @@ function LiveMonitorApp() {
             <img src="assets/rayong-trail-icon.png" alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
           </div>
           <div>
-            <div style={{ fontFamily: M_MONO, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#5d6b59' }}>Rayong Trail Running</div>
+            <div style={{ fontFamily: M_MONO, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#5d6b59' }}>{selectedEvent ? selectedEvent.name : 'Rayong Trail Running'}</div>
             <div style={{ fontFamily: 'Georgia,serif', fontStyle: 'italic', fontSize: 17, fontWeight: 600, color: '#1f4d39' }}>Live GPS Monitor</div>
           </div>
+          {events.length > 0 && (
+            <select value={eventId || ''} onChange={e => setEventId(e.target.value)} style={{
+              padding: '6px 10px', border: '1px solid #e5e0d3', borderRadius: 6, background: '#fff',
+              fontFamily: M_MONO, fontSize: 11, color: '#1f2a1c', maxWidth: 260 }}>
+              {events.map(ev => (
+                <option key={ev.id} value={ev.id}>{ev.name} · {ev.date}</option>
+              ))}
+            </select>
+          )}
           <div style={{ flex: 1 }}/>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', border: '1px solid #e5e0d3', borderRadius: 6, boxShadow: '0 1px 3px rgba(31,42,28,0.08)' }}>
             <span style={{ width: 8, height: 8, borderRadius: 99, background: M_BRAND, boxShadow: '0 0 0 3px rgba(45,106,79,0.18)' }}/>
             <span style={{ fontFamily: M_MONO, fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 600 }}>Live · {counts.total} นักวิ่ง</span>
           </div>
         </header>
+        {events.length > 1 && (
+          <div style={{ padding: '8px 22px', borderBottom: '1px solid #d8d2c2', background: '#fdf6e3', fontFamily: M_MONO, fontSize: 10.5, color: '#7c4a03', lineHeight: 1.5 }}>
+            ⚠ นักวิ่งที่เห็นเป็นข้อมูลจำลองชุดเดียว ยังไม่ได้แยกตามงานที่เลือก — ต้องต่อ backend จริงต่องานก่อนถึงจะกรองได้จริง
+          </div>
+        )}
 
         <div style={{ display: 'flex', borderBottom: '1px solid #d8d2c2' }}>
           {[['ทั้งหมด', counts.total, '#1f2a1c'], ['กำลังวิ่ง', counts.on, '#1f2a1c'], ['เข้าเส้นชัย', counts.finished, M_BRAND], ['Alerts', counts.alert, counts.alert ? M_ALERT : '#1f2a1c']].map(([label, value, color], i) => (
