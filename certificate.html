@@ -182,9 +182,20 @@
       * { -webkit-print-color-adjust: exact !important;
           print-color-adjust: exact !important; }
     }
+    .trt-nav { display: flex; gap: 6px; align-items: center; padding: 10px 20px; background: #fff;
+      border-bottom: 1px solid #e5e0d3; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 11px; }
+    .trt-nav a { color: #5d6b59; text-decoration: none; padding: 6px 10px; border-radius: 6px; }
+    .trt-nav a.active { color: #fff; background: #2d6a4f; }
+    .trt-nav a:hover:not(.active) { background: #f5f1e8; color: #1f4d39; }
   </style>
 </head>
 <body>
+  <nav class="trt-nav no-print">
+    <a href="./">📱 App</a>
+    <a href="monitor.html">🖥 Live Monitor</a>
+    <a href="results/">📊 Results</a>
+    <a href="admin/">🔧 Admin</a>
+  </nav>
   <div class="toolbar no-print">
     <span>📜 ใบประกาศ · กด Print เพื่อ Save as PDF</span>
     <button onclick="window.print()">🖨 Print / Save as PDF</button>

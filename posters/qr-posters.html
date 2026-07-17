@@ -83,9 +83,21 @@
       .sheets { padding: 0; gap: 0; }
       .poster { box-shadow: none; border: none; margin: 0; }
     }
+    .trt-nav { display: flex; gap: 6px; align-items: center; padding: 10px 20px; background: #fff;
+      border-bottom: 1px solid #d8d2c2; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 11px; }
+    .trt-nav a { color: #5d6b59; text-decoration: none; padding: 6px 10px; border-radius: 6px; }
+    .trt-nav a.active { color: #fff; background: #2d6a4f; }
+    .trt-nav a:hover:not(.active) { background: #f5f1e8; color: #1f4d39; }
+    @media print { .trt-nav { display: none; } }
   </style>
 </head>
 <body>
+  <nav class="trt-nav">
+    <a href="../">📱 App</a>
+    <a href="../monitor.html">🖥 Live Monitor</a>
+    <a href="../results/">📊 Results</a>
+    <a href="../admin/">🔧 Admin</a>
+  </nav>
   <div class="controls">
     <label>Base URL</label>
     <input id="base" type="url" value="https://rayong-trail.pages.dev/runner/" placeholder="https://your-domain.example/runner/"/>

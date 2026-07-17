@@ -6,8 +6,14 @@
   <title>Trail Run Tracker · Diagnostics</title>
   <style>
     body { font-family: ui-monospace, "SF Mono", monospace; background: #fafaf8;
-      color: #1f2a1c; padding: 24px; max-width: 720px; margin: 0 auto;
+      color: #1f2a1c; margin: 0;
       line-height: 1.5; font-size: 14px; }
+    .wrap { padding: 24px; max-width: 720px; margin: 0 auto; }
+    .trt-nav { display: flex; gap: 6px; align-items: center; padding: 10px 20px; background: #fff;
+      border-bottom: 1px solid #d8d2c2; font-family: ui-monospace, "SF Mono", monospace; font-size: 11px; }
+    .trt-nav a { color: #5d6b59; text-decoration: none; padding: 6px 10px; border-radius: 6px; }
+    .trt-nav a.active { color: #fff; background: #2d6a4f; }
+    .trt-nav a:hover:not(.active) { background: #f5f1e8; color: #1f4d39; }
     h1 { font-family: ui-sans-serif, system-ui, sans-serif; color: #1f4d39;
       margin-bottom: 4px; }
     .sub { color: #5d6b59; font-size: 13px; margin-bottom: 24px; }
@@ -29,6 +35,13 @@
   </style>
 </head>
 <body>
+  <nav class="trt-nav">
+    <a href="./">📱 App</a>
+    <a href="monitor.html">🖥 Live Monitor</a>
+    <a href="results/">📊 Results</a>
+    <a href="admin/">🔧 Admin</a>
+  </nav>
+  <div class="wrap">
   <h1>🔬 Diagnostics</h1>
   <div class="sub">ทดสอบการเชื่อมต่อ Apps Script backend ทีละแบบ · ดูว่าตัวไหนล้มเหลว</div>
 
@@ -112,5 +125,6 @@
     }
   }
   </script>
+  </div>
 </body>
 </html>
