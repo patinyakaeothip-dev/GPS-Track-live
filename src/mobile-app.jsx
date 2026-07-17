@@ -77,7 +77,12 @@ function Kicker({ children }) {
 }
 
 function Logo({ size = 18 }) {
-  return <img src="assets/rayong-trail-logo.jpg" alt="" style={{ width: size, height: size, borderRadius: 4, objectFit: 'cover', flexShrink: 0 }}/>;
+  return (
+    <div style={{ width: size, height: size, borderRadius: size >= 30 ? 8 : 4, background: '#fff', flexShrink: 0,
+      display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+      <img src="assets/rayong-trail-icon.png" alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+    </div>
+  );
 }
 
 function Brand() {
@@ -96,8 +101,8 @@ function SplashScreen({ onDone }) {
       background: `linear-gradient(180deg,${C.brand} 0%,${C.brandDk} 100%)`, color: '#fff',
       fontFamily: C.font, padding: '0 24px 40px' }}>
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 14 }}>
-        <div style={{ width: 76, height: 76, borderRadius: 20, background: '#fff', padding: 8, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <img src="assets/rayong-trail-logo.jpg" alt="" style={{ width: '100%', height: 'auto', borderRadius: 8 }}/>
+        <div style={{ width: 76, height: 76, borderRadius: 20, background: '#fff', padding: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+          <img src="assets/rayong-trail-icon.png" alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 8 }}/>
         </div>
         <div style={{ fontFamily: 'Georgia,serif', fontStyle: 'italic', fontSize: 24, fontWeight: 700 }}>Rayong Trail Running</div>
         <Kicker>2026 · GPS TRACKER</Kicker>
@@ -153,7 +158,7 @@ function EventCard({ ev, onRunnerSpace, onFollow, onSeeResult }) {
       borderRadius: 14, boxShadow: ev.status !== 'live' ? '0 1px 3px rgba(31,42,28,0.08)' : 'none', overflow: 'hidden' }}>
       <div style={{ display: 'flex', gap: 12, alignItems: 'center', padding: 14 }}>
         {ev.status === 'live'
-          ? <div style={{ width: 46, height: 46, borderRadius: 12, background: '#fff', border: '1px solid #d8d2c2', padding: 4, flexShrink: 0 }}><img src="assets/rayong-trail-logo.jpg" alt="" style={{ width: '100%', height: 'auto' }}/></div>
+          ? <div style={{ width: 46, height: 46, borderRadius: 12, background: '#fff', border: '1px solid #d8d2c2', padding: 4, flexShrink: 0, overflow: 'hidden' }}><img src="assets/rayong-trail-icon.png" alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/></div>
           : <div style={{ width: 46, height: 46, borderRadius: 12, background: '#e5e4df', flexShrink: 0 }}/>}
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 14.5, fontWeight: 600, color: C.text }}>{ev.name}</div>
@@ -303,11 +308,28 @@ function RegisterScreen({ onDone, onBack }) {
   );
 }
 function BackBtn({ onClick, dark, inline }) {
+  const stroke = dark ? '#fff' : C.text;
   return (
     <div onClick={onClick} style={{ ...(inline ? { flexShrink: 0 } : { position: 'absolute', top: 40, left: 18, zIndex: 5 }),
-      width: 32, height: 32, borderRadius: 999,
-      background: dark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.06)', color: dark ? '#fff' : C.text,
-      display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, cursor: 'pointer' }}>←</div>
+      width: 32, height: 32, borderRadius: 10, border: `1.6px solid ${dark ? 'rgba(255,255,255,0.55)' : '#bdb6a4'}`,
+      background: dark ? 'rgba(255,255,255,0.08)' : '#fff',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+        <path d="M15 5L8 12L15 19" stroke={stroke} strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    </div>
+  );
+}
+function HomeIcon({ size = 19, dark, active }) {
+  const stroke = active ? C.brand : (dark ? '#fff' : C.mute2);
+  return (
+    <div style={{ width: size + 13, height: size + 13, borderRadius: 10, border: `1.6px solid ${active ? C.brand : (dark ? 'rgba(255,255,255,0.55)' : '#d8d2c2')}`,
+      display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <path d="M4 11.5L12 4l8 7.5" stroke={stroke} strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round"/>
+        <path d="M6 10v9h4v-5.5h4V19h4v-9" stroke={stroke} strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round"/>
+      </svg>
+    </div>
   );
 }
 function Field({ label, children, required }) {
@@ -722,7 +744,7 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
       <div style={{ flexShrink: 0, display: 'flex', borderTop: `1px solid #d8d2c2`, background: '#fff', padding: '6px 4px 20px' }}>
         {TABS.map(([k, icon, label]) => (
           <div key={k} onClick={() => k === 'event' ? onHome() : setTab(k)} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, padding: '6px 0', color: tab === k ? C.brand : C.mute2, cursor: 'pointer' }}>
-            <span style={{ fontSize: 19 }}>{icon}</span>
+            {k === 'event' ? <HomeIcon size={17} active={tab === k}/> : <span style={{ fontSize: 19 }}>{icon}</span>}
             <span style={{ fontFamily: C.mono, fontSize: 9.5, fontWeight: 600 }}>{label}</span>
           </div>
         ))}

@@ -227,8 +227,8 @@ function LiveMonitorApp() {
 
       <div style={{ background: '#fff', border: '1px solid #e5e0d3', borderRadius: 14, boxShadow: '0 2px 16px rgba(0,0,0,0.05)', overflow: 'hidden' }}>
         <header style={{ display: 'flex', alignItems: 'center', padding: '14px 22px', borderBottom: '1px solid #d8d2c2', gap: 16 }}>
-          <div style={{ width: 40, height: 40, borderRadius: 8, background: '#fff', padding: 3, border: '1px solid #d8d2c2', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <img src="assets/rayong-trail-logo.jpg" alt="" style={{ width: 32, height: 'auto' }}/>
+          <div style={{ width: 40, height: 40, borderRadius: 8, background: '#fff', padding: 3, border: '1px solid #d8d2c2', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden' }}>
+            <img src="assets/rayong-trail-icon.png" alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
           </div>
           <div>
             <div style={{ fontFamily: M_MONO, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#5d6b59' }}>Rayong Trail Running</div>
