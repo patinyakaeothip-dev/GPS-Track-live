@@ -9,6 +9,13 @@ const { useState: aS, useEffect: aE } = React;
 const A_BRAND = '#2d6a4f', A_MONO = "'JetBrains Mono',ui-monospace,monospace";
 const CP_KMS = { a1_out: 5.6, a2_in: 11.6, a2_out: 19, a1_in: 23.5 };
 
+const THAI_MONTHS = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+function formatThaiDate(iso) {
+  const [y, m, d] = iso.split('-').map(Number);
+  if (!y || !m || !d) return iso;
+  return `${d} ${THAI_MONTHS[m - 1]} ${y}`;
+}
+
 function Field({ label, children }) {
   return <div><div style={{ fontFamily: A_MONO, fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#5d6b59', marginBottom: 6 }}>{label}</div>{children}</div>;
 }
@@ -88,7 +95,7 @@ function blankCpTimes(start, finish) {
 function blankEvent() {
   return {
     id: window.eventStore.newEventId(),
-    name: '', date: '', regClose: '', status: 'upcoming', closed: false, hotline: '',
+    name: '', date: '', raceDateISO: '', regClose: '', status: 'upcoming', closed: false, hotline: '',
     distances: [
       { id: 'd1', label: '11K', cutoff: '150', open: true, color: '#3a86c4', cpTimes: blankCpTimes('06:10', '08:40') },
       { id: 'd2', label: '22K', cutoff: '270', open: true, color: '#e07a3e', cpTimes: blankCpTimes('06:05', '10:35') },
@@ -138,8 +145,18 @@ function EventForm({ initial, onCancel, onSave, onDelete }) {
       <div style={{ background: '#fff', border: '1px solid #e5e0d3', borderRadius: 14, boxShadow: '0 1px 3px rgba(31,42,28,0.08)', padding: 24 }}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14, marginBottom: 14 }}>
           <Field label="ชื่องานแข่ง"><input value={ev.name} onChange={e => set({ name: e.target.value })} style={inputStyle()}/></Field>
-          <Field label="วันที่แข่ง"><input value={ev.date} onChange={e => set({ date: e.target.value })} style={inputStyle({ fontFamily: A_MONO })}/></Field>
+          <Field label="วันที่แข่ง (ปฏิทิน — ใช้คำนวณเวลา)">
+            <input type="date" value={ev.raceDateISO} onChange={e => {
+              const iso = e.target.value;
+              set({ raceDateISO: iso, date: iso ? formatThaiDate(iso) : ev.date });
+            }} style={inputStyle({ fontFamily: A_MONO })}/>
+          </Field>
           <Field label="ปิดรับสมัคร (วันที่)"><input value={ev.regClose} onChange={e => set({ regClose: e.target.value })} style={inputStyle({ fontFamily: A_MONO })}/></Field>
+        </div>
+        <div style={{ marginTop: -8, marginBottom: 14 }}>
+          <Field label="วันที่แข่ง (ข้อความที่แสดงในแอพ — แก้ไขเพิ่มเติมได้)">
+            <input value={ev.date} onChange={e => set({ date: e.target.value })} style={inputStyle({ fontFamily: A_MONO, maxWidth: 280 })}/>
+          </Field>
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
