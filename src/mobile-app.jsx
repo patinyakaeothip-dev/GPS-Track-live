@@ -138,7 +138,7 @@ function LoginScreen({ onLogin }) {
 }
 
 // ── Screen: Event picker ──────────────────────────────────────────────────
-function EventCard({ ev, onRunnerSpace, onFollow, onSeeResult }) {
+function EventCard({ ev, isRegistered, onRunnerSpace, onFollow, onSeeResult }) {
   if (ev.status === 'past') {
     return (
       <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 14, boxShadow: '0 1px 3px rgba(31,42,28,0.08)', overflow: 'hidden' }}>
@@ -169,9 +169,11 @@ function EventCard({ ev, onRunnerSpace, onFollow, onSeeResult }) {
         {ev.status === 'live' && <span style={{ fontFamily: C.mono, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.06em', color: '#fff', background: `linear-gradient(135deg,${C.brandLt},${C.brandDk})`, padding: '4px 10px', borderRadius: 999 }}>LIVE</span>}
       </div>
       <div style={{ display: 'flex' }}>
-        <button disabled={ev.closed} onClick={onRunnerSpace} style={{ flex: 1, padding: 13, background: ev.closed ? '#e5e4df' : C.orange, color: ev.closed ? '#a8b1a3' : '#fff', border: 'none', fontSize: 12.5, fontWeight: 700, cursor: ev.closed ? 'not-allowed' : 'pointer' }}>
+        <button onClick={onRunnerSpace} style={{ flex: 1, padding: 13, background: (ev.closed && !isRegistered) ? '#e5e4df' : C.orange, color: (ev.closed && !isRegistered) ? '#7c7566' : '#fff', border: 'none', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>
           🏃 Runner Space
-          <div style={{ fontFamily: C.mono, fontSize: 9, fontWeight: 600, opacity: 0.85, marginTop: 1 }}>{ev.closed ? 'ลงทะเบียนวิ่ง' : (ev.status === 'live' ? 'ไปหน้าติดตามของฉัน' : 'ดูสถานะการลงทะเบียน')}</div>
+          <div style={{ fontFamily: C.mono, fontSize: 9, fontWeight: 600, opacity: 0.85, marginTop: 1 }}>
+            {isRegistered ? 'ไปหน้าติดตามของฉัน' : ev.closed ? 'ปิดรับสมัครแล้ว' : (ev.status === 'live' ? 'ไปหน้าติดตามของฉัน' : 'ดูสถานะการลงทะเบียน')}
+          </div>
         </button>
         {ev.status === 'live' && (
           <button onClick={onFollow} style={{ flex: 1, padding: 13, background: C.brand, color: '#fff', border: 'none', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>
@@ -184,12 +186,27 @@ function EventCard({ ev, onRunnerSpace, onFollow, onSeeResult }) {
   );
 }
 
-function EventPickerScreen({ user, onOpenApp, onFollow, onProfile }) {
+function EventPickerScreen({ user, session, onOpenApp, onFollow, onProfile }) {
   const [tab, setTab] = uS('live');
   const [q, setQ] = uS('');
+  const [toast, setToast] = uS(null);
   const filtered = EVENTS.filter(e => e.status === tab && (!q || e.name.toLowerCase().includes(q.toLowerCase())));
+
+  function handleRunnerSpace(ev) {
+    const isRegistered = session.runner && session.runner.eventId === ev.id;
+    if (ev.closed && !isRegistered) {
+      setToast('ปิดรับสมัครแล้วสำหรับงานนี้');
+      setTimeout(() => setToast(null), 2400);
+      return;
+    }
+    onOpenApp(ev);
+  }
+
   return (
-    <div style={{ height: '100%', background: C.bg, fontFamily: C.font, display: 'flex', flexDirection: 'column' }}>
+    <div style={{ height: '100%', background: C.bg, fontFamily: C.font, display: 'flex', flexDirection: 'column', position: 'relative' }}>
+      {toast && <div style={{ position: 'absolute', top: 14, left: '50%', transform: 'translateX(-50%)', zIndex: 20,
+        padding: '10px 16px', background: '#3a3a3a', color: '#fff', borderRadius: 999, fontSize: 12.5, whiteSpace: 'nowrap',
+        boxShadow: '0 6px 20px rgba(0,0,0,0.25)' }}>🔒 {toast}</div>}
       <div style={{ padding: '40px 20px 14px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
         <div>
           <Brand/>
@@ -215,7 +232,8 @@ function EventPickerScreen({ user, onOpenApp, onFollow, onProfile }) {
         </div>
         {filtered.map(ev => (
           <EventCard key={ev.id} ev={ev}
-            onRunnerSpace={() => onOpenApp(ev)}
+            isRegistered={!!(session.runner && session.runner.eventId === ev.id)}
+            onRunnerSpace={() => handleRunnerSpace(ev)}
             onFollow={() => onFollow(ev)}
             onSeeResult={() => window.location.href = 'results/'} />
         ))}
@@ -323,13 +341,16 @@ function BackBtn({ onClick, dark, inline }) {
   );
 }
 function HomeIcon({ size = 19, dark, active }) {
-  const stroke = active ? C.brand : (dark ? '#fff' : C.mute2);
+  const stroke = active ? '#fff' : (dark ? '#fff' : C.muted);
   return (
-    <div style={{ width: size + 13, height: size + 13, borderRadius: 10, border: `1.6px solid ${active ? C.brand : (dark ? 'rgba(255,255,255,0.55)' : '#d8d2c2')}`,
+    <div style={{ width: size + 13, height: size + 13, borderRadius: 10,
+      border: active ? 'none' : `1.8px solid ${dark ? 'rgba(255,255,255,0.6)' : '#a8b1a3'}`,
+      background: active ? `linear-gradient(135deg,${C.brandLt},${C.brandDk})` : 'transparent',
+      boxShadow: active ? '0 3px 8px -2px rgba(26,74,55,0.55)' : 'none',
       display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
       <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-        <path d="M4 11.5L12 4l8 7.5" stroke={stroke} strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round"/>
-        <path d="M6 10v9h4v-5.5h4V19h4v-9" stroke={stroke} strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round"/>
+        <path d="M4 11.5L12 4l8 7.5" stroke={stroke} strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"/>
+        <path d="M6 10v9h4v-5.5h4V19h4v-9" stroke={stroke} strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"/>
       </svg>
     </div>
   );
@@ -777,14 +798,14 @@ function MobileApp() {
   }
   function openRunnerSpace(ev) {
     setPendingEvent(ev);
-    if (session && session.runner) { setScreen('app'); return; }
+    if (session && session.runner && session.runner.eventId === ev.id) { setScreen('app'); return; }
     setScreen('register');
   }
   function afterRegister(data) {
     persist({
       ...session,
       user: { ...session.user, nickname: session.user.nickname || data.nick, phone: session.user.phone || data.phone, emgPhone: session.user.emgPhone || data.emg },
-      runner: { dist: data.dist, name: data.nick, checkins: [], progressKm: 0 },
+      runner: { dist: data.dist, name: data.nick, checkins: [], progressKm: 0, eventId: pendingEvent && pendingEvent.id },
       spectator: false, followBib: null,
     });
     setScreen('gps');
@@ -808,7 +829,7 @@ function MobileApp() {
   if (screen === 'splash') body = <SplashScreen onDone={() => setScreen(session ? 'events' : 'login')}/>;
   else if (screen === 'login') body = <LoginScreen onLogin={handleLogin}/>;
   else if (screen === 'onboard') body = <ProfileScreen user={session.user} onboard onSave={finishOnboard}/>;
-  else if (screen === 'events') body = <EventPickerScreen user={session.user}
+  else if (screen === 'events') body = <EventPickerScreen user={session.user} session={session}
     onOpenApp={openRunnerSpace}
     onFollow={() => setScreen('follow-picker')}
     onProfile={() => setModal('profile')}/>;
