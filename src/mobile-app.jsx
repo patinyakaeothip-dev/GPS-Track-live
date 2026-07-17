@@ -36,6 +36,16 @@ function saveProfile(p) {
   try { localStorage.setItem(LS_PROFILE_KEY, JSON.stringify(p)); } catch (_) {}
 }
 
+// Favourite runners (❤ picked from the registered-runner list) shown in the
+// Friends tab — persisted per device, independent of who you're following.
+const LS_FAVS_KEY = 'trt.mobile.favorites';
+function loadFavorites() {
+  try { return JSON.parse(localStorage.getItem(LS_FAVS_KEY)) || []; } catch (_) { return []; }
+}
+function saveFavorites(list) {
+  try { localStorage.setItem(LS_FAVS_KEY, JSON.stringify(list)); } catch (_) {}
+}
+
 // Events come from src/event-store.js (shared with admin/index.html) so
 // events created/edited in Admin show up here — see that file's header for
 // why this only syncs within one browser until a real backend exists.
@@ -282,6 +292,54 @@ function FollowPickerScreen({ onBack, onPick }) {
             <span style={{ fontSize: 16, color: C.mute2 }}>›</span>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Screen: pick registered runners to favourite (❤) for the Friends tab ──
+function FavoritePickerScreen({ onBack, favBibs, onToggle }) {
+  const [q, setQ] = uS('');
+  const snap = uM(() => (window.buildSnapshot ? window.buildSnapshot('mid') : null), []);
+  const runners = uM(() => {
+    if (!snap) return [];
+    const query = q.trim().toLowerCase();
+    return snap.runners
+      .filter(r => !query || r.bib.includes(query) || `${r.firstName} ${r.lastName}`.toLowerCase().includes(query))
+      .slice(0, 40);
+  }, [snap, q]);
+  return (
+    <div style={{ height: '100%', background: C.bg, fontFamily: C.font, display: 'flex', flexDirection: 'column' }}>
+      <div style={{ padding: '40px 20px 14px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+          <BackBtn onClick={onBack} inline/>
+          <Brand/>
+        </div>
+        <div style={{ fontSize: 21, fontWeight: 800, color: C.text }}>เพิ่มเพื่อนที่ติดตาม</div>
+        <div style={{ fontSize: 12.5, color: C.muted, marginTop: 4 }}>กด ❤ เพื่อเพิ่ม/ลบจากรายชื่อในแท็บ Friends · ค้นหาด้วยชื่อหรือเลข BIB</div>
+      </div>
+      <div style={{ padding: '0 18px 10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '11px 13px', background: '#fff', border: `1px solid ${C.border}`, borderRadius: 10, boxShadow: '0 1px 3px rgba(31,42,28,0.08)' }}>
+          <span style={{ fontSize: 13, color: C.mute2 }}>🔍</span>
+          <input value={q} onChange={e => setQ(e.target.value)} placeholder="ชื่อ หรือ BIB" style={{ border: 'none', outline: 'none', fontSize: 13, flex: 1, fontFamily: C.font, background: 'transparent' }}/>
+        </div>
+      </div>
+      <div style={{ flex: 1, overflow: 'auto', padding: '0 18px 18px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {!snap && <div style={{ textAlign: 'center', color: C.muted, fontSize: 13, padding: 30 }}>กำลังโหลดรายชื่อนักวิ่ง…</div>}
+        {snap && runners.length === 0 && <div style={{ textAlign: 'center', color: C.muted, fontSize: 13, padding: 30 }}>ไม่พบนักวิ่งที่ค้นหา</div>}
+        {runners.map(r => {
+          const fav = favBibs.includes(r.bib);
+          return (
+            <div key={r.bib} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 12, background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, boxShadow: '0 1px 3px rgba(31,42,28,0.08)' }}>
+              <div style={{ width: 36, height: 36, borderRadius: 999, background: C.orange, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 600, flexShrink: 0 }}>{r.firstName[0]}</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 600 }}>{r.firstName} {r.lastName}</div>
+                <div style={{ fontFamily: C.mono, fontSize: 10.5, color: C.muted }}>bib {r.bib} · {r.distance}</div>
+              </div>
+              <span onClick={() => onToggle(r.bib)} style={{ fontSize: 20, cursor: 'pointer', color: fav ? '#e0453e' : C.mute2, lineHeight: 1 }}>{fav ? '♥' : '♡'}</span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -592,20 +650,48 @@ function RankingTab({ snap }) {
   );
 }
 
-function FriendsTab({ snap, followedBib }) {
-  const runner = snap && snap.runners.find(r => r.bib === followedBib);
+function FriendsTab({ snap, followedBib, favBibs, onAddFavorite, onRemoveFavorite }) {
+  const followed = snap && snap.runners.find(r => r.bib === followedBib);
+  const favs = uM(() => {
+    if (!snap) return [];
+    return favBibs.map(bib => snap.runners.find(r => r.bib === bib)).filter(Boolean);
+  }, [snap, favBibs]);
   return (
-    <div style={{ flex: 1, overflow: 'auto', padding: '14px 18px 90px' }}>
-      {!runner && <div style={{ color: C.muted, fontSize: 13, textAlign: 'center', padding: 30 }}>ยังไม่มีเพื่อนที่ติดตาม</div>}
-      {runner && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 10, background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, boxShadow: '0 1px 3px rgba(31,42,28,0.08)' }}>
-          <div style={{ width: 36, height: 36, borderRadius: 999, background: C.orange, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 600 }}>{runner.firstName[0]}</div>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 14, fontWeight: 600 }}>{runner.firstName} {runner.lastName}</div>
-            <div style={{ fontFamily: C.mono, fontSize: 10.5, color: C.muted }}>{runner.distance} · {runner.progressKm.toFixed(1)}/{runner.course.distance}K · {runner.status}</div>
+    <div style={{ flex: 1, overflow: 'auto', padding: '14px 18px 90px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {followed && (
+        <div>
+          <div style={{ fontFamily: C.mono, fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted, marginBottom: 6 }}>กำลังติดตามอยู่</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 10, background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, boxShadow: '0 1px 3px rgba(31,42,28,0.08)' }}>
+            <div style={{ width: 36, height: 36, borderRadius: 999, background: C.orange, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 600 }}>{followed.firstName[0]}</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 14, fontWeight: 600 }}>{followed.firstName} {followed.lastName}</div>
+              <div style={{ fontFamily: C.mono, fontSize: 10.5, color: C.muted }}>{followed.distance} · {followed.progressKm.toFixed(1)}/{followed.course.distance}K · {followed.status}</div>
+            </div>
           </div>
         </div>
       )}
+
+      <div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+          <div style={{ fontFamily: C.mono, fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted }}>เพื่อนที่ favourite ({favs.length})</div>
+          <button onClick={onAddFavorite} style={{ padding: '6px 10px', background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 8, fontFamily: C.mono, fontSize: 10.5, fontWeight: 700, color: C.brand, cursor: 'pointer' }}>♥ เพิ่มเพื่อน</button>
+        </div>
+        {favs.length === 0 && <div style={{ color: C.muted, fontSize: 13, textAlign: 'center', padding: 24, background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12 }}>ยังไม่มีเพื่อนที่ favourite · กด "♥ เพิ่มเพื่อน"</div>}
+        {favs.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {favs.map(r => (
+              <div key={r.bib} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 10, background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, boxShadow: '0 1px 3px rgba(31,42,28,0.08)' }}>
+                <div style={{ width: 36, height: 36, borderRadius: 999, background: C.orange, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 600, flexShrink: 0 }}>{r.firstName[0]}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600 }}>{r.firstName} {r.lastName}</div>
+                  <div style={{ fontFamily: C.mono, fontSize: 10.5, color: C.muted }}>{r.distance} · {r.progressKm.toFixed(1)}/{r.course.distance}K · {r.status}</div>
+                </div>
+                <span onClick={() => onRemoveFavorite(r.bib)} style={{ fontSize: 18, cursor: 'pointer', color: '#e0453e', lineHeight: 1 }}>♥</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -738,8 +824,18 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
   const [tab, setTab] = uS(isSpectator ? 'friends' : 'track');
   const [scanning, setScanning] = uS(false);
   const [scanned, setScanned] = uS(null);
+  const [pickingFav, setPickingFav] = uS(false);
+  const [favBibs, setFavBibs] = uS(() => loadFavorites());
   const course = useCourse();
   const snap = uM(() => (window.buildSnapshot ? window.buildSnapshot('mid') : null), []);
+
+  function toggleFavorite(bib) {
+    setFavBibs(list => {
+      const next = list.includes(bib) ? list.filter(b => b !== bib) : [...list, bib];
+      saveFavorites(next);
+      return next;
+    });
+  }
 
   const seq = !isSpectator && CP_SEQ[session.runner.dist];
   const nextCp = seq && seq[session.runner.checkins.length];
@@ -757,6 +853,7 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
 
   if (scanning) return <QrScanScreen label={nextCp === 'start' ? 'จุดสตาร์ท' : CP_LABEL[nextCp]} onScanned={scanComplete}/>;
   if (scanned) return <ScanSuccessScreen cp={scanned.cp} km={scanned.km} onDone={() => setScanned(null)}/>;
+  if (pickingFav) return <FavoritePickerScreen onBack={() => setPickingFav(false)} favBibs={favBibs} onToggle={toggleFavorite}/>;
 
   const followedRunner = isSpectator && snap && snap.runners.find(r => r.bib === session.followBib);
 
@@ -775,7 +872,7 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
       {!isSpectator && tab === 'track' && <TrackTab runner={{ ...session.runner, pace: "6'42\"/กม.", gradient: '+4.2%' }} onScan={doScan} onSos={onSos} onDnf={onDnf}/>}
       {tab === 'route' && <RouteTab course={course} runner={isSpectator ? (followedRunner ? { dist: followedRunner.distance, progressKm: followedRunner.progressKm } : { dist: '22K', progressKm: 0 }) : session.runner}/>}
       {tab === 'ranking' && <RankingTab snap={snap}/>}
-      {tab === 'friends' && <FriendsTab snap={snap} followedBib={isSpectator ? session.followBib : (snap && snap.runners[10] && snap.runners[10].bib)}/>}
+      {tab === 'friends' && <FriendsTab snap={snap} followedBib={isSpectator ? session.followBib : (snap && snap.runners[10] && snap.runners[10].bib)} favBibs={favBibs} onAddFavorite={() => setPickingFav(true)} onRemoveFavorite={toggleFavorite}/>}
       <div style={{ flexShrink: 0, display: 'flex', borderTop: `1px solid #d8d2c2`, background: '#fff', padding: '6px 4px 20px' }}>
         {TABS.map(([k, icon, label]) => (
           <div key={k} onClick={() => k === 'event' ? onHome() : setTab(k)} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, padding: '6px 0', color: tab === k ? C.brand : C.mute2, cursor: 'pointer' }}>
