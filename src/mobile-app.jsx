@@ -171,12 +171,14 @@ function EventCard({ ev, onRunnerSpace, onFollow, onSeeResult }) {
       <div style={{ display: 'flex' }}>
         <button disabled={ev.closed} onClick={onRunnerSpace} style={{ flex: 1, padding: 13, background: ev.closed ? '#e5e4df' : C.orange, color: ev.closed ? '#a8b1a3' : '#fff', border: 'none', fontSize: 12.5, fontWeight: 700, cursor: ev.closed ? 'not-allowed' : 'pointer' }}>
           🏃 Runner Space
-          <div style={{ fontFamily: C.mono, fontSize: 9, fontWeight: 600, opacity: 0.85, marginTop: 1 }}>{ev.closed ? 'ลงทะเบียนวิ่ง' : 'ไปหน้าติดตามของฉัน'}</div>
+          <div style={{ fontFamily: C.mono, fontSize: 9, fontWeight: 600, opacity: 0.85, marginTop: 1 }}>{ev.closed ? 'ลงทะเบียนวิ่ง' : (ev.status === 'live' ? 'ไปหน้าติดตามของฉัน' : 'ดูสถานะการลงทะเบียน')}</div>
         </button>
-        <button onClick={onFollow} style={{ flex: 1, padding: 13, background: C.brand, color: '#fff', border: 'none', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>
-          🔗 Follow the race
-          <div style={{ fontFamily: C.mono, fontSize: 9, fontWeight: 600, opacity: 0.85, marginTop: 1 }}>ดูเพื่อนที่ในงานนี้</div>
-        </button>
+        {ev.status === 'live' && (
+          <button onClick={onFollow} style={{ flex: 1, padding: 13, background: C.brand, color: '#fff', border: 'none', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>
+            🔗 Follow the race
+            <div style={{ fontFamily: C.mono, fontSize: 9, fontWeight: 600, opacity: 0.85, marginTop: 1 }}>ดูเพื่อนที่ในงานนี้</div>
+          </button>
+        )}
       </div>
     </div>
   );
