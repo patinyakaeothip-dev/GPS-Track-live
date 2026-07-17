@@ -25,6 +25,24 @@ const NAMES = [
   ['307', 'ใหม่', '11K', 9.0, 'normal', 'M'],
 ];
 
+// RD can open the map early to check GPS/course setup before an upcoming
+// event actually starts, within this window before the earliest wave time.
+const PREVIEW_WINDOW_MS = 3 * 60 * 60 * 1000;
+function earliestStartDate(ev) {
+  if (!ev || !ev.raceDateISO) return null;
+  const times = (ev.distances || []).map(d => d.cpTimes && d.cpTimes.start).filter(Boolean);
+  if (!times.length) return null;
+  const earliest = times.slice().sort()[0];
+  const [h, m] = earliest.split(':').map(Number);
+  if (Number.isNaN(h) || Number.isNaN(m)) return null;
+  const d = new Date(ev.raceDateISO + 'T00:00:00');
+  d.setHours(h, m, 0, 0);
+  return d;
+}
+function fmtClock(d) {
+  return d.toLocaleString('th-TH', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+}
+
 function fmtPace(p) {
   if (!isFinite(p) || p <= 0) return '—';
   let mm = Math.floor(p), ss = Math.round((p - mm) * 60);
@@ -84,6 +102,11 @@ function LiveMonitorApp() {
     return (live || list[0] || {}).id || null;
   });
   const selectedEvent = events.find(e => e.id === eventId) || null;
+  const [previewOpen, setPreviewOpen] = mS(false);
+  const earliestStart = earliestStartDate(selectedEvent);
+  const previewFrom = earliestStart ? new Date(earliestStart.getTime() - PREVIEW_WINDOW_MS) : null;
+  const previewUnlocked = !!(earliestStart && Date.now() >= previewFrom.getTime() && Date.now() < earliestStart.getTime());
+  const showDashboard = !selectedEvent || selectedEvent.status === 'live' || (selectedEvent.status === 'upcoming' && previewUnlocked && previewOpen);
   const [rankGender, setRankGender] = mS(null);
   const [search, setSearch] = mS('');
   const [focusBib, setFocusBib] = mS(null);
@@ -242,7 +265,7 @@ function LiveMonitorApp() {
             <div style={{ fontFamily: 'Georgia,serif', fontStyle: 'italic', fontSize: 17, fontWeight: 600, color: '#1f4d39' }}>Live GPS Monitor</div>
           </div>
           {events.length > 0 && (
-            <select value={eventId || ''} onChange={e => setEventId(e.target.value)} style={{
+            <select value={eventId || ''} onChange={e => { setEventId(e.target.value); setPreviewOpen(false); }} style={{
               padding: '6px 10px', border: '1px solid #e5e0d3', borderRadius: 6, background: '#fff',
               fontFamily: M_MONO, fontSize: 11, color: '#1f2a1c', maxWidth: 260 }}>
               {events.map(ev => (
@@ -262,7 +285,7 @@ function LiveMonitorApp() {
           </div>
         )}
 
-        {selectedEvent && selectedEvent.status === 'upcoming' && (
+        {selectedEvent && selectedEvent.status === 'upcoming' && !showDashboard && (
           <div style={{ padding: '60px 24px', textAlign: 'center' }}>
             <div style={{ fontSize: 34, marginBottom: 10 }}>🕓</div>
             <div style={{ fontSize: 17, fontWeight: 700, color: '#1f2a1c' }}>ยังไม่เริ่มงาน</div>
@@ -270,6 +293,22 @@ function LiveMonitorApp() {
               "{selectedEvent.name}" มีกำหนดแข่ง {selectedEvent.date}<br/>
               แผนที่ GPS จะเริ่มแสดงตำแหน่งนักวิ่งเมื่องานเริ่มและมีคน scan QR ที่จุดสตาร์ทแล้ว
             </div>
+            {earliestStart && (
+              previewUnlocked ? (
+                <button onClick={() => setPreviewOpen(true)} style={{ marginTop: 16, padding: '10px 18px', background: M_BRAND, color: '#fff', border: 'none', borderRadius: 8, fontFamily: M_MONO, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                  🔍 ดูแผนที่ล่วงหน้า (preview)
+                </button>
+              ) : (
+                <div style={{ marginTop: 16, fontFamily: M_MONO, fontSize: 11, color: '#7c4a03', background: '#fdf6e3', display: 'inline-block', padding: '8px 14px', borderRadius: 8 }}>
+                  🔍 ดูแผนที่ล่วงหน้าได้ตั้งแต่ {fmtClock(previewFrom)} (3 ชม.ก่อนสตาร์ท)
+                </div>
+              )
+            )}
+            {!earliestStart && (
+              <div style={{ marginTop: 16, fontFamily: M_MONO, fontSize: 10.5, color: '#5d6b59' }}>
+                (ยังกดดูแผนที่ล่วงหน้าไม่ได้ — ใส่วันที่แข่งและเวลาสตาร์ทของแต่ละระยะในหน้า Admin ก่อน)
+              </div>
+            )}
           </div>
         )}
 
@@ -285,8 +324,14 @@ function LiveMonitorApp() {
           </div>
         )}
 
-        {(!selectedEvent || selectedEvent.status === 'live') && (
+        {showDashboard && (
         <>
+        {selectedEvent && selectedEvent.status === 'upcoming' && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 22px', borderBottom: '1px solid #d8d2c2', background: '#fdf6e3', fontFamily: M_MONO, fontSize: 10.5, color: '#7c4a03' }}>
+            <span>🔍 โหมดพรีวิว — งานยังไม่เริ่ม ตำแหน่งนักวิ่งที่เห็นเป็นข้อมูลจำลองสำหรับเช็คระบบเท่านั้น</span>
+            <button onClick={() => setPreviewOpen(false)} style={{ padding: '5px 10px', background: 'transparent', border: '1px solid #d8ae5c', borderRadius: 6, fontFamily: M_MONO, fontSize: 10, fontWeight: 700, color: '#7c4a03', cursor: 'pointer' }}>ปิดพรีวิว</button>
+          </div>
+        )}
         <div style={{ display: 'flex', borderBottom: '1px solid #d8d2c2' }}>
           {[['ทั้งหมด', counts.total, '#1f2a1c'], ['กำลังวิ่ง', counts.on, '#1f2a1c'], ['เข้าเส้นชัย', counts.finished, M_BRAND], ['Alerts', counts.alert, counts.alert ? M_ALERT : '#1f2a1c']].map(([label, value, color], i) => (
             <div key={i} style={{ flex: 1, padding: '12px 18px', borderRight: '1px solid #d8d2c2' }}>
