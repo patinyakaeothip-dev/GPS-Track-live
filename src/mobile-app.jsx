@@ -262,8 +262,8 @@ function BackBtn({ onClick, dark }) {
       display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, cursor: 'pointer' }}>←</div>
   );
 }
-function Field({ label, children }) {
-  return <div><div style={{ fontFamily: C.mono, fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted, marginBottom: 5 }}>{label}</div>{children}</div>;
+function Field({ label, children, required }) {
+  return <div><div style={{ fontFamily: C.mono, fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted, marginBottom: 5 }}>{label}{required && <span style={{ color: '#9b1c10' }}> *จำเป็น</span>}</div>{children}</div>;
 }
 function fieldStyle() { return { width: '100%', padding: '12px 14px', background: '#fff', border: '1px solid #bdb6a4', borderRadius: 10, fontSize: 14, outline: 'none', fontFamily: C.font, boxSizing: 'border-box' }; }
 
@@ -574,7 +574,7 @@ function ProfileScreen({ user, onLogout, onClose, onSave, onboard }) {
   const [emgPhone, setEmgPhone] = uS(user.emgPhone || '');
   const [medical, setMedical] = uS(user.medical || '');
   const [saved, setSaved] = uS(false);
-  const canSubmit = !onboard || (nickname.trim() && phone.trim());
+  const canSubmit = !onboard || (nickname.trim() && phone.trim() && emgName.trim() && emgPhone.trim());
 
   function save() {
     onSave({ ...user, nickname, gender, phone, email, emgName, emgPhone, medical });
@@ -601,7 +601,7 @@ function ProfileScreen({ user, onLogout, onClose, onSave, onboard }) {
       </div>
 
       <div style={{ flex: 1, overflow: 'auto', marginTop: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <Field label="ชื่อเล่น"><input value={nickname} onChange={e => setNickname(e.target.value)} placeholder="เช่น ธีระ" style={fieldStyle()}/></Field>
+        <Field label="ชื่อเล่น" required={onboard}><input value={nickname} onChange={e => setNickname(e.target.value)} placeholder="เช่น ธีระ" style={fieldStyle()}/></Field>
         <Field label="เพศ">
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
             {[['m', 'ชาย'], ['f', 'หญิง']].map(([v, l]) => (
@@ -610,10 +610,10 @@ function ProfileScreen({ user, onLogout, onClose, onSave, onboard }) {
             ))}
           </div>
         </Field>
-        <Field label="เบอร์โทร"><input value={phone} onChange={e => setPhone(e.target.value)} placeholder="08X-XXX-XXXX" style={{ ...fieldStyle(), fontFamily: C.mono }}/></Field>
+        <Field label="เบอร์โทร" required={onboard}><input value={phone} onChange={e => setPhone(e.target.value)} placeholder="08X-XXX-XXXX" style={{ ...fieldStyle(), fontFamily: C.mono }}/></Field>
         <Field label="อีเมล"><input value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" style={{ ...fieldStyle(), fontFamily: C.mono }}/></Field>
-        <Field label="ผู้ติดต่อฉุกเฉิน · ชื่อ"><input value={emgName} onChange={e => setEmgName(e.target.value)} placeholder="ชื่อคนใกล้ตัว" style={fieldStyle()}/></Field>
-        <Field label="ผู้ติดต่อฉุกเฉิน · เบอร์"><input value={emgPhone} onChange={e => setEmgPhone(e.target.value)} placeholder="08X-XXX-XXXX" style={{ ...fieldStyle(), fontFamily: C.mono }}/></Field>
+        <Field label="ผู้ติดต่อฉุกเฉิน · ชื่อ" required={onboard}><input value={emgName} onChange={e => setEmgName(e.target.value)} placeholder="ชื่อคนใกล้ตัว" style={fieldStyle()}/></Field>
+        <Field label="ผู้ติดต่อฉุกเฉิน · เบอร์" required={onboard}><input value={emgPhone} onChange={e => setEmgPhone(e.target.value)} placeholder="08X-XXX-XXXX" style={{ ...fieldStyle(), fontFamily: C.mono }}/></Field>
         <Field label="กรุ๊ปเลือด / โรคประจำตัว"><input value={medical} onChange={e => setMedical(e.target.value)} placeholder="เช่น O+ · หอบหืด" style={fieldStyle()}/></Field>
       </div>
 
