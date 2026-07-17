@@ -26,6 +26,16 @@ function saveSession(s) {
 }
 function clearSession() { try { localStorage.removeItem(LS_KEY); } catch (_) {} }
 
+// Profile persists across logout/login on this device — so the mandatory
+// onboarding form only ever shows once per device, not on every login.
+const LS_PROFILE_KEY = 'trt.mobile.profile';
+function loadProfile() {
+  try { return JSON.parse(localStorage.getItem(LS_PROFILE_KEY)) || null; } catch (_) { return null; }
+}
+function saveProfile(p) {
+  try { localStorage.setItem(LS_PROFILE_KEY, JSON.stringify(p)); } catch (_) {}
+}
+
 const EVENTS = [
   { id: 'rtr2026', name: 'Rayong Trail Running 2026', date: '18 เม.ย. 2026', status: 'live',
     distances: ['11K', '22K', '29K'] },
@@ -555,7 +565,7 @@ function DnfScreen({ onCancel, onConfirm }) {
   );
 }
 
-function ProfileScreen({ user, onLogout, onClose, onSave }) {
+function ProfileScreen({ user, onLogout, onClose, onSave, onboard }) {
   const [nickname, setNickname] = uS(user.nickname || user.name || '');
   const [gender, setGender] = uS(user.gender || '');
   const [phone, setPhone] = uS(user.phone || '');
@@ -564,9 +574,11 @@ function ProfileScreen({ user, onLogout, onClose, onSave }) {
   const [emgPhone, setEmgPhone] = uS(user.emgPhone || '');
   const [medical, setMedical] = uS(user.medical || '');
   const [saved, setSaved] = uS(false);
+  const canSubmit = !onboard || (nickname.trim() && phone.trim());
 
   function save() {
     onSave({ ...user, nickname, gender, phone, email, emgName, emgPhone, medical });
+    if (onboard) return;
     setSaved(true);
     setTimeout(() => setSaved(false), 1800);
   }
@@ -574,8 +586,11 @@ function ProfileScreen({ user, onLogout, onClose, onSave }) {
   return (
     <div style={{ height: '100%', background: C.bg2, fontFamily: C.font, display: 'flex', flexDirection: 'column', padding: '40px 24px 24px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
-        <div style={{ fontSize: 20, fontWeight: 800 }}>โปรไฟล์</div>
-        <span onClick={onClose} style={{ cursor: 'pointer', fontSize: 20, color: C.muted }}>×</span>
+        <div>
+          <div style={{ fontSize: 20, fontWeight: 800 }}>{onboard ? 'ยินดีต้อนรับ 👋' : 'โปรไฟล์'}</div>
+          {onboard && <div style={{ fontSize: 12.5, color: C.muted, marginTop: 4 }}>กรอกข้อมูลก่อนเริ่มใช้งานครั้งแรก · ครั้งต่อไปไม่ต้องกรอกอีก</div>}
+        </div>
+        {!onboard && <span onClick={onClose} style={{ cursor: 'pointer', fontSize: 20, color: C.muted }}>×</span>}
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 20, flexShrink: 0 }}>
         <div style={{ width: 52, height: 52, borderRadius: 999, background: `linear-gradient(135deg,${C.brandLt},${C.brandDk})`, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, fontWeight: 700 }}>{(nickname || user.name)[0]}</div>
@@ -603,8 +618,8 @@ function ProfileScreen({ user, onLogout, onClose, onSave }) {
       </div>
 
       <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
-        <Btn onClick={save}>{saved ? '✓ บันทึกแล้ว' : 'บันทึกโปรไฟล์'}</Btn>
-        <Btn variant="ghost" onClick={onLogout}>ออกจากระบบ</Btn>
+        <Btn disabled={!canSubmit} onClick={save}>{onboard ? 'เริ่มใช้งาน →' : (saved ? '✓ บันทึกแล้ว' : 'บันทึกโปรไฟล์')}</Btn>
+        {!onboard && <Btn variant="ghost" onClick={onLogout}>ออกจากระบบ</Btn>}
       </div>
     </div>
   );
@@ -671,7 +686,14 @@ function MobileApp() {
   function persist(next) { setSession(next); saveSession(next); }
 
   function handleLogin(name) {
-    persist({ user: { name, provider: 'google' }, runner: null });
+    const profile = loadProfile();
+    persist({ user: { name, provider: 'google', ...(profile || {}) }, runner: null });
+    setScreen(profile && profile.profileCompleted ? 'events' : 'onboard');
+  }
+  function finishOnboard(nextUser) {
+    const completed = { ...nextUser, profileCompleted: true };
+    saveProfile(completed);
+    persist({ ...session, user: completed });
     setScreen('events');
   }
   function openRunnerSpace(ev) {
@@ -691,7 +713,9 @@ function MobileApp() {
     persist({ ...session, runner: fn(session.runner) });
   }
   function updateUser(nextUser) {
-    persist({ ...session, user: nextUser });
+    const withCompleted = { ...nextUser, profileCompleted: true };
+    saveProfile(withCompleted);
+    persist({ ...session, user: withCompleted });
   }
 
   uE(() => { const id = 'trt-mobile-style'; if (document.getElementById(id)) return;
@@ -703,6 +727,7 @@ function MobileApp() {
   let body;
   if (screen === 'splash') body = <SplashScreen onDone={() => setScreen(session ? 'events' : 'login')}/>;
   else if (screen === 'login') body = <LoginScreen onLogin={handleLogin}/>;
+  else if (screen === 'onboard') body = <ProfileScreen user={session.user} onboard onSave={finishOnboard}/>;
   else if (screen === 'events') body = <EventPickerScreen user={session.user}
     onOpenApp={openRunnerSpace}
     onFollow={() => { persist({ ...session, runner: session.runner || { dist: '22K', checkins: [], progressKm: 0, spectator: true } }); setScreen('app'); }}
