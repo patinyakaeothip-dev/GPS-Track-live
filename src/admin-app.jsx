@@ -173,7 +173,7 @@ function blankEvent() {
   };
 }
 
-function EventForm({ initial, onCancel, onSave, onDelete }) {
+function EventForm({ initial, onCancel, onSave, onSaveInPlace, onDelete }) {
   const isNew = !initial;
   const [ev, setEv] = aS(() => initial ? { ...blankEvent(), ...initial, distances: (initial.distances || blankEvent().distances).map(d => ({ capacity: '', registered: '0', ...d, cpTimes: d.cpTimes || blankCpTimes('', '') })) } : blankEvent());
   const [gpx11k, setGpx11k] = aS(null);
@@ -213,6 +213,16 @@ function EventForm({ initial, onCancel, onSave, onDelete }) {
   function save() {
     if (!ev.name.trim()) { setToast('⚠ กรอกชื่องานแข่งก่อน'); setTimeout(() => setToast(null), 2000); return; }
     onSave({ ...ev, status: computeStatus(ev), closed: computeClosed(ev) });
+  }
+  // Saves everything immediately without leaving the form — lets admin
+  // commit one distance's edits (quota, cutoff, open/closed) right away and
+  // keep working on the rest, instead of every change being tied to one
+  // all-or-nothing save at the very bottom of the page.
+  function saveDistance(label) {
+    if (!ev.name.trim()) { setToast('⚠ กรอกชื่องานแข่งก่อน'); setTimeout(() => setToast(null), 2000); return; }
+    onSaveInPlace({ ...ev, status: computeStatus(ev), closed: computeClosed(ev) });
+    setToast(`✓ บันทึกระยะ ${label} แล้ว`);
+    setTimeout(() => setToast(null), 1600);
   }
 
   const liveStatus = computeStatus(ev);
@@ -334,7 +344,7 @@ function EventForm({ initial, onCancel, onSave, onDelete }) {
 
         <div style={{ fontFamily: A_MONO, fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#5d6b59', marginBottom: 4 }}>ระยะที่เปิดรับสมัคร + cut-off + โควตา (แก้ไขระยะได้เอง)</div>
         <div style={{ fontFamily: A_MONO, fontSize: 10, color: '#5d6b59', marginBottom: 8, lineHeight: 1.5 }}>
-          พอ "สมัครแล้ว" ถึง "โควตา" ระบบจะปิดรับสมัครระยะนั้นให้อัตโนมัติ (สลับ toggle เป็นปิด) — เว้นโควตาไว้ว่างถ้าไม่จำกัดจำนวน · admin เปิดกลับมาเองได้เสมอ เผื่อมีนักวิ่งมาเพิ่มหน้างาน
+          พอ "สมัครแล้ว" ถึง "โควตา" ระบบจะปิดรับสมัครระยะนั้นให้อัตโนมัติ (สลับ toggle เป็นปิด) — เว้นโควตาไว้ว่างถ้าไม่จำกัดจำนวน · admin เปิดกลับมาเองได้เสมอ เผื่อมีนักวิ่งมาเพิ่มหน้างาน · กด "บันทึกระยะนี้" ในแต่ละการ์ดเพื่อบันทึกทันทีโดยไม่ต้องรอกดบันทึกทั้งงานด้านล่าง
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
           {ev.distances.map(de => {
@@ -368,6 +378,8 @@ function EventForm({ initial, onCancel, onSave, onDelete }) {
                   style={{ width: 70, padding: '7px 7px', background: '#fff', border: '1px solid #e5e0d3', borderRadius: 8, fontFamily: A_MONO, fontSize: 12, textAlign: 'center' }}/>
                 <span style={{ fontFamily: A_MONO, fontSize: 10, color: '#5d6b59' }}>คน</span>
                 {isFull && <span style={{ fontFamily: A_MONO, fontSize: 9.5, fontWeight: 700, color: '#b91c1c', background: '#fde9e6', padding: '3px 8px', borderRadius: 999, marginLeft: 4 }}>เต็มแล้ว</span>}
+                <div style={{ flex: 1 }}/>
+                <button onClick={() => saveDistance(de.label)} style={{ padding: '6px 10px', background: A_BRAND, color: '#fff', border: 'none', borderRadius: 8, fontFamily: A_MONO, fontSize: 10, fontWeight: 700, cursor: 'pointer' }}>💾 บันทึกระยะนี้</button>
               </div>
             </div>
           );})}
@@ -406,6 +418,14 @@ function AdminApp({ adminEmail, onLogout }) {
     refresh();
     setView('list');
   }
+  // Used by the per-distance "บันทึกระยะนี้" button — persists immediately
+  // without leaving the form, so admin can save one distance's edits and
+  // keep working on the others instead of being kicked back to the list.
+  function saveEventInPlace(ev) {
+    window.eventStore.upsertEvent(ev);
+    refresh();
+    setEditing(ev);
+  }
   function deleteEvent(id) {
     if (!window.confirm('ลบงานแข่งนี้? ข้อมูลจะหายถาวร')) return;
     window.eventStore.deleteEvent(id);
@@ -422,7 +442,7 @@ function AdminApp({ adminEmail, onLogout }) {
         </div>
       )}
       {view === 'form'
-        ? <EventForm initial={editing} onCancel={cancelForm} onSave={saveEvent} onDelete={deleteEvent}/>
+        ? <EventForm initial={editing} onCancel={cancelForm} onSave={saveEvent} onSaveInPlace={saveEventInPlace} onDelete={deleteEvent}/>
         : <EventList events={events} onEdit={openEdit} onDelete={deleteEvent} onCreate={openCreate}/>}
     </div>
   );
