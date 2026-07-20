@@ -65,6 +65,17 @@
     return 'ev' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   }
 
+  // Called by the runner app right after a successful registration so the
+  // Admin quota (see src/admin-app.jsx capacity/registered fields) reflects
+  // real sign-ups instead of staying a manually-typed number.
+  function incrementRegistration(eventId, distLabel) {
+    const ev = loadEvents().find(e => e.id === eventId);
+    if (!ev) return;
+    const distances = (ev.distances || []).map(d =>
+      d.label === distLabel ? { ...d, registered: String((parseInt(d.registered, 10) || 0) + 1) } : d);
+    upsertEvent({ ...ev, distances });
+  }
+
   // Best-effort: once Firebase is configured, pull the real remote list on
   // load and keep listening for changes made from other devices, so every
   // open tab/phone converges on the same data instead of each device's own
@@ -91,5 +102,5 @@
   if (window.fb) startFirestoreSync();
   else window.addEventListener('trt:firebase-ready', startFirestoreSync, { once: true });
 
-  Object.assign(window, { eventStore: { loadEvents, saveEvents, upsertEvent, deleteEvent, newEventId } });
+  Object.assign(window, { eventStore: { loadEvents, saveEvents, upsertEvent, deleteEvent, newEventId, incrementRegistration } });
 })();

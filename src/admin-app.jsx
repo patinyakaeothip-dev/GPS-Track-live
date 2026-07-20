@@ -346,7 +346,7 @@ function EventForm({ initial, onCancel, onSave, onDelete }) {
   );
 }
 
-function AdminApp() {
+function AdminApp({ adminEmail, onLogout }) {
   const [events, setEvents] = aS(() => window.eventStore.loadEvents());
   const [view, setView] = aS('list'); // 'list' | 'form'
   const [editing, setEditing] = aS(null); // event being edited, or null for a new one
@@ -373,10 +373,76 @@ function AdminApp() {
     setView('list');
   }
 
-  if (view === 'form') {
-    return <EventForm initial={editing} onCancel={cancelForm} onSave={saveEvent} onDelete={deleteEvent}/>;
-  }
-  return <EventList events={events} onEdit={openEdit} onDelete={deleteEvent} onCreate={openCreate}/>;
+  return (
+    <div>
+      {onLogout && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 10, padding: '8px 20px', fontFamily: A_MONO, fontSize: 10.5, color: '#5d6b59' }}>
+          <span>👤 {adminEmail}</span>
+          <button onClick={onLogout} style={{ padding: '5px 10px', background: 'transparent', border: '1px solid #d8d2c2', borderRadius: 6, fontFamily: A_MONO, fontSize: 10, fontWeight: 700, color: '#5d6b59', cursor: 'pointer' }}>ออกจากระบบ</button>
+        </div>
+      )}
+      {view === 'form'
+        ? <EventForm initial={editing} onCancel={cancelForm} onSave={saveEvent} onDelete={deleteEvent}/>
+        : <EventList events={events} onEdit={openEdit} onDelete={deleteEvent} onCreate={openCreate}/>}
+    </div>
+  );
 }
 
-Object.assign(window, { AdminApp });
+// ── Admin login gate ────────────────────────────────────────────────────
+// Only Google accounts in ADMIN_EMAILS may see/edit event data. Without
+// Firebase configured (no window.fb yet) this stays open, matching the
+// previous no-login demo behavior.
+const ADMIN_EMAILS = ['patinya.kaeothip@gmail.com'];
+
+function AdminGate() {
+  const [authState, setAuthState] = aS('checking'); // checking | signed-out | denied | allowed
+  const [user, setUser] = aS(null);
+  const [error, setError] = aS(null);
+
+  aE(() => {
+    if (!window.fb) { setAuthState('allowed'); return; }
+    return window.fb.onAuthChange(u => {
+      if (!u) { setUser(null); setAuthState('signed-out'); return; }
+      setUser(u);
+      setAuthState(ADMIN_EMAILS.includes(u.email) ? 'allowed' : 'denied');
+    });
+  }, []);
+
+  async function login() {
+    setError(null);
+    try { await window.fb.signInWithGoogle(); }
+    catch (e) { setError('เข้าสู่ระบบไม่สำเร็จ ลองอีกครั้ง'); }
+  }
+  function logout() { window.fb.signOutUser(); }
+
+  const cardStyle = { maxWidth: 380, margin: '80px auto', padding: 28, background: '#fff', borderRadius: 14, textAlign: 'center',
+    fontFamily: "'Plus Jakarta Sans','Noto Sans Thai',ui-sans-serif,system-ui,sans-serif" };
+
+  if (authState === 'checking') {
+    return <div style={{ padding: 60, textAlign: 'center', fontFamily: A_MONO, color: '#5d6b59' }}>กำลังตรวจสอบสิทธิ์…</div>;
+  }
+  if (authState === 'signed-out') {
+    return (
+      <div style={{ ...cardStyle, border: '1px solid #e5e0d3' }}>
+        <div style={{ fontSize: 30, marginBottom: 8 }}>🔧</div>
+        <div style={{ fontSize: 17, fontWeight: 700, marginBottom: 4 }}>Admin เข้าสู่ระบบ</div>
+        <div style={{ fontSize: 12.5, color: '#5d6b59', marginBottom: 18 }}>เฉพาะบัญชีที่ได้รับสิทธิ์ RD เท่านั้น</div>
+        {error && <div style={{ marginBottom: 12, padding: 10, background: '#fde9e6', color: '#9b1c10', borderRadius: 8, fontSize: 12 }}>{error}</div>}
+        <button onClick={login} style={{ padding: '11px 18px', background: '#fff', border: '1px solid #e5e0d3', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: 'pointer', boxShadow: '0 1px 3px rgba(31,42,28,0.08)' }}>G เข้าสู่ระบบด้วย Google</button>
+      </div>
+    );
+  }
+  if (authState === 'denied') {
+    return (
+      <div style={{ ...cardStyle, border: '1px solid #f0c9c4' }}>
+        <div style={{ fontSize: 30, marginBottom: 8 }}>⛔</div>
+        <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4, color: '#b91c1c' }}>ไม่มีสิทธิ์เข้าถึง Admin</div>
+        <div style={{ fontSize: 12.5, color: '#5d6b59', marginBottom: 18 }}>บัญชี {user && user.email} ไม่ได้อยู่ในรายชื่อ RD ที่ได้รับสิทธิ์</div>
+        <button onClick={logout} style={{ padding: '10px 16px', background: 'transparent', border: '1px solid #bdb6a4', borderRadius: 10, fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>ออกจากระบบ</button>
+      </div>
+    );
+  }
+  return <AdminApp adminEmail={user && user.email} onLogout={window.fb ? logout : null}/>;
+}
+
+Object.assign(window, { AdminApp, AdminGate });

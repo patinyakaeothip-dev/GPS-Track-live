@@ -940,6 +940,7 @@ function MobileApp() {
       runner: { dist: data.dist, name: data.nick, checkins: [], progressKm: 0, eventId: pendingEvent && pendingEvent.id },
       spectator: false, followBib: null,
     });
+    if (pendingEvent) window.eventStore.incrementRegistration(pendingEvent.id, data.dist);
     setScreen('gps');
   }
   function updateRunner(fn) {
