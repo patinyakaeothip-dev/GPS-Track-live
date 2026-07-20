@@ -1,0 +1,17 @@
+# Cloudflare Pages header rules.
+#
+# This site has no build/bundling step — index.html etc. reference
+# src/*.jsx and src/*.js directly by plain filename (no content hash), so
+# there is nothing in the URL that changes when the file's content changes.
+# Without this, Cloudflare's edge cache and browsers can keep serving a
+# stale copy of a script for a long time after a new deploy, which has
+# repeatedly shown up as "I pushed a fix but the site still behaves like
+# the old code." Force revalidation on every request for anything that
+# isn't a fingerprinted third-party asset, so a hard refresh (or even a
+# normal reload) always gets the latest deployed version.
+
+/*
+  Cache-Control: no-cache
+
+/assets/*
+  Cache-Control: public, max-age=3600
