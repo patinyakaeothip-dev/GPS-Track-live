@@ -277,6 +277,11 @@ function AdminApp() {
 
   function refresh() { setEvents(window.eventStore.loadEvents()); }
 
+  aE(() => {
+    window.addEventListener('trt:events-updated', refresh);
+    return () => window.removeEventListener('trt:events-updated', refresh);
+  }, []);
+
   function openCreate() { setEditing(null); setView('form'); }
   function openEdit(ev) { setEditing(ev); setView('form'); }
   function cancelForm() { setView('list'); }

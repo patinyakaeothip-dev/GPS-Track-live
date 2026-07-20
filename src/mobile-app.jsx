@@ -201,7 +201,12 @@ function EventPickerScreen({ user, session, onOpenApp, onFollow, onProfile }) {
   const [q, setQ] = uS('');
   const [toast, setToast] = uS(null);
   const [events, setEvents] = uS(() => getEvents());
-  uE(() => { setEvents(getEvents()); }, []);
+  uE(() => {
+    setEvents(getEvents());
+    const refresh = () => setEvents(getEvents());
+    window.addEventListener('trt:events-updated', refresh);
+    return () => window.removeEventListener('trt:events-updated', refresh);
+  }, []);
   const filtered = events.filter(e => e.status === tab && (!q || e.name.toLowerCase().includes(q.toLowerCase())));
 
   function handleRunnerSpace(ev) {

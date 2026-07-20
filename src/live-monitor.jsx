@@ -95,7 +95,12 @@ function LiveMonitorApp() {
   const [selectedBib, setSelectedBib] = mS('103');
   const [dashView, setDashView] = mS('map'); // 'map' | 'ranking'
   const [distFilter, setDistFilter] = mS(null);
-  const [events] = mS(() => (window.eventStore ? window.eventStore.loadEvents() : []));
+  const [events, setEvents] = mS(() => (window.eventStore ? window.eventStore.loadEvents() : []));
+  mE(() => {
+    const refresh = () => setEvents(window.eventStore.loadEvents());
+    window.addEventListener('trt:events-updated', refresh);
+    return () => window.removeEventListener('trt:events-updated', refresh);
+  }, []);
   const [eventId, setEventId] = mS(() => {
     const list = window.eventStore ? window.eventStore.loadEvents() : [];
     const live = list.find(e => e.status === 'live');

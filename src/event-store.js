@@ -1,9 +1,11 @@
 // event-store.js — shared events data used by both admin/index.html (create/
-// edit) and the runner app's event picker (index.html). No real backend yet:
-// persisted to localStorage, so it only syncs between Admin and the app when
-// opened in the same browser/device. A real multi-device deploy needs this
-// swapped for an actual API (see src/api.js for the existing Apps Script
-// client shape to extend).
+// edit) and the runner app's event picker (index.html). Persisted to
+// localStorage so the UI is instant and works offline/without a backend.
+// When src/firebase-config.js has real credentials (window.fb is set by
+// src/firebase.js), this also mirrors every write to the Firestore
+// "events" collection in the background and listens for remote changes —
+// that's what makes Admin edits show up on a runner's phone across devices.
+// Until then it silently stays localStorage-only, same as before.
 
 (function () {
   const KEY = 'trt.events.v1';
@@ -48,18 +50,46 @@
     const idx = list.findIndex(e => e.id === ev.id);
     if (idx >= 0) list[idx] = ev; else list.push(ev);
     saveEvents(list);
+    if (window.fb) window.fb.setDocById('events', ev.id, ev).catch(err => console.warn('[event-store] Firestore write failed', err));
     return list;
   }
 
   function deleteEvent(id) {
     const list = loadEvents().filter(e => e.id !== id);
     saveEvents(list);
+    if (window.fb) window.fb.deleteDocById('events', id).catch(err => console.warn('[event-store] Firestore delete failed', err));
     return list;
   }
 
   function newEventId() {
     return 'ev' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   }
+
+  // Best-effort: once Firebase is configured, pull the real remote list on
+  // load and keep listening for changes made from other devices, so every
+  // open tab/phone converges on the same data instead of each device's own
+  // localStorage copy.
+  function startFirestoreSync() {
+    if (!window.fb) return;
+    window.fb.listDocs('events').then(remote => {
+      if (remote.length) { saveEvents(remote); notifyUpdated(); }
+      else if (loadEvents().length) {
+        // First run against an empty Firestore collection — seed it from
+        // whatever this device already has (e.g. the local SEED_EVENTS).
+        loadEvents().forEach(ev => window.fb.setDocById('events', ev.id, ev).catch(() => {}));
+      }
+    }).catch(err => console.warn('[event-store] Firestore initial load failed', err));
+
+    window.fb.watchCollection('events', remote => {
+      saveEvents(remote);
+      notifyUpdated();
+    });
+  }
+  function notifyUpdated() {
+    window.dispatchEvent(new CustomEvent('trt:events-updated'));
+  }
+  if (window.fb) startFirestoreSync();
+  else window.addEventListener('trt:firebase-ready', startFirestoreSync, { once: true });
 
   Object.assign(window, { eventStore: { loadEvents, saveEvents, upsertEvent, deleteEvent, newEventId } });
 })();
