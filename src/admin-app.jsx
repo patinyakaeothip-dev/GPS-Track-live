@@ -15,6 +15,45 @@ function formatThaiDate(iso) {
   if (!y || !m || !d) return iso;
   return `${d} ${THAI_MONTHS[m - 1]} ${y}`;
 }
+function formatThaiDateTime(localDT) {
+  if (!localDT) return '';
+  const [datePart, timePart] = localDT.split('T');
+  const dateStr = formatThaiDate(datePart);
+  return timePart ? `${dateStr} ${timePart} น.` : dateStr;
+}
+
+// Status ("upcoming"/"live"/"past") and whether registration is closed are
+// both derived from real dates/times instead of being picked manually — the
+// race date + each distance's start/finish-cutoff clock times decide when
+// the event goes live and ends, and regCloseISO decides when signup closes.
+function combineDateTime(dateISO, hhmm) {
+  if (!dateISO || !hhmm) return null;
+  const [h, m] = hhmm.split(':').map(Number);
+  if (Number.isNaN(h) || Number.isNaN(m)) return null;
+  const d = new Date(dateISO + 'T00:00:00');
+  d.setHours(h, m, 0, 0);
+  return d;
+}
+function eventWindow(ev) {
+  if (!ev.raceDateISO) return { start: null, end: null };
+  const starts = (ev.distances || []).map(d => combineDateTime(ev.raceDateISO, d.cpTimes && d.cpTimes.start)).filter(Boolean);
+  const ends = (ev.distances || []).map(d => combineDateTime(ev.raceDateISO, d.cpTimes && d.cpTimes.finish)).filter(Boolean);
+  return {
+    start: starts.length ? new Date(Math.min(...starts.map(d => d.getTime()))) : null,
+    end: ends.length ? new Date(Math.max(...ends.map(d => d.getTime()))) : null,
+  };
+}
+function computeStatus(ev) {
+  const { start, end } = eventWindow(ev);
+  if (!start) return 'upcoming';
+  const now = Date.now();
+  if (now < start.getTime()) return 'upcoming';
+  if (end && now > end.getTime()) return 'past';
+  return 'live';
+}
+function computeClosed(ev) {
+  return !!(ev.regCloseISO && Date.now() > new Date(ev.regCloseISO).getTime());
+}
 
 function Field({ label, children }) {
   return <div><div style={{ fontFamily: A_MONO, fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#5d6b59', marginBottom: 6 }}>{label}</div>{children}</div>;
@@ -95,7 +134,7 @@ function blankCpTimes(start, finish) {
 function blankEvent() {
   return {
     id: window.eventStore.newEventId(),
-    name: '', date: '', raceDateISO: '', regClose: '', status: 'upcoming', closed: false, hotline: '',
+    name: '', date: '', raceDateISO: '', regClose: '', regCloseISO: '', status: 'upcoming', closed: false, hotline: '',
     distances: [
       { id: 'd1', label: '11K', cutoff: '150', open: true, color: '#3a86c4', cpTimes: blankCpTimes('06:10', '08:40') },
       { id: 'd2', label: '22K', cutoff: '270', open: true, color: '#e07a3e', cpTimes: blankCpTimes('06:05', '10:35') },
@@ -128,8 +167,12 @@ function EventForm({ initial, onCancel, onSave, onDelete }) {
 
   function save() {
     if (!ev.name.trim()) { setToast('⚠ กรอกชื่องานแข่งก่อน'); setTimeout(() => setToast(null), 2000); return; }
-    onSave(ev);
+    onSave({ ...ev, status: computeStatus(ev), closed: computeClosed(ev) });
   }
+
+  const liveStatus = computeStatus(ev);
+  const liveClosed = computeClosed(ev);
+  const statusMeta = STATUS_META[liveStatus];
 
   return (
     <div style={{ maxWidth: 760, margin: '0 auto', padding: '24px 20px 60px', fontFamily: "'Plus Jakarta Sans','Noto Sans Thai',ui-sans-serif,system-ui,sans-serif", color: '#1f2a1c' }}>
@@ -151,7 +194,12 @@ function EventForm({ initial, onCancel, onSave, onDelete }) {
               set({ raceDateISO: iso, date: iso ? formatThaiDate(iso) : ev.date });
             }} style={inputStyle({ fontFamily: A_MONO })}/>
           </Field>
-          <Field label="ปิดรับสมัคร (วันที่)"><input value={ev.regClose} onChange={e => set({ regClose: e.target.value })} style={inputStyle({ fontFamily: A_MONO })}/></Field>
+          <Field label="ปิดรับสมัคร (วันที่ + เวลา)">
+            <input type="datetime-local" value={ev.regCloseISO} onChange={e => {
+              const v = e.target.value;
+              set({ regCloseISO: v, regClose: formatThaiDateTime(v) });
+            }} style={inputStyle({ fontFamily: A_MONO })}/>
+          </Field>
         </div>
         <div style={{ marginTop: -8, marginBottom: 14 }}>
           <Field label="วันที่แข่ง (ข้อความที่แสดงในแอพ — แก้ไขเพิ่มเติมได้)">
@@ -159,22 +207,16 @@ function EventForm({ initial, onCancel, onSave, onDelete }) {
           </Field>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
-          <Field label="สถานะที่แสดงในแอพนักวิ่ง">
-            <select value={ev.status} onChange={e => set({ status: e.target.value })} style={inputStyle({ fontFamily: A_MONO })}>
-              <option value="upcoming">กำลังจะมาถึง</option>
-              <option value="live">กำลังแข่ง (live)</option>
-              <option value="past">ผ่านมาแล้ว</option>
-            </select>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 6 }}>
+          <Field label="สถานะที่แสดงในแอพนักวิ่ง (คำนวณอัตโนมัติ)">
+            <div style={{ padding: '11px 13px', background: '#fafaf8', border: '1px solid #e5e0d3', borderRadius: 10, fontFamily: A_MONO, fontSize: 12.5, fontWeight: 700, color: statusMeta.color }}>{statusMeta.label}</div>
           </Field>
-          <Field label="การรับสมัคร">
-            <div onClick={() => set({ closed: !ev.closed })} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 13px', background: '#fafaf8', border: '1px solid #e5e0d3', borderRadius: 10, cursor: 'pointer', height: 20 }}>
-              <span style={{ width: 26, height: 15, borderRadius: 999, background: ev.closed ? '#a8b1a3' : A_BRAND, position: 'relative', flexShrink: 0 }}>
-                <span style={{ position: 'absolute', top: 2, left: ev.closed ? 2 : 13, width: 11, height: 11, borderRadius: 999, background: '#fff', transition: 'left .15s' }}/>
-              </span>
-              <span style={{ fontSize: 12.5, fontWeight: 600, color: ev.closed ? '#5d6b59' : A_BRAND }}>{ev.closed ? 'ปิดรับสมัครแล้ว' : 'เปิดรับสมัครอยู่'}</span>
-            </div>
+          <Field label="การรับสมัคร (คำนวณอัตโนมัติ)">
+            <div style={{ padding: '11px 13px', background: '#fafaf8', border: '1px solid #e5e0d3', borderRadius: 10, fontFamily: A_MONO, fontSize: 12.5, fontWeight: 700, color: liveClosed ? '#5d6b59' : A_BRAND }}>{liveClosed ? 'ปิดรับสมัครแล้ว' : 'เปิดรับสมัครอยู่'}</div>
           </Field>
+        </div>
+        <div style={{ fontFamily: A_MONO, fontSize: 10, color: '#5d6b59', marginBottom: 14, lineHeight: 1.5 }}>
+          อิงจากวันที่แข่ง + เวลาสตาร์ท/finish cutoff ของแต่ละระยะด้านล่าง กับเวลาปิดรับสมัครด้านบน — ไม่ต้องเลือกเอง
         </div>
 
         <div style={{ marginBottom: 18 }}>
