@@ -43,6 +43,8 @@
   <div id="root"></div>
 
   <script src="../src/api.js?v=10"></script>
+  <script src="../src/firebase-config.js"></script>
+  <script type="module" src="../src/firebase.js"></script>
   <script src="../src/event-store.js"></script>
 
   <script type="text/babel">
@@ -133,13 +135,19 @@
       const [distFilter, setDistFilter] = useState('all');
       const [statusFilter, setStatusFilter] = useState('all');
       const [query, setQuery] = useState('');
-      const [events] = useState(() => (window.eventStore ? window.eventStore.loadEvents() : []));
+      const [events, setEvents] = useState(() => (window.eventStore ? window.eventStore.loadEvents() : []));
       const [eventId, setEventId] = useState(() => {
         const list = window.eventStore ? window.eventStore.loadEvents() : [];
         const live = list.find(e => e.status === 'live');
         return (live || list[0] || {}).id || null;
       });
       const selectedEvent = events.find(e => e.id === eventId) || null;
+
+      useEffect(() => {
+        const refresh = () => setEvents(window.eventStore.loadEvents());
+        window.addEventListener('trt:events-updated', refresh);
+        return () => window.removeEventListener('trt:events-updated', refresh);
+      }, []);
 
       useEffect(() => {
         let cancelled = false;
