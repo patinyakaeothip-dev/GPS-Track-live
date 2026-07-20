@@ -136,16 +136,16 @@ function blankEvent() {
     id: window.eventStore.newEventId(),
     name: '', date: '', raceDateISO: '', regClose: '', regCloseISO: '', status: 'upcoming', closed: false, hotline: '',
     distances: [
-      { id: 'd1', label: '11K', cutoff: '150', open: true, color: '#3a86c4', cpTimes: blankCpTimes('06:10', '08:40') },
-      { id: 'd2', label: '22K', cutoff: '270', open: true, color: '#e07a3e', cpTimes: blankCpTimes('06:05', '10:35') },
-      { id: 'd3', label: '29K', cutoff: '360', open: true, color: '#1f4d39', cpTimes: blankCpTimes('06:00', '12:00') },
+      { id: 'd1', label: '11K', cutoff: '150', open: true, color: '#3a86c4', capacity: '', registered: '0', cpTimes: blankCpTimes('06:10', '08:40') },
+      { id: 'd2', label: '22K', cutoff: '270', open: true, color: '#e07a3e', capacity: '', registered: '0', cpTimes: blankCpTimes('06:05', '10:35') },
+      { id: 'd3', label: '29K', cutoff: '360', open: true, color: '#1f4d39', capacity: '', registered: '0', cpTimes: blankCpTimes('06:00', '12:00') },
     ],
   };
 }
 
 function EventForm({ initial, onCancel, onSave, onDelete }) {
   const isNew = !initial;
-  const [ev, setEv] = aS(() => initial ? { ...blankEvent(), ...initial, distances: (initial.distances || blankEvent().distances).map(d => ({ ...d, cpTimes: d.cpTimes || blankCpTimes('', '') })) } : blankEvent());
+  const [ev, setEv] = aS(() => initial ? { ...blankEvent(), ...initial, distances: (initial.distances || blankEvent().distances).map(d => ({ capacity: '', registered: '0', ...d, cpTimes: d.cpTimes || blankCpTimes('', '') })) } : blankEvent());
   const [gpx11k, setGpx11k] = aS(null);
   const [toast, setToast] = aS(null);
 
@@ -155,7 +155,22 @@ function EventForm({ initial, onCancel, onSave, onDelete }) {
   function removeDist(id) { setEv(e => ({ ...e, distances: e.distances.filter(d => d.id !== id) })); }
   function addDist() {
     const colors = ['#3a86c4', '#e07a3e', '#1f4d39', '#7c4a03', '#9b1c10'];
-    setEv(e => ({ ...e, distances: [...e.distances, { id: 'd' + Date.now(), label: 'ใหม่', cutoff: '180', open: true, color: colors[e.distances.length % colors.length], cpTimes: blankCpTimes('', '') }] }));
+    setEv(e => ({ ...e, distances: [...e.distances, { id: 'd' + Date.now(), label: 'ใหม่', cutoff: '180', open: true, color: colors[e.distances.length % colors.length], capacity: '', registered: '0', cpTimes: blankCpTimes('', '') }] }));
+  }
+  // Registration auto-closes the moment the quota fills, but only as a
+  // one-time nudge — it never fights back against a manual reopen, so RD can
+  // still add late runners on race day by flipping the toggle back on.
+  function updateDistRegistered(id, val) {
+    setEv(e => ({
+      ...e,
+      distances: e.distances.map(d => {
+        if (d.id !== id) return d;
+        const cap = parseInt(d.capacity, 10);
+        const reg = parseInt(val, 10);
+        const justFilled = cap > 0 && !Number.isNaN(reg) && reg >= cap && d.open;
+        return { ...d, registered: val, open: justFilled ? false : d.open };
+      }),
+    }));
   }
 
   const cpEditor = [
@@ -277,26 +292,45 @@ function EventForm({ initial, onCancel, onSave, onDelete }) {
           ))}
         </div>
 
-        <div style={{ fontFamily: A_MONO, fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#5d6b59', marginBottom: 8 }}>ระยะที่เปิดรับสมัคร + cut-off (แก้ไขระยะได้เอง)</div>
+        <div style={{ fontFamily: A_MONO, fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#5d6b59', marginBottom: 4 }}>ระยะที่เปิดรับสมัคร + cut-off + โควตา (แก้ไขระยะได้เอง)</div>
+        <div style={{ fontFamily: A_MONO, fontSize: 10, color: '#5d6b59', marginBottom: 8, lineHeight: 1.5 }}>
+          พอ "สมัครแล้ว" ถึง "โควตา" ระบบจะปิดรับสมัครระยะนั้นให้อัตโนมัติ (สลับ toggle เป็นปิด) — เว้นโควตาไว้ว่างถ้าไม่จำกัดจำนวน · admin เปิดกลับมาเองได้เสมอ เผื่อมีนักวิ่งมาเพิ่มหน้างาน
+        </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
-          {ev.distances.map(de => (
-            <div key={de.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: '#fafaf8', border: '1px solid #ece7da', borderRadius: 10 }}>
-              <input value={de.label} onChange={e => updateDist(de.id, { label: e.target.value })}
-                style={{ width: 70, padding: '8px 9px', background: '#fff', border: '1px solid #e5e0d3', borderRadius: 8, boxShadow: '0 1px 3px rgba(31,42,28,0.08)', fontFamily: A_MONO, fontSize: 13, fontWeight: 700, color: de.color, textAlign: 'center' }}/>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ fontFamily: A_MONO, fontSize: 10, color: '#5d6b59' }}>cut-off</span>
-                <input value={de.cutoff} onChange={e => updateDist(de.id, { cutoff: e.target.value })}
-                  style={{ width: 52, padding: '8px 7px', background: '#fff', border: '1px solid #e5e0d3', borderRadius: 8, boxShadow: '0 1px 3px rgba(31,42,28,0.08)', fontFamily: A_MONO, fontSize: 12, textAlign: 'center' }}/>
-                <span style={{ fontFamily: A_MONO, fontSize: 10, color: '#5d6b59' }}>นาที</span>
+          {ev.distances.map(de => {
+            const cap = parseInt(de.capacity, 10);
+            const reg = parseInt(de.registered, 10) || 0;
+            const isFull = cap > 0 && reg >= cap;
+            return (
+            <div key={de.id} style={{ padding: '10px 12px', background: '#fafaf8', border: '1px solid #ece7da', borderRadius: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                <input value={de.label} onChange={e => updateDist(de.id, { label: e.target.value })}
+                  style={{ width: 70, padding: '8px 9px', background: '#fff', border: '1px solid #e5e0d3', borderRadius: 8, boxShadow: '0 1px 3px rgba(31,42,28,0.08)', fontFamily: A_MONO, fontSize: 13, fontWeight: 700, color: de.color, textAlign: 'center' }}/>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontFamily: A_MONO, fontSize: 10, color: '#5d6b59' }}>cut-off</span>
+                  <input value={de.cutoff} onChange={e => updateDist(de.id, { cutoff: e.target.value })}
+                    style={{ width: 52, padding: '8px 7px', background: '#fff', border: '1px solid #e5e0d3', borderRadius: 8, boxShadow: '0 1px 3px rgba(31,42,28,0.08)', fontFamily: A_MONO, fontSize: 12, textAlign: 'center' }}/>
+                  <span style={{ fontFamily: A_MONO, fontSize: 10, color: '#5d6b59' }}>นาที</span>
+                </div>
+                <div style={{ flex: 1 }}/>
+                <span onClick={() => updateDist(de.id, { open: !de.open })} style={{ width: 26, height: 15, borderRadius: 999, background: de.open ? A_BRAND : '#d8d2c2', position: 'relative', display: 'inline-block', cursor: 'pointer', flexShrink: 0 }}>
+                  <span style={{ position: 'absolute', top: 2, left: de.open ? 13 : 2, width: 11, height: 11, borderRadius: 999, background: '#fff', transition: 'left .15s' }}/>
+                </span>
+                <span style={{ fontFamily: A_MONO, fontSize: 9.5, color: de.open ? A_BRAND : '#5d6b59', width: 66 }}>{de.open ? 'เปิดรับสมัคร' : 'ปิดรับสมัคร'}</span>
+                <button onClick={() => removeDist(de.id)} style={{ background: 'none', border: 'none', color: '#b91c1c', fontSize: 16, cursor: 'pointer', padding: '2px 4px' }}>×</button>
               </div>
-              <div style={{ flex: 1 }}/>
-              <span onClick={() => updateDist(de.id, { open: !de.open })} style={{ width: 26, height: 15, borderRadius: 999, background: de.open ? A_BRAND : '#d8d2c2', position: 'relative', display: 'inline-block', cursor: 'pointer', flexShrink: 0 }}>
-                <span style={{ position: 'absolute', top: 2, left: de.open ? 13 : 2, width: 11, height: 11, borderRadius: 999, background: '#fff', transition: 'left .15s' }}/>
-              </span>
-              <span style={{ fontFamily: A_MONO, fontSize: 9.5, color: de.open ? A_BRAND : '#5d6b59', width: 66 }}>{de.open ? 'เปิดรับสมัคร' : 'ปิดรับสมัคร'}</span>
-              <button onClick={() => removeDist(de.id)} style={{ background: 'none', border: 'none', color: '#b91c1c', fontSize: 16, cursor: 'pointer', padding: '2px 4px' }}>×</button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingLeft: 2 }}>
+                <span style={{ fontFamily: A_MONO, fontSize: 10, color: '#5d6b59' }}>สมัครแล้ว</span>
+                <input value={de.registered} onChange={e => updateDistRegistered(de.id, e.target.value)}
+                  style={{ width: 56, padding: '7px 7px', background: '#fff', border: '1px solid #e5e0d3', borderRadius: 8, fontFamily: A_MONO, fontSize: 12, textAlign: 'center' }}/>
+                <span style={{ fontFamily: A_MONO, fontSize: 10, color: '#5d6b59' }}>/ โควตา</span>
+                <input value={de.capacity} onChange={e => updateDist(de.id, { capacity: e.target.value })} placeholder="ไม่จำกัด"
+                  style={{ width: 70, padding: '7px 7px', background: '#fff', border: '1px solid #e5e0d3', borderRadius: 8, fontFamily: A_MONO, fontSize: 12, textAlign: 'center' }}/>
+                <span style={{ fontFamily: A_MONO, fontSize: 10, color: '#5d6b59' }}>คน</span>
+                {isFull && <span style={{ fontFamily: A_MONO, fontSize: 9.5, fontWeight: 700, color: '#b91c1c', background: '#fde9e6', padding: '3px 8px', borderRadius: 999, marginLeft: 4 }}>เต็มแล้ว</span>}
+              </div>
             </div>
-          ))}
+          );})}
         </div>
         <button onClick={addDist} style={{ width: '100%', padding: 10, background: 'transparent', border: '1px dashed #bdb6a4', borderRadius: 10, fontFamily: A_MONO, fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 600, color: '#1f2a1c', cursor: 'pointer', marginBottom: 20 }}>+ เพิ่มระยะ</button>
 
