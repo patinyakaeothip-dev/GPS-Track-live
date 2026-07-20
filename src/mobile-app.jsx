@@ -404,6 +404,16 @@ function RegisterScreen({ onDone, onBack }) {
     </div>
   );
 }
+function RegisterSuccessScreen({ dist, onContinue }) {
+  return (
+    <div style={{ height: '100%', background: C.bg2, fontFamily: C.font, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 32, textAlign: 'center', gap: 14 }}>
+      <div style={{ width: 68, height: 68, borderRadius: 999, background: `linear-gradient(135deg,${C.brandLt},${C.brandDk})`, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 8px 22px -6px rgba(26,74,55,0.55)', fontSize: 30, color: '#fff' }}>✓</div>
+      <div style={{ fontSize: 20, fontWeight: 800, color: C.brandDk }}>ลงทะเบียนสำเร็จ</div>
+      <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.6 }}>ระยะ {dist} · เตรียมพร้อมสำหรับวันแข่ง<br/>ระบบผูกข้อมูลกับอุปกรณ์นี้ให้แล้ว</div>
+      <Btn onClick={onContinue} style={{ marginTop: 8 }}>ถัดไป →</Btn>
+    </div>
+  );
+}
 function BackBtn({ onClick, dark, inline }) {
   const stroke = dark ? '#fff' : C.text;
   return (
@@ -511,24 +521,87 @@ function ScanSuccessScreen({ cp, km, onDone }) {
   );
 }
 
-function QrScanScreen({ label, onScanned }) {
-  uE(() => { const t = setTimeout(onScanned, 1400); return () => clearTimeout(t); }, []);
+// Reads the device camera and decodes real QR codes with jsQR (loaded via
+// CDN in index.html) — no more auto-succeed-after-a-timeout fake scan.
+// expectedCode is the exact string Admin's QR generator encoded for this CP
+// (`TRT:{eventId}:{cpKey}`); anything else is rejected so a runner can't
+// scan the wrong station's QR and skip ahead.
+function QrScanScreen({ label, expectedCode, onScanned, onBack }) {
+  const videoRef = uR(null);
+  const canvasRef = uR(null);
+  const rafRef = uR(null);
+  const streamRef = uR(null);
+  const [error, setError] = uS(null);
+  const [mismatch, setMismatch] = uS(false);
+
+  uE(() => {
+    let cancelled = false;
+    function cleanup() {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
+    }
+    function tick() {
+      const video = videoRef.current, canvas = canvasRef.current;
+      if (!video || !canvas || video.readyState !== video.HAVE_ENOUGH_DATA) {
+        rafRef.current = requestAnimationFrame(tick);
+        return;
+      }
+      canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const code = window.jsQR && window.jsQR(imageData.data, imageData.width, imageData.height);
+      if (code && code.data) {
+        if (code.data === expectedCode) { cleanup(); onScanned(); return; }
+        setMismatch(true);
+        setTimeout(() => setMismatch(false), 1200);
+      }
+      rafRef.current = requestAnimationFrame(tick);
+    }
+    (async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+        if (cancelled) { stream.getTracks().forEach(t => t.stop()); return; }
+        streamRef.current = stream;
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+        tick();
+      } catch (e) {
+        if (!cancelled) setError('เปิดกล้องไม่ได้ · ตรวจสอบสิทธิ์การใช้กล้องของเบราว์เซอร์');
+      }
+    })();
+    return () => { cancelled = true; cleanup(); };
+  }, [expectedCode]);
+
   return (
-    <div style={{ height: '100%', background: '#0a0f0c', color: '#fff', fontFamily: C.font, display: 'flex', flexDirection: 'column', position: 'relative' }}>
+    <div style={{ height: '100%', background: '#0a0f0c', color: '#fff', fontFamily: C.font, display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden' }}>
+      <video ref={videoRef} playsInline muted style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', opacity: error ? 0 : 0.9 }}/>
+      <canvas ref={canvasRef} style={{ display: 'none' }}/>
+      {onBack && <BackBtn onClick={onBack} dark/>}
       <div style={{ position: 'absolute', top: 40, left: 0, right: 0, textAlign: 'center' }}>
         <Kicker><span style={{ opacity: 0.7 }}>RAYONG TRAIL</span></Kicker>
         <div style={{ fontSize: 17, fontWeight: 700, marginTop: 4 }}>สแกน QR ที่{label}</div>
       </div>
-      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ width: 200, height: 200, position: 'relative' }}>
-          {[['top', 0, 'left', 0], ['top', 0, 'right', 0], ['bottom', 0, 'left', 0], ['bottom', 0, 'right', 0]].map(([vk, vv, hk, hv], i) => (
-            <div key={i} style={{ position: 'absolute', [vk]: vv, [hk]: hv, width: 30, height: 30,
-              [`border${vk === 'top' ? 'Top' : 'Bottom'}`]: '4px solid #fff', [`border${hk === 'left' ? 'Left' : 'Right'}`]: '4px solid #fff' }}/>
-          ))}
-          <div style={{ position: 'absolute', left: 8, right: 8, top: '50%', height: 2, background: 'linear-gradient(90deg,transparent,#4ade80,transparent)' }}/>
+      {!error && (
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ width: 200, height: 200, position: 'relative' }}>
+            {[['top', 0, 'left', 0], ['top', 0, 'right', 0], ['bottom', 0, 'left', 0], ['bottom', 0, 'right', 0]].map(([vk, vv, hk, hv], i) => (
+              <div key={i} style={{ position: 'absolute', [vk]: vv, [hk]: hv, width: 30, height: 30,
+                [`border${vk === 'top' ? 'Top' : 'Bottom'}`]: `4px solid ${mismatch ? '#f87171' : '#fff'}`, [`border${hk === 'left' ? 'Left' : 'Right'}`]: `4px solid ${mismatch ? '#f87171' : '#fff'}` }}/>
+            ))}
+            <div style={{ position: 'absolute', left: 8, right: 8, top: '50%', height: 2, background: 'linear-gradient(90deg,transparent,#4ade80,transparent)' }}/>
+          </div>
         </div>
+      )}
+      {error && (
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, padding: '0 32px', textAlign: 'center' }}>
+          <div style={{ fontSize: 30 }}>🚫</div>
+          <div style={{ fontSize: 13.5 }}>{error}</div>
+        </div>
+      )}
+      <div style={{ padding: '0 24px 40px', textAlign: 'center', fontSize: 13, color: mismatch ? '#f87171' : 'rgba(255,255,255,0.8)' }}>
+        {mismatch ? 'QR นี้ไม่ตรงกับจุดนี้ · ลองสแกนป้ายที่ถูกต้อง' : 'ส่อง QR ที่ป้ายให้อยู่ในกรอบ · ระบบจะสแกนอัตโนมัติ'}
       </div>
-      <div style={{ padding: '0 24px 40px', textAlign: 'center', fontSize: 13, color: 'rgba(255,255,255,0.8)' }}>ส่อง QR ที่ป้ายให้อยู่ในกรอบ · ระบบจะสแกนอัตโนมัติ</div>
     </div>
   );
 }
@@ -881,7 +954,8 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
     }
   }
 
-  if (scanning) return <QrScanScreen label={nextCp === 'start' ? 'จุดสตาร์ท' : CP_LABEL[nextCp]} onScanned={scanComplete}/>;
+  if (scanning) return <QrScanScreen label={nextCp === 'start' ? 'จุดสตาร์ท' : CP_LABEL[nextCp]}
+    expectedCode={`TRT:${session.runner.eventId}:${nextCp}`} onBack={() => setScanning(false)} onScanned={scanComplete}/>;
   if (scanned) return <ScanSuccessScreen cp={scanned.cp} km={scanned.km} onDone={() => setScanned(null)}/>;
   if (pickingFav) return <FavoritePickerScreen onBack={() => setPickingFav(false)} favBibs={favBibs} onToggle={toggleFavorite}/>;
 
@@ -952,7 +1026,7 @@ function MobileApp() {
       spectator: false, followBib: null,
     });
     if (pendingEvent) window.eventStore.incrementRegistration(pendingEvent.id, data.dist);
-    setScreen('gps');
+    setScreen('register-success');
   }
   function updateRunner(fn) {
     persist({ ...session, runner: fn(session.runner) });
@@ -982,9 +1056,11 @@ function MobileApp() {
     setScreen('app');
   }}/>;
   else if (screen === 'register') body = <RegisterScreen onDone={afterRegister} onBack={() => setScreen('events')}/>;
+  else if (screen === 'register-success') body = <RegisterSuccessScreen dist={session.runner.dist} onContinue={() => setScreen('gps')}/>;
   else if (screen === 'gps') body = <GpsPermissionScreen onAllow={() => setScreen('prerace')} onBack={() => setScreen('register')}/>;
-  else if (screen === 'prerace') body = <PreRaceScreen dist={session.runner.dist} onBack={() => setScreen('events')} onScan={() => {
-    updateRunner(r => ({ ...r, checkins: [{ cp: 'start', t: '06:05' }], progressKm: 0 }));
+  else if (screen === 'prerace') body = <PreRaceScreen dist={session.runner.dist} onBack={() => setScreen('events')} onScan={() => setScreen('qr-start')}/>;
+  else if (screen === 'qr-start') body = <QrScanScreen label="จุดสตาร์ท" expectedCode={`TRT:${session.runner.eventId}:start`} onBack={() => setScreen('prerace')} onScanned={() => {
+    updateRunner(r => ({ ...r, checkins: [{ cp: 'start', t: new Date().toTimeString().slice(0, 5) }], progressKm: 0 }));
     setScreen('app');
   }}/>;
   else if (screen === 'app') body = <AppShell user={session.user} session={session} updateRunner={updateRunner}

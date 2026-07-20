@@ -87,6 +87,29 @@ function GpxCard({ label, filename, stats, filled, onChoose }) {
   );
 }
 
+// Renders + lets RD download the actual QR image runners scan at each CP.
+// Encodes `TRT:{eventId}:{cpKey}` so the app's real camera scanner (see
+// QrScanScreen in mobile-app.jsx) can reject a QR from the wrong event or
+// station instead of blindly accepting whatever's in frame.
+function QrCard({ eventId, cpKey, label }) {
+  const dataUrl = (() => {
+    if (!window.qrcode) return null;
+    const qr = window.qrcode(0, 'M');
+    qr.addData(`TRT:${eventId}:${cpKey}`);
+    qr.make();
+    return qr.createDataURL(6, 2);
+  })();
+  return (
+    <div style={{ textAlign: 'center' }}>
+      <div style={{ fontFamily: A_MONO, fontSize: 10.5, fontWeight: 700, marginBottom: 6 }}>{label}</div>
+      {dataUrl
+        ? <img src={dataUrl} alt={`QR ${label}`} style={{ width: 110, height: 110, border: '1px solid #e5e0d3', borderRadius: 8 }}/>
+        : <div style={{ width: 110, height: 110, background: '#f0ede3', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#5d6b59' }}>โหลดไม่สำเร็จ</div>}
+      {dataUrl && <a href={dataUrl} download={`qr-${cpKey}.png`} style={{ display: 'block', marginTop: 6, fontFamily: A_MONO, fontSize: 10, color: A_BRAND, textDecoration: 'underline' }}>ดาวน์โหลด</a>}
+    </div>
+  );
+}
+
 const STATUS_META = {
   live: { label: '🟢 กำลังแข่ง', color: A_BRAND },
   upcoming: { label: '🕓 กำลังจะมาถึง', color: '#7c4a03' },
@@ -259,6 +282,16 @@ function EventForm({ initial, onCancel, onSave, onDelete }) {
               <span style={{ fontSize: 11.5, color: '#5d6b59' }}>{cpe.desc}</span>
             </div>
           ))}
+        </div>
+
+        <div style={{ fontFamily: A_MONO, fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#5d6b59', marginBottom: 4 }}>QR code เช็คอินแต่ละจุด (ปริ้นท์ไปติดหน้างาน)</div>
+        <div style={{ fontFamily: A_MONO, fontSize: 10, color: '#5d6b59', marginBottom: 10, lineHeight: 1.5 }}>
+          แต่ละใบใช้ได้เฉพาะงานนี้และจุดนั้นเท่านั้น — นักวิ่งสแกนป้ายผิดจุด/ผิดงาน แอปจะไม่ยอมรับ ดาวน์โหลดแล้วปริ้นท์ไปติดที่จุดจริงก่อนวันแข่ง
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, marginBottom: 20 }}>
+          <QrCard eventId={ev.id} cpKey="start" label="START"/>
+          {cpEditor.map(cpe => <QrCard key={cpe.key} eventId={ev.id} cpKey={cpe.key} label={cpe.label}/>)}
+          <QrCard eventId={ev.id} cpKey="finish" label="FINISH"/>
         </div>
 
         <div style={{ fontFamily: A_MONO, fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#5d6b59', marginBottom: 4 }}>เวลาสตาร์ท / cut-off แต่ละจุด (นาฬิกา, ต่อระยะ)</div>
