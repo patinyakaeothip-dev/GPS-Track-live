@@ -153,9 +153,6 @@ function LoginScreen({ onLogin }) {
       {error && <div style={{ marginTop: 12, padding: 10, background: '#fde9e6', color: '#9b1c10', borderRadius: 10, fontSize: 12 }}>{error}</div>}
       <div style={{ marginTop: 26, display: 'flex', flexDirection: 'column', gap: 10 }}>
         <Btn variant="white" onClick={googleLogin} disabled={busy}>G {busy ? 'กำลังเข้าสู่ระบบ…' : 'เข้าสู่ระบบด้วย Google'}</Btn>
-        <Btn variant="black" onClick={() => onLogin({ name: 'มิ้น', provider: 'apple' })}>เข้าสู่ระบบด้วย Apple</Btn>
-        <Btn variant="line" onClick={() => onLogin({ name: 'มิ้น', provider: 'line' })}>LINE เข้าสู่ระบบด้วย LINE</Btn>
-        <Btn variant="ghost" onClick={() => onLogin({ name: 'มิ้น', provider: 'email' })} style={{ padding: 13, fontSize: 13 }}>ใช้อีเมลแทน</Btn>
       </div>
       <div style={{ flex: 1 }}/>
       <div style={{ textAlign: 'center', fontFamily: C.mono, fontSize: 10.5, color: C.muted, lineHeight: 1.6 }}>
