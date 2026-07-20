@@ -26,13 +26,16 @@ function formatThaiDateTime(localDT) {
 // both derived from real dates/times instead of being picked manually — the
 // race date + each distance's start/finish-cutoff clock times decide when
 // the event goes live and ends, and regCloseISO decides when signup closes.
+// Races happen in Thailand, so start/cutoff times must always mean
+// Asia/Bangkok (UTC+7) — regardless of what timezone the admin's or a
+// runner's device happens to be set to. Building the Date from a plain
+// "T06:00:00" local-time string would silently reinterpret 06:00 as
+// whatever timezone the browser/OS is in, which is how this bug showed a
+// same-day 06:00-12:00 event as still "upcoming" well past 12:00.
 function combineDateTime(dateISO, hhmm) {
-  if (!dateISO || !hhmm) return null;
-  const [h, m] = hhmm.split(':').map(Number);
-  if (Number.isNaN(h) || Number.isNaN(m)) return null;
-  const d = new Date(dateISO + 'T00:00:00');
-  d.setHours(h, m, 0, 0);
-  return d;
+  if (!dateISO || !/^\d{2}:\d{2}$/.test(hhmm || '')) return null;
+  const d = new Date(`${dateISO}T${hhmm}:00+07:00`);
+  return Number.isNaN(d.getTime()) ? null : d;
 }
 function eventWindow(ev) {
   if (!ev.raceDateISO) return { start: null, end: null };
@@ -52,7 +55,11 @@ function computeStatus(ev) {
   return 'live';
 }
 function computeClosed(ev) {
-  return !!(ev.regCloseISO && Date.now() > new Date(ev.regCloseISO).getTime());
+  // regCloseISO comes from a <input type="datetime-local">, e.g.
+  // "2026-07-20T17:54" — same Thailand-time-fix as combineDateTime above.
+  if (!ev.regCloseISO) return false;
+  const d = new Date(`${ev.regCloseISO}:00+07:00`);
+  return !Number.isNaN(d.getTime()) && Date.now() > d.getTime();
 }
 
 function Field({ label, children }) {
