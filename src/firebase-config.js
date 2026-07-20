@@ -8,10 +8,10 @@
 // mode (src/event-store.js falls back automatically when this isn't filled in).
 
 window.FIREBASE_CONFIG = {
-  apiKey: '',
-  authDomain: '',
-  projectId: '',
-  storageBucket: '',
-  messagingSenderId: '',
-  appId: '',
+  apiKey: 'AIzaSyC4YFyApNa8vHydeAZ_48pABgGIXmKLx3s',
+  authDomain: 'rayong-trail-live.firebaseapp.com',
+  projectId: 'rayong-trail-live',
+  storageBucket: 'rayong-trail-live.firebasestorage.app',
+  messagingSenderId: '404432675602',
+  appId: '1:404432675602:web:7d4e2c65082d28c00409cb',
 };
