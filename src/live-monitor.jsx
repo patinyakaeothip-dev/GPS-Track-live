@@ -28,16 +28,18 @@ const NAMES = [
 // RD can open the map early to check GPS/course setup before an upcoming
 // event actually starts, within this window before the earliest wave time.
 const PREVIEW_WINDOW_MS = 3 * 60 * 60 * 1000;
+// Same Thailand-time fix as combineDateTime in admin-app.jsx: build the Date
+// with an explicit +07:00 offset instead of relying on the viewer's local
+// timezone, so "06:00" always means Bangkok 06:00 no matter whose device
+// (or which timezone a server-rendered/CI browser defaults to) is looking.
 function earliestStartDate(ev) {
   if (!ev || !ev.raceDateISO) return null;
   const times = (ev.distances || []).map(d => d.cpTimes && d.cpTimes.start).filter(Boolean);
   if (!times.length) return null;
   const earliest = times.slice().sort()[0];
-  const [h, m] = earliest.split(':').map(Number);
-  if (Number.isNaN(h) || Number.isNaN(m)) return null;
-  const d = new Date(ev.raceDateISO + 'T00:00:00');
-  d.setHours(h, m, 0, 0);
-  return d;
+  if (!/^\d{2}:\d{2}$/.test(earliest)) return null;
+  const d = new Date(`${ev.raceDateISO}T${earliest}:00+07:00`);
+  return Number.isNaN(d.getTime()) ? null : d;
 }
 function fmtClock(d) {
   return d.toLocaleString('th-TH', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
