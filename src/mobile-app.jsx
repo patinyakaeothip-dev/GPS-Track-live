@@ -128,16 +128,34 @@ function SplashScreen({ onDone }) {
 
 // ── Screen: Login ─────────────────────────────────────────────────────────
 function LoginScreen({ onLogin }) {
+  const [busy, setBusy] = uS(false);
+  const [error, setError] = uS(null);
+
+  async function googleLogin() {
+    if (!window.fb) { onLogin({ name: 'มิ้น', provider: 'google' }); return; }
+    setBusy(true); setError(null);
+    try {
+      const result = await window.fb.signInWithGoogle();
+      const u = result.user;
+      onLogin({ uid: u.uid, name: u.displayName || 'นักวิ่ง', email: u.email, photo: u.photoURL, provider: 'google' });
+    } catch (e) {
+      setError('เข้าสู่ระบบไม่สำเร็จ ลองอีกครั้ง');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div style={{ height: '100%', background: C.bg2, fontFamily: C.font, display: 'flex', flexDirection: 'column', padding: '40px 24px 30px', overflow: 'auto' }}>
       <Brand/>
       <div style={{ fontSize: 21, fontWeight: 800, marginTop: 18, color: C.text }}>เข้าสู่ระบบ</div>
       <div style={{ fontSize: 12.5, color: C.muted, marginTop: 6, lineHeight: 1.5 }}>ไม่ต้องตั้งรหัสผ่าน · เลือกบัญชีที่ใช้อยู่แล้ว</div>
+      {error && <div style={{ marginTop: 12, padding: 10, background: '#fde9e6', color: '#9b1c10', borderRadius: 10, fontSize: 12 }}>{error}</div>}
       <div style={{ marginTop: 26, display: 'flex', flexDirection: 'column', gap: 10 }}>
-        <Btn variant="white" onClick={() => onLogin('มิ้น')}>G เข้าสู่ระบบด้วย Google</Btn>
-        <Btn variant="black" onClick={() => onLogin('มิ้น')}>เข้าสู่ระบบด้วย Apple</Btn>
-        <Btn variant="line" onClick={() => onLogin('มิ้น')}>LINE เข้าสู่ระบบด้วย LINE</Btn>
-        <Btn variant="ghost" onClick={() => onLogin('มิ้น')} style={{ padding: 13, fontSize: 13 }}>ใช้อีเมลแทน</Btn>
+        <Btn variant="white" onClick={googleLogin} disabled={busy}>G {busy ? 'กำลังเข้าสู่ระบบ…' : 'เข้าสู่ระบบด้วย Google'}</Btn>
+        <Btn variant="black" onClick={() => onLogin({ name: 'มิ้น', provider: 'apple' })}>เข้าสู่ระบบด้วย Apple</Btn>
+        <Btn variant="line" onClick={() => onLogin({ name: 'มิ้น', provider: 'line' })}>LINE เข้าสู่ระบบด้วย LINE</Btn>
+        <Btn variant="ghost" onClick={() => onLogin({ name: 'มิ้น', provider: 'email' })} style={{ padding: 13, fontSize: 13 }}>ใช้อีเมลแทน</Btn>
       </div>
       <div style={{ flex: 1 }}/>
       <div style={{ textAlign: 'center', fontFamily: C.mono, fontSize: 10.5, color: C.muted, lineHeight: 1.6 }}>
@@ -899,9 +917,9 @@ function MobileApp() {
 
   function persist(next) { setSession(next); saveSession(next); }
 
-  function handleLogin(name) {
+  function handleLogin(authedUser) {
     const profile = loadProfile();
-    persist({ user: { name, provider: 'google', ...(profile || {}) }, runner: null });
+    persist({ user: { ...authedUser, ...(profile || {}) }, runner: null });
     setScreen(profile && profile.profileCompleted ? 'events' : 'onboard');
   }
   function finishOnboard(nextUser) {
@@ -965,7 +983,7 @@ function MobileApp() {
       {body}
       {modal === 'profile' && <Overlay><ProfileScreen user={session.user} onClose={() => setModal(null)}
         onSave={updateUser}
-        onLogout={() => { clearSession(); setSession(null); setModal(null); setScreen('login'); }}/></Overlay>}
+        onLogout={() => { if (window.fb) window.fb.signOutUser().catch(() => {}); clearSession(); setSession(null); setModal(null); setScreen('login'); }}/></Overlay>}
       {modal === 'sos' && <Overlay><SosScreen onCancel={() => setModal(null)} onSent={() => setModal(null)}/></Overlay>}
       {modal === 'dnf' && <Overlay><DnfScreen onCancel={() => setModal(null)} onConfirm={() => setModal(null)}/></Overlay>}
     </div>
