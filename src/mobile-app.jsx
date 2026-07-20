@@ -918,7 +918,11 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
 // ── Root ───────────────────────────────────────────────────────────────────
 function MobileApp() {
   const [session, setSession] = uS(() => loadSession());
-  const [screen, setScreen] = uS(session ? 'app' : 'splash');
+  // A session only belongs on the 'app' screen once it actually has a
+  // runner or is following one — otherwise (logged in but never registered/
+  // followed a race, e.g. a stale session from a previous test) land on the
+  // event picker instead of crashing AppShell on a null runner.
+  const [screen, setScreen] = uS(session ? ((session.runner || session.spectator) ? 'app' : 'events') : 'splash');
   const [modal, setModal] = uS(null); // 'profile' | 'sos' | 'dnf'
   const [pendingEvent, setPendingEvent] = uS(null);
 
