@@ -27,6 +27,13 @@
     .trt-nav a { color: #5d6b59; text-decoration: none; padding: 6px 10px; border-radius: 6px; }
     .trt-nav a.active { color: #fff; background: #2d6a4f; }
     .trt-nav a:hover:not(.active) { background: #f5f1e8; color: #1f4d39; }
+
+    /* On real phones, skip the mockup bezel and run the app edge-to-edge. */
+    @media (max-width: 480px) {
+      #stage { min-height: calc(100vh - 41px); padding: 0; gap: 0; }
+      #phone { width: 100%; height: calc(100vh - 41px); max-height: none; border-radius: 0;
+        box-shadow: none; background: #efe9dc; }
+    }
   </style>
 </head>
 <body>
