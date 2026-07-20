@@ -872,6 +872,16 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
     const km = typeof CP_KM[nextCp] === 'object' ? CP_KM[nextCp][session.runner.dist] : CP_KM[nextCp];
     updateRunner(r => ({ ...r, checkins: [...r.checkins, { cp: nextCp, t }], progressKm: km }));
     setScanned({ cp: CP_LABEL[nextCp], km });
+    // Scanning the start CP is the "gun goes off" moment — that's when GPS
+    // should start recording, not the instant the phone got permission.
+    if (window.trtGpsTracker) {
+      if (nextCp === 'start') {
+        const bib = session.runner.bib || session.user.uid || session.user.name;
+        window.trtGpsTracker.start(session.runner.eventId, bib);
+      } else if (nextCp === 'finish') {
+        window.trtGpsTracker.stop();
+      }
+    }
   }
 
   if (scanning) return <QrScanScreen label={nextCp === 'start' ? 'จุดสตาร์ท' : CP_LABEL[nextCp]} onScanned={scanComplete}/>;
@@ -986,7 +996,7 @@ function MobileApp() {
         onSave={updateUser}
         onLogout={() => { if (window.fb) window.fb.signOutUser().catch(() => {}); clearSession(); setSession(null); setModal(null); setScreen('login'); }}/></Overlay>}
       {modal === 'sos' && <Overlay><SosScreen onCancel={() => setModal(null)} onSent={() => setModal(null)}/></Overlay>}
-      {modal === 'dnf' && <Overlay><DnfScreen onCancel={() => setModal(null)} onConfirm={() => setModal(null)}/></Overlay>}
+      {modal === 'dnf' && <Overlay><DnfScreen onCancel={() => setModal(null)} onConfirm={() => { if (window.trtGpsTracker) window.trtGpsTracker.stop(); setModal(null); }}/></Overlay>}
     </div>
   );
 }

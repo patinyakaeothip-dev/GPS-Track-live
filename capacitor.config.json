@@ -1,0 +1,13 @@
+{
+  "appId": "com.rayongtrail.live",
+  "appName": "Rayong Trail Running",
+  "webDir": ".",
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "Geolocation": {
+      "permissions": ["location"]
+    }
+  }
+}
