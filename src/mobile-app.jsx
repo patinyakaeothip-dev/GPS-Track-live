@@ -642,15 +642,30 @@ function QrScanScreen({ label, expectedCode, onScanned, onBack }) {
 }
 
 // ── Track / Route / Ranking / Friends tabs ───────────────────────────────
-const CP_SEQ = { '11K': ['start', 'a1_out', 'finish'], '22K': ['start', 'a1_out', 'a2_in', 'a1_in', 'finish'],
-  '29K': ['start', 'a1_out', 'a2_in', 'a2_out', 'a1_in', 'finish'] };
-const CP_KM = { start: 0, a1_out: 5.6, a2_in: 11.6, a2_out: 19, a1_in: 23.5, finish: { '11K': 11, '22K': 22, '29K': 29 } };
-const CP_LABEL = { start: 'จุดสตาร์ท', a1_out: 'A1 · ขาไป', a2_in: 'A2 · ขึ้นเขา', a2_out: 'A2 · ลงเขา', a1_in: 'A1 · ขากลับ', finish: 'เส้นชัย' };
+// Checkpoint sequence used to be a fixed table keyed by distance label,
+// matching one specific course. Now every event carries its own
+// `checkpoints` list (see src/admin-app.jsx) — every distance passes
+// through start → each checkpoint in order → finish.
+function cpSeqFor(event) {
+  return ['start', ...((event && event.checkpoints) || []).map(c => c.id), 'finish'];
+}
+function cpLabelFor(event, cpId) {
+  if (cpId === 'start') return 'จุดสตาร์ท';
+  if (cpId === 'finish') return 'เส้นชัย';
+  const cp = event && (event.checkpoints || []).find(c => c.id === cpId);
+  return cp ? cp.label : cpId;
+}
+function cpKmFor(event, cpId, distLabel) {
+  if (cpId === 'start') return 0;
+  if (cpId === 'finish') return parseFloat(distLabel) || 0;
+  const cp = event && (event.checkpoints || []).find(c => c.id === cpId);
+  return cp ? (parseFloat(cp.km) || 0) : 0;
+}
 
-function TrackTab({ runner, onScan, onSos, onDnf }) {
-  const seq = CP_SEQ[runner.dist];
+function TrackTab({ runner, event, onScan, onSos, onDnf }) {
+  const seq = cpSeqFor(event);
   const nextIdx = runner.checkins.length;
-  const totalKm = runner.dist === '11K' ? 11 : runner.dist === '22K' ? 22 : 29;
+  const totalKm = parseFloat(runner.dist) || 29;
   const pct = Math.min(100, (runner.progressKm / totalKm) * 100);
   return (
     <div style={{ flex: 1, overflow: 'auto', padding: '16px 18px 90px', display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -665,7 +680,7 @@ function TrackTab({ runner, onScan, onSos, onDnf }) {
         <div style={{ display: 'flex', gap: 14, marginTop: 14 }}>
           <Stat label="เพซปัจจุบัน" value={runner.pace}/>
           <Stat label="ความชัน" value={runner.gradient} accent={runner.gradient.startsWith('-') ? C.brand : C.orange}/>
-          <Stat label="จุดถัดไป" value={nextIdx < seq.length ? CP_LABEL[seq[nextIdx]] : '—'}/>
+          <Stat label="จุดถัดไป" value={nextIdx < seq.length ? cpLabelFor(event, seq[nextIdx]) : '—'}/>
         </div>
       </div>
 
@@ -682,7 +697,7 @@ function TrackTab({ runner, onScan, onSos, onDnf }) {
             <div key={cp} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px', borderTop: i ? `1px solid ${C.border}` : 'none' }}>
               <span style={{ width: 20, height: 20, borderRadius: 999, background: done ? C.brand : C.bg, color: done ? '#fff' : C.mute2,
                 display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, flexShrink: 0 }}>{done ? '✓' : i + 1}</span>
-              <span style={{ flex: 1, fontSize: 13, color: done ? C.text : C.mute2 }}>{CP_LABEL[cp]}</span>
+              <span style={{ flex: 1, fontSize: 13, color: done ? C.text : C.mute2 }}>{cpLabelFor(event, cp)}</span>
               {done && <span style={{ fontFamily: C.mono, fontSize: 10, color: C.muted }}>{runner.checkins[i].t}</span>}
             </div>
           );
@@ -1010,7 +1025,7 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
     });
   }
 
-  const seq = !isSpectator && CP_SEQ[session.runner.dist];
+  const seq = !isSpectator && cpSeqFor(currentEvent);
   const nextCp = seq && seq[session.runner.checkins.length];
 
   function doScan() {
@@ -1019,9 +1034,9 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
   function scanComplete() {
     setScanning(false);
     const t = new Date().toTimeString().slice(0, 5);
-    const km = typeof CP_KM[nextCp] === 'object' ? CP_KM[nextCp][session.runner.dist] : CP_KM[nextCp];
+    const km = cpKmFor(currentEvent, nextCp, session.runner.dist);
     updateRunner(r => ({ ...r, checkins: [...r.checkins, { cp: nextCp, t }], progressKm: km }));
-    setScanned({ cp: CP_LABEL[nextCp], km });
+    setScanned({ cp: cpLabelFor(currentEvent, nextCp), km });
     // Scanning the start CP is the "gun goes off" moment — that's when GPS
     // should start recording, not the instant the phone got permission.
     if (window.trtGpsTracker) {
@@ -1034,7 +1049,7 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
     }
   }
 
-  if (scanning) return <QrScanScreen label={nextCp === 'start' ? 'จุดสตาร์ท' : CP_LABEL[nextCp]}
+  if (scanning) return <QrScanScreen label={nextCp === 'start' ? 'จุดสตาร์ท' : cpLabelFor(currentEvent, nextCp)}
     expectedCode={`TRT:${session.runner.eventId}:${nextCp}`} onBack={() => setScanning(false)} onScanned={scanComplete}/>;
   if (scanned) return <ScanSuccessScreen cp={scanned.cp} km={scanned.km} onDone={() => setScanned(null)}/>;
   if (pickingFav) return <FavoritePickerScreen eventId={currentEventId} onBack={() => setPickingFav(false)} favBibs={favBibs} onToggle={toggleFavorite}/>;
@@ -1053,7 +1068,7 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
         <Brand/>
         <PersonIcon size={30} onClick={onProfile}/>
       </div>
-      {!isSpectator && tab === 'track' && <TrackTab runner={{ ...session.runner, pace: "6'42\"/กม.", gradient: '+4.2%' }} onScan={doScan} onSos={onSos} onDnf={onDnf}/>}
+      {!isSpectator && tab === 'track' && <TrackTab runner={{ ...session.runner, pace: "6'42\"/กม.", gradient: '+4.2%' }} event={currentEvent} onScan={doScan} onSos={onSos} onDnf={onDnf}/>}
       {tab === 'route' && <RouteTab course={course} runner={isSpectator ? (followedRunner ? { dist: followedRunner.distance, progressKm: followedRunner.progressKm } : { dist: '22K', progressKm: 0 }) : session.runner}/>}
       {tab === 'ranking' && <RankingTab snap={snap} eventId={!isSpectator ? session.runner.eventId : null}/>}
       {tab === 'friends' && <FriendsTab eventId={currentEventId} followedBib={isSpectator ? session.followBib : (session.runner && session.runner.bib)} favBibs={favBibs} onAddFavorite={() => setPickingFav(true)} onRemoveFavorite={toggleFavorite}/>}

@@ -14,6 +14,12 @@
     {
       id: 'rtr2026', name: 'Rayong Trail Running 2026', date: '18 เม.ย. 2026', raceDateISO: '2026-04-18', status: 'live',
       closed: false, hotline: '081-234-5678',
+      checkpoints: [
+        { id: 'a1_out', label: 'A1 ↗', km: 5.6 },
+        { id: 'a2_in', label: 'A2 ↑', km: 11.6 },
+        { id: 'a2_out', label: 'A2 ↓', km: 19 },
+        { id: 'a1_in', label: 'A1 ↙', km: 23.5 },
+      ],
       distances: [
         { id: 'd0', label: '11K', cutoff: '150', open: true, cpTimes: { start: '06:10', a1_out: '', a2_in: '', a2_out: '', a1_in: '', finish: '08:40' } },
         { id: 'd1', label: '22K', cutoff: '270', open: true, cpTimes: { start: '06:05', a1_out: '', a2_in: '', a2_out: '', a1_in: '', finish: '10:35' } },
@@ -23,6 +29,12 @@
     {
       id: 'kk2026', name: 'Khao Kho Ultra 2026', date: '3 ส.ค. 2026', raceDateISO: '2026-08-03', status: 'upcoming',
       closed: true, hotline: '',
+      checkpoints: [
+        { id: 'a1_out', label: 'A1 ↗', km: 5.6 },
+        { id: 'a2_in', label: 'A2 ↑', km: 11.6 },
+        { id: 'a2_out', label: 'A2 ↓', km: 19 },
+        { id: 'a1_in', label: 'A1 ↙', km: 23.5 },
+      ],
       distances: [{ id: 'd0', label: '22K', cutoff: '270', open: false, cpTimes: { start: '06:00', a1_out: '', a2_in: '', a2_out: '', a1_in: '', finish: '10:30' } }],
     },
     {
