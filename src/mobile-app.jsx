@@ -26,6 +26,25 @@ function saveSession(s) {
 }
 function clearSession() { try { localStorage.removeItem(LS_KEY); } catch (_) {} }
 
+// Remembers which top-level screen the runner was last looking at, so a
+// refresh (accidental or not — flaky mobile signal, browser restart) drops
+// them back where they were instead of always re-deriving from session
+// state alone. Only "stable" screens are worth remembering — the others are
+// one-off steps mid-flow (register/qr-scan/onboarding/...) that assume
+// state (like `pendingEvent`) that isn't persisted, so a refresh mid-step
+// falls back to initialScreenFor() instead of resuming half-finished.
+const LS_SCREEN_KEY = 'trt.screen.v1';
+const RESUMABLE_SCREENS = ['events', 'app', 'prerace'];
+function loadSavedScreen() {
+  try { return localStorage.getItem(LS_SCREEN_KEY); } catch (_) { return null; }
+}
+function saveScreen(screen) {
+  try {
+    if (RESUMABLE_SCREENS.includes(screen)) localStorage.setItem(LS_SCREEN_KEY, screen);
+    else localStorage.removeItem(LS_SCREEN_KEY);
+  } catch (_) {}
+}
+
 // Profile persists across logout/login on this device — so the mandatory
 // onboarding form only ever shows once per device, not on every login.
 const LS_PROFILE_KEY = 'trt.mobile.profile';
@@ -1126,12 +1145,15 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
 // opening the runner space and on every page load/refresh — a registered
 // runner who hasn't started belongs on the pre-race countdown, not the
 // live Track screen, no matter how they got back into the app.
-function initialScreenFor(session) {
+function initialScreenFor(session, savedScreen) {
   if (!session) return 'splash';
-  if (session.spectator) return 'app';
+  if (session.spectator) return savedScreen === 'events' ? 'events' : 'app';
   if (session.runner) {
     const started = (session.runner.checkins || []).some(c => c.cp === 'start');
-    return started ? 'app' : 'prerace';
+    if (!started) return 'prerace';
+    // Once actually racing, resume whichever resumable screen (events or
+    // app) they last had open instead of always jumping to Track.
+    return savedScreen === 'events' ? 'events' : 'app';
   }
   return 'events';
 }
@@ -1142,7 +1164,8 @@ function MobileApp() {
   // runner or is following one — otherwise (logged in but never registered/
   // followed a race, e.g. a stale session from a previous test) land on the
   // event picker instead of crashing AppShell on a null runner.
-  const [screen, setScreen] = uS(() => initialScreenFor(session));
+  const [screen, setScreen] = uS(() => initialScreenFor(session, loadSavedScreen()));
+  uE(() => { saveScreen(screen); }, [screen]);
   const [modal, setModal] = uS(null); // 'profile' | 'sos' | 'dnf'
   const [pendingEvent, setPendingEvent] = uS(null);
 
