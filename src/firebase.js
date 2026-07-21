@@ -9,7 +9,7 @@
 
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
 import {
-  getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signOut, onAuthStateChanged,
+  getAuth, GoogleAuthProvider, signInWithRedirect, getRedirectResult, signOut, onAuthStateChanged,
 } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
 import {
   getFirestore, collection, doc, getDocs, setDoc, deleteDoc, onSnapshot,
@@ -26,17 +26,20 @@ if (!configured) {
   const auth = getAuth(app);
   const db = getFirestore(app);
   const googleProvider = new GoogleAuthProvider();
-  // signInWithPopup opens about:blank in a separate window context — most
-  // mobile browsers (and every in-app webview: Line, Facebook, etc.) either
-  // block that outright or leave it stuck on a blank page after login, as
-  // reported on iOS Safari. Redirect navigates the current tab instead,
-  // which works everywhere; keep popup on desktop since it's the smoother
-  // experience there (no full page reload).
-  const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
 
   window.fb = {
     app, auth, db,
-    signInWithGoogle: () => isMobile ? signInWithRedirect(auth, googleProvider) : signInWithPopup(auth, googleProvider),
+    // Always redirect, never popup. signInWithPopup opens about:blank in a
+    // separate window context — mobile browsers and in-app webviews (Line,
+    // Facebook, etc.) often block that outright or leave it stuck blank,
+    // and even on plain desktop Chrome it started failing with
+    // "Cross-Origin-Opener-Policy policy would block the window.closed
+    // call" once Chrome tightened its default COOP behavior for popups.
+    // Detecting "is this mobile" via user-agent sniffing to pick between
+    // the two (tried previously) is also unreliable — iPadOS defaults to a
+    // desktop-looking UA, "Request Desktop Site" strips it on phones too —
+    // so redirect unconditionally instead of trying to guess.
+    signInWithGoogle: () => signInWithRedirect(auth, googleProvider),
     // Only relevant on the redirect path — call on page load to pick up the
     // result of a Google sign-in that just navigated back. Resolves to null
     // when there's no pending redirect sign-in.
