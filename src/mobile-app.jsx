@@ -1122,13 +1122,27 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
 }
 
 // ── Root ───────────────────────────────────────────────────────────────────
+// Same "have they actually scanned the start QR yet" check used when
+// opening the runner space and on every page load/refresh — a registered
+// runner who hasn't started belongs on the pre-race countdown, not the
+// live Track screen, no matter how they got back into the app.
+function initialScreenFor(session) {
+  if (!session) return 'splash';
+  if (session.spectator) return 'app';
+  if (session.runner) {
+    const started = (session.runner.checkins || []).some(c => c.cp === 'start');
+    return started ? 'app' : 'prerace';
+  }
+  return 'events';
+}
+
 function MobileApp() {
   const [session, setSession] = uS(() => loadSession());
   // A session only belongs on the 'app' screen once it actually has a
   // runner or is following one — otherwise (logged in but never registered/
   // followed a race, e.g. a stale session from a previous test) land on the
   // event picker instead of crashing AppShell on a null runner.
-  const [screen, setScreen] = uS(session ? ((session.runner || session.spectator) ? 'app' : 'events') : 'splash');
+  const [screen, setScreen] = uS(() => initialScreenFor(session));
   const [modal, setModal] = uS(null); // 'profile' | 'sos' | 'dnf'
   const [pendingEvent, setPendingEvent] = uS(null);
 
@@ -1192,11 +1206,7 @@ function MobileApp() {
   function openRunnerSpace(ev) {
     setPendingEvent(ev);
     if (session && session.runner && session.runner.eventId === ev.id) {
-      // Only actually "in" the race after scanning the start QR — before
-      // that, always land back on the pre-race countdown instead of the
-      // live Track screen (which has nothing real to show yet).
-      const started = (session.runner.checkins || []).some(c => c.cp === 'start');
-      setScreen(started ? 'app' : 'prerace');
+      setScreen(initialScreenFor(session));
       return;
     }
     setScreen('register');
