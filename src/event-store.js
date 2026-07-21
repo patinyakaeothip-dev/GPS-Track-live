@@ -54,9 +54,19 @@
     return list;
   }
 
+  // Deletes fired against Firestore are async and take a moment to actually
+  // land — if a realtime snapshot from *before* the delete finished arrives
+  // in the meantime, watchCollection's "trust whatever remote says" would
+  // silently resurrect the just-deleted event. Remember recent deletes for
+  // a few seconds and filter them out of any incoming snapshot so this
+  // can't bounce back.
+  const pendingDeletes = new Set();
+
   function deleteEvent(id) {
     const list = loadEvents().filter(e => e.id !== id);
     saveEvents(list);
+    pendingDeletes.add(id);
+    setTimeout(() => pendingDeletes.delete(id), 10000);
     if (window.fb) window.fb.deleteDocById('events', id).catch(err => console.warn('[event-store] Firestore delete failed', err));
     return list;
   }
@@ -93,7 +103,8 @@
   function startFirestoreSync() {
     if (!window.fb) return;
     window.fb.listDocs('events').then(remote => {
-      if (remote.length) { saveEvents(remote); notifyUpdated(); }
+      const filtered = remote.filter(e => !pendingDeletes.has(e.id));
+      if (filtered.length) { saveEvents(filtered); notifyUpdated(); }
       else if (loadEvents().length) {
         // First run against an empty Firestore collection — seed it from
         // whatever this device already has (e.g. the local SEED_EVENTS).
@@ -102,7 +113,7 @@
     }).catch(err => console.warn('[event-store] Firestore initial load failed', err));
 
     window.fb.watchCollection('events', remote => {
-      saveEvents(remote);
+      saveEvents(remote.filter(e => !pendingDeletes.has(e.id)));
       notifyUpdated();
     });
   }
