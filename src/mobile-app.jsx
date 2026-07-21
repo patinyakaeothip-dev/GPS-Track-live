@@ -162,18 +162,29 @@ function LoginScreen({ onLogin }) {
   // On mobile, signInWithGoogle() navigates away (signInWithRedirect) and
   // back instead of resolving a popup promise — pick up that result here
   // once the page reloads, so login completes the same way as the desktop
-  // popup flow below.
+  // popup flow below. src/firebase.js loads as an async ES module, so
+  // window.fb often isn't set yet on this very first effect run right after
+  // the redirect brings the page back — checking once and giving up if it's
+  // not ready yet silently dropped the completed sign-in, bouncing the user
+  // back to this same login screen. Wait for 'trt:firebase-ready' instead.
   uE(() => {
-    if (!window.fb || !window.fb.getGoogleRedirectResult) return;
-    setBusy(true);
-    window.fb.getGoogleRedirectResult().then(result => {
-      if (result && result.user) {
-        const u = result.user;
-        onLogin({ uid: u.uid, name: u.displayName || 'นักวิ่ง', email: u.email, photo: u.photoURL, provider: 'google' });
-      } else {
-        setBusy(false);
-      }
-    }).catch(() => { setError('เข้าสู่ระบบไม่สำเร็จ ลองอีกครั้ง'); setBusy(false); });
+    let cancelled = false;
+    function checkRedirect() {
+      if (cancelled || !window.fb || !window.fb.getGoogleRedirectResult) return;
+      setBusy(true);
+      window.fb.getGoogleRedirectResult().then(result => {
+        if (cancelled) return;
+        if (result && result.user) {
+          const u = result.user;
+          onLogin({ uid: u.uid, name: u.displayName || 'นักวิ่ง', email: u.email, photo: u.photoURL, provider: 'google' });
+        } else {
+          setBusy(false);
+        }
+      }).catch(() => { if (!cancelled) { setError('เข้าสู่ระบบไม่สำเร็จ ลองอีกครั้ง'); setBusy(false); } });
+    }
+    if (window.fb) checkRedirect();
+    else window.addEventListener('trt:firebase-ready', checkRedirect, { once: true });
+    return () => { cancelled = true; window.removeEventListener('trt:firebase-ready', checkRedirect); };
   }, []);
 
   async function googleLogin() {
