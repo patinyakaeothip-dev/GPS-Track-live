@@ -79,12 +79,18 @@
     return list[idx];
   }
 
+  // Same "don't let a late realtime snapshot resurrect what we just
+  // deleted" guard as event-store.js's deleteEvent.
+  const pendingDeletes = new Set();
+
   // Cancels a registration outright (mis-registration, duplicate, etc).
   // Caller is responsible for also calling eventStore.decrementRegistration
   // so the quota count stays in sync.
   function deleteRunner(id) {
     const list = loadRunners().filter(r => r.id !== id);
     saveRunners(list);
+    pendingDeletes.add(id);
+    setTimeout(() => pendingDeletes.delete(id), 10000);
     if (window.fb) window.fb.deleteDocById('runners', id).catch(err => console.warn('[runner-store] Firestore delete failed', err));
     notifyUpdated();
   }
@@ -116,9 +122,13 @@
   function startFirestoreSync() {
     if (!window.fb) return;
     window.fb.listDocs('runners').then(remote => {
-      if (remote.length) { saveRunners(remote); notifyUpdated(); }
+      const filtered = remote.filter(r => !pendingDeletes.has(r.id));
+      if (filtered.length) { saveRunners(filtered); notifyUpdated(); }
     }).catch(err => console.warn('[runner-store] Firestore initial load failed', err));
-    window.fb.watchCollection('runners', remote => { saveRunners(remote); notifyUpdated(); });
+    window.fb.watchCollection('runners', remote => {
+      saveRunners(remote.filter(r => !pendingDeletes.has(r.id)));
+      notifyUpdated();
+    });
   }
   function notifyUpdated() {
     window.dispatchEvent(new CustomEvent('trt:runners-updated'));
