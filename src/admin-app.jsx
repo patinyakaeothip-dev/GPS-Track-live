@@ -145,7 +145,7 @@ function blankEvent() {
 
 function EventForm({ initial, onCancel, onSave, onSaveInPlace, onDelete }) {
   const isNew = !initial;
-  const [ev, setEv] = aS(() => initial ? { ...blankEvent(), ...initial, distances: (initial.distances || blankEvent().distances).map(d => ({ capacity: '', registered: '0', ...d, cpTimes: d.cpTimes || blankCpTimes('', '') })) } : blankEvent());
+  const [ev, setEv] = aS(() => initial ? { ...blankEvent(), ...initial, distances: (initial.distances || blankEvent().distances).map((d, i) => ({ capacity: '', registered: '0', ...d, id: d.id || `d${i}-${d.label}`, cpTimes: d.cpTimes || blankCpTimes('', '') })) } : blankEvent());
   const [gpx11k, setGpx11k] = aS(null);
   const [toast, setToast] = aS(null);
 
