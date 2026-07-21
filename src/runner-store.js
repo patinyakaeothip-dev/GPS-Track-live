@@ -32,18 +32,26 @@
   // Bibs are 4-digit, assigned per distance using that distance's numeric
   // prefix (1000s for the 1st distance in the event, 2000s for the 2nd,
   // ...) so they stay stable and readable instead of a random id — e.g.
-  // 1001, 1002, ... 2001, 2002, ...
+  // 1001, 1002, ... 2001, 2002, ... Based on the highest bib already taken
+  // (not a plain count) so a cancelled/deleted registration doesn't free up
+  // its number and hand it to someone else later.
   function nextBib(eventId, ev, distLabel) {
     const distIdx = Math.max(0, (ev.distances || []).findIndex(d => d.label === distLabel));
     const base = (distIdx + 1) * 1000;
-    const taken = listRunners(eventId).filter(r => r.distance === distLabel).length;
-    return String(base + taken + 1);
+    const bibs = listRunners(eventId).filter(r => r.distance === distLabel).map(r => parseInt(r.bib, 10) || base);
+    const highest = bibs.length ? Math.max(...bibs) : base;
+    return String(highest + 1);
   }
 
   function registerRunner(ev, data) {
     const bib = nextBib(ev.id, ev, data.distance);
     const runner = {
-      id: `${ev.id}_${bib}`,
+      // Deliberately NOT derived from the bib — two registrations racing
+      // each other (e.g. before this device's roster has finished syncing
+      // from Firestore) could otherwise compute the same "next" bib and end
+      // up overwriting each other's Firestore document outright instead of
+      // just showing a duplicate bib.
+      id: `${ev.id}_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`,
       eventId: ev.id,
       bib,
       distance: data.distance,

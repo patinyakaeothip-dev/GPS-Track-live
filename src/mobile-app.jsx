@@ -1098,7 +1098,9 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
         <Brand/>
         <PersonIcon size={30} onClick={onProfile}/>
       </div>
-      {!isSpectator && tab === 'track' && <TrackTab runner={{ ...session.runner, pace: "6'42\"/กม.", gradient: '+4.2%' }} event={currentEvent} onScan={doScan} onSos={onSos} onDnf={onDnf}/>}
+      {!isSpectator && tab === 'track' && <TrackTab runner={{ ...session.runner,
+        pace: session.runner.checkins.length ? "6'42\"/กม." : '—',
+        gradient: session.runner.checkins.length ? '+4.2%' : '—' }} event={currentEvent} onScan={doScan} onSos={onSos} onDnf={onDnf}/>}
       {tab === 'route' && <RouteTab course={course} runner={isSpectator ? (followedRunner ? { dist: followedRunner.distance, progressKm: followedRunner.progressKm } : { dist: '22K', progressKm: 0 }) : session.runner}/>}
       {tab === 'ranking' && <RankingTab snap={snap} eventId={!isSpectator ? session.runner.eventId : null} event={currentEvent}/>}
       {tab === 'friends' && <FriendsTab eventId={currentEventId} followedBib={isSpectator ? session.followBib : (session.runner && session.runner.bib)} favBibs={favBibs} onAddFavorite={() => setPickingFav(true)} onRemoveFavorite={toggleFavorite}/>}
@@ -1184,7 +1186,14 @@ function MobileApp() {
   }
   function openRunnerSpace(ev) {
     setPendingEvent(ev);
-    if (session && session.runner && session.runner.eventId === ev.id) { setScreen('app'); return; }
+    if (session && session.runner && session.runner.eventId === ev.id) {
+      // Only actually "in" the race after scanning the start QR — before
+      // that, always land back on the pre-race countdown instead of the
+      // live Track screen (which has nothing real to show yet).
+      const started = (session.runner.checkins || []).some(c => c.cp === 'start');
+      setScreen(started ? 'app' : 'prerace');
+      return;
+    }
     setScreen('register');
   }
   function afterRegister(data) {
