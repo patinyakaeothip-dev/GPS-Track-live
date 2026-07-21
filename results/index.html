@@ -78,6 +78,18 @@
       return s.slice(0,3) + '••••' + s.slice(-2);
     }
 
+    // Distance pill color — was hardcoded to only 29K/22K/11K (anything else
+    // fell back to plain gray). Hashes the label into a small fixed palette
+    // instead, so events with their own distance labels (e.g. "28.6K") still
+    // get a distinct, stable color.
+    const DIST_PALETTE = ['#1f4d39', '#e07a3e', '#3a86c4', '#7c4a03', '#9b1c10'];
+    function distColor(label) {
+      if (!label) return MUTED;
+      let h = 0;
+      for (let i = 0; i < label.length; i++) h = (h * 31 + label.charCodeAt(i)) >>> 0;
+      return DIST_PALETTE[h % DIST_PALETTE.length];
+    }
+
     // Real per-event roster (src/runner-store.js) instead of a shared demo
     // dataset — every event used to show the exact same simulated runners
     // regardless of which one was selected. A runner shows up here the
@@ -103,6 +115,8 @@
         const status = r.dnf ? 'dnf' : finish ? 'finished' : cks.length ? 'active' : 'not_started';
         return {
           id: r.id,
+          bib: r.bib,
+          gender: r.gender,
           name: r.nickname,
           phone: maskPhone(r.phone),
           distance: r.distance,
@@ -391,9 +405,13 @@
           </div>
           {/* Name + meta */}
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 15, fontWeight: 600, color: TEXT,
-              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {it.name}
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+              {it.bib && <span style={{ fontFamily: MONO, fontSize: 12, fontWeight: 700, color: BRAND_DK, flexShrink: 0 }}>#{it.bib}</span>}
+              <span style={{ fontSize: 15, fontWeight: 600, color: TEXT,
+                whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {it.name}
+              </span>
+              {it.gender && <span style={{ fontFamily: MONO, fontSize: 10, fontWeight: 700, color: it.gender === 'f' ? '#b3467c' : '#3a86c4', flexShrink: 0 }}>{it.gender === 'f' ? 'หญิง' : 'ชาย'}</span>}
             </div>
             <div style={{ fontFamily: MONO, fontSize: 10, color: MUTED, marginTop: 2 }}>
               {it.phone}
@@ -408,9 +426,7 @@
             gap: 2 }}>
             <div style={{ padding: '3px 8px', borderRadius: 999, fontSize: 11,
               fontWeight: 700, fontFamily: MONO, color: '#fff',
-              background: it.distance === '29K' ? BRAND_DK
-                : it.distance === '22K' ? '#e07a3e'
-                : it.distance === '11K' ? '#3a86c4' : MUTED }}>
+              background: distColor(it.distance) }}>
               {it.distance || '—'}
             </div>
             {adjusted && (
