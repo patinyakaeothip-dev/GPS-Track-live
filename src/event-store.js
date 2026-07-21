@@ -34,8 +34,15 @@
 
   function loadEvents() {
     try {
+      // Only seed demo events when there's genuinely nothing stored yet
+      // (missing key / corrupted JSON) — an empty array is a valid,
+      // intentional state (every event got deleted) and must be respected,
+      // not treated the same as "no data" and silently reseeded. That
+      // conflation was the actual bug behind "deleting the last event
+      // brings back all 3 demo events."
+      if (localStorage.getItem(KEY) === null) throw new Error('no stored events yet');
       const raw = JSON.parse(localStorage.getItem(KEY));
-      if (Array.isArray(raw) && raw.length) return raw;
+      if (Array.isArray(raw)) return raw;
     } catch (_) {}
     saveEvents(SEED_EVENTS);
     return SEED_EVENTS;
