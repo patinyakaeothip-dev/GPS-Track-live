@@ -418,8 +418,13 @@ function LiveMonitorApp() {
           <button onClick={() => setDashView('ranking')} style={{ flex: 1, padding: 12, background: 'none', border: 'none', borderBottom: `3px solid ${dashView === 'ranking' ? M_BRAND : 'transparent'}`, cursor: 'pointer', fontFamily: M_MONO, fontSize: 11.5, letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 700, color: dashView === 'ranking' ? M_BRAND : '#a8b1a3' }}>🏆 Ranking</button>
         </div>
 
-        {dashView === 'map' && (
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
+        {/* Kept mounted (just hidden) instead of conditionally unmounted —
+            switching tabs used to destroy the map's host <div>, but
+            mapRef.current stayed set to the now-orphaned Leaflet instance,
+            so switching back to "map" silently skipped creating a new one
+            (its effect bails out whenever mapRef.current is already
+            truthy) and the map never came back without a full refresh. */}
+        <div style={{ display: dashView === 'map' ? 'flex' : 'none', flexDirection: 'column' }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', minHeight: 560 }}>
               <div style={{ position: 'relative', borderRight: '1px solid #d8d2c2' }}>
                 <div style={{ position: 'absolute', top: 12, left: 16, zIndex: 400, display: 'flex', gap: 16, background: 'rgba(255,255,255,0.92)', padding: '6px 12px', borderRadius: 10, boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
@@ -518,8 +523,7 @@ function LiveMonitorApp() {
                 </svg>
               )}
             </div>
-          </div>
-        )}
+        </div>
 
         {dashView === 'ranking' && (
           <div style={{ display: 'flex', flexDirection: 'column', minHeight: 560 }}>
