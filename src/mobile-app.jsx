@@ -1105,6 +1105,27 @@ function MobileApp() {
     return () => window.removeEventListener('trt:runners-updated', tryRecover);
   }, [session && session.user && session.user.uid]);
 
+  // A session can point at an event that no longer exists (Admin deleted
+  // it, or — before the loadEvents empty-array bug was fixed — deleting
+  // every event reseeded a *different* demo event under the same-looking
+  // slot). Without this check the app just trusted the stale
+  // runner/spectator record forever and kept showing Track/AppShell for an
+  // event that's gone, instead of sending the user back to pick one.
+  uE(() => {
+    function validateEvent() {
+      if (!session) return;
+      const eventId = session.runner ? session.runner.eventId : (session.spectator ? session.followEventId : null);
+      if (!eventId) return;
+      const events = getEvents();
+      if (events.some(e => e.id === eventId)) return;
+      persist({ ...session, runner: null, spectator: false, followBib: null, followEventId: null });
+      setScreen('events');
+    }
+    validateEvent();
+    window.addEventListener('trt:events-updated', validateEvent);
+    return () => window.removeEventListener('trt:events-updated', validateEvent);
+  }, [session && session.runner && session.runner.eventId, session && session.followEventId]);
+
   function handleLogin(authedUser) {
     const profile = loadProfile();
     persist({ user: { ...authedUser, ...(profile || {}) }, runner: null });
