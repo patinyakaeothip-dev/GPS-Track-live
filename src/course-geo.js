@@ -30,33 +30,6 @@
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   }
 
-  // Build lat/lon/ele/km path arrays for each race distance from the single
-  // recorded 29K track + the checkpoint km marks (CP_KMS: a1_out, a2_in, a2_out, a1_in).
-  function buildCoursePaths(track, cpKms) {
-    const at = km => track.reduce((best, p) => Math.abs(p.km - km) < Math.abs(best.km - km) ? p : best, track[0]);
-    const idxAt = km => {
-      let bestI = 0, bestD = Infinity;
-      track.forEach((p, i) => { const d = Math.abs(p.km - km); if (d < bestD) { bestD = d; bestI = i; } });
-      return bestI;
-    };
-
-    // 29K: the full recorded track as-is.
-    const path29 = track;
-
-    // 22K: splice out the hill loop between a2_in and a2_out.
-    const i1 = idxAt(cpKms.a2_in), i2 = idxAt(cpKms.a2_out);
-    const path22Raw = track.slice(0, i1 + 1).concat(track.slice(i2 + 1));
-    const path22 = reindexKm(path22Raw);
-
-    // 11K: out to a1_out then back the same way (out-and-back).
-    const iA1 = idxAt(cpKms.a1_out);
-    const outLeg = track.slice(0, iA1 + 1);
-    const backLeg = track.slice(0, iA1 + 1).slice().reverse();
-    const path11 = reindexKm(outLeg.concat(backLeg));
-
-    return { '29K': path29, '22K': path22, '11K': path11 };
-  }
-
   function pointAtKm(pts, km) {
     const clamped = Math.max(0, Math.min(pts[pts.length - 1].km, km));
     for (let i = 1; i < pts.length; i++) {
@@ -101,48 +74,45 @@
     return best.km;
   }
 
-  const DEMO_CP_KMS = { a1_out: 5.6, a2_in: 11.6, a2_out: 19, a1_in: 23.5 };
-
   // Builds real per-distance course paths for an event from whatever GPX it
   // actually has (src/admin-app.jsx GpxCard uploads → ev.gpxFiles, parsed by
   // src/gpx-parse.js into the same {points:[[lat,lon,ele,km]],...} shape as
-  // assets/course-track.json), falling back to the bundled demo course for
-  // any distance that has nothing uploaded — so events with no GPX yet keep
-  // working exactly like before instead of breaking.
-  //
-  // Preference order per distance: (1) that distance's own uploaded GPX,
-  // used as-is since it's already the real route; (2) derived by splicing
-  // the event's own uploaded 29K GPX using its cpKms, same technique as the
-  // demo course; (3) the bundled demo course.
+  // assets/course-track.json). Distance labels come from the event's own
+  // `distances` list (set up in Admin) instead of a fixed 29K/22K/11K set,
+  // so events with different distances resolve correctly. Any distance with
+  // nothing uploaded yet falls back to the bundled demo course rather than
+  // trying to derive one — deriving a spliced sub-route only ever made sense
+  // for one specific out-and-back/loop course shape, and doesn't generalize
+  // to arbitrary RD-defined checkpoints.
   async function buildEventCoursePaths(ev) {
-    const cpKms = (ev && ev.cpKms) || DEMO_CP_KMS;
     const gpxFiles = (ev && ev.gpxFiles) || {};
+    const labels = (ev && ev.distances && ev.distances.length) ? ev.distances.map(d => d.label) : ['29K', '22K', '11K'];
 
-    let baseTrack;
-    if (gpxFiles['29K']) {
-      baseTrack = reindexKm(gpxFiles['29K'].track.points.map(p => ({ lat: p[0], lon: p[1], ele: p[2], km: p[3] })));
-    } else {
-      baseTrack = await loadTrack();
-    }
-    const derived = buildCoursePaths(baseTrack, cpKms);
-
+    let demoTrack = null;
     const paths = {};
-    ['11K', '22K', '29K'].forEach(label => {
+    for (const label of labels) {
       if (gpxFiles[label]) {
         paths[label] = reindexKm(gpxFiles[label].track.points.map(p => ({ lat: p[0], lon: p[1], ele: p[2], km: p[3] })));
       } else {
-        paths[label] = derived[label];
+        if (!demoTrack) demoTrack = await loadTrack();
+        paths[label] = demoTrack;
       }
-    });
-    return { paths, cpKms };
+    }
+    // The "overview" course used for the RD map/elevation strip and to
+    // project runner positions onto — whichever distance's path is actually
+    // longest, instead of assuming a fixed '29K' key exists.
+    const overviewLabel = labels.slice().sort((a, b) =>
+      (paths[b][paths[b].length - 1].km) - (paths[a][paths[a].length - 1].km))[0];
+
+    return { paths, overviewLabel, checkpoints: (ev && Array.isArray(ev.checkpoints)) ? ev.checkpoints : [] };
   }
 
   // Same per-distance resolution as buildEventCoursePaths, but returns the
   // flat {points:[[lat,lon,ele,km]], totalKm, minEle, maxEle} JSON shape the
   // runner app's Route tab (mobile-app.jsx useCourse/ElevationSvg) expects.
   async function courseJsonForDistance(ev, distLabel) {
-    const { paths } = await buildEventCoursePaths(ev);
-    const pts = paths[distLabel] || paths['29K'];
+    const { paths, overviewLabel } = await buildEventCoursePaths(ev);
+    const pts = paths[distLabel] || paths[overviewLabel];
     const eles = pts.map(p => p.ele);
     return {
       points: pts.map(p => [p.lat, p.lon, p.ele, p.km]),
@@ -153,6 +123,6 @@
   }
 
   Object.assign(window, {
-    courseGeo: { loadTrack, buildCoursePaths, pointAtKm, gradientAtKm, coursePolylineLatLngs, nearestKmOnTrack, haversineKm, buildEventCoursePaths, courseJsonForDistance },
+    courseGeo: { loadTrack, pointAtKm, gradientAtKm, coursePolylineLatLngs, nearestKmOnTrack, haversineKm, buildEventCoursePaths, courseJsonForDistance },
   });
 })();

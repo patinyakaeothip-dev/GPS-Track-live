@@ -8,9 +8,13 @@
 const { useState: mS, useEffect: mE, useMemo: mM, useRef: mR } = React;
 
 const M_BRAND = '#2d6a4f', M_DIST = { '29K': '#1f4d39', '22K': '#e07a3e', '11K': '#3a86c4' };
+const M_DIST_FALLBACK = ['#1f4d39', '#e07a3e', '#3a86c4', '#7c4a03', '#9b1c10'];
 const M_WARN = 'oklch(0.68 0.16 70)', M_ALERT = 'oklch(0.58 0.22 28)', M_REST = '#7c8a78';
 const M_MONO = "'JetBrains Mono',ui-monospace,monospace";
-const CP_KMS = { a1_out: 5.6, a2_in: 11.6, a2_out: 19, a1_in: 23.5 };
+// Original demo runner km values were hand-placed assuming these course
+// lengths — used to rescale them proportionally onto whatever distance an
+// event's own course actually is.
+const DEMO_MAX_KM = { '29K': 29, '22K': 22, '11K': 11 };
 
 const NAMES = [
   ['101', 'ก้อง', '29K', 4.0, 'normal', 'M'], ['102', 'เก่ง', '29K', 9.5, 'normal', 'M'],
@@ -56,12 +60,12 @@ function statusMeta(status) {
     finished: { label: 'เข้าเส้นชัย', bg: M_BRAND, fg: '#fff' },
   }[status] || { label: status, bg: '#eee', fg: '#000' };
 }
-function colorFor(r) {
+function colorFor(r, distColor) {
   if (r.statusBase === 'missing') return M_ALERT;
   if (r.statusBase === 'slow') return M_WARN;
   if (r.statusBase === 'rest') return M_REST;
   if (r.km >= r.totalKm - 0.02) return M_BRAND;
-  return M_DIST[r.distance];
+  return (distColor || M_DIST)[r.distance] || '#5d6b59';
 }
 
 function useElevationProfile(geo, coursePaths, distance) {
@@ -102,6 +106,17 @@ function LiveMonitorApp() {
     return (live || list[0] || {}).id || null;
   });
   const selectedEvent = events.find(e => e.id === eventId) || null;
+  // Distances/colors follow the selected event's own `distances` list (set
+  // up in Admin) instead of a fixed 29K/22K/11K set — an event's own color
+  // per distance is reused so the map legend matches what RD already sees
+  // when editing the event.
+  const distLabels = mM(() => (selectedEvent && selectedEvent.distances && selectedEvent.distances.length)
+    ? selectedEvent.distances.map(d => d.label) : ['29K', '22K', '11K'], [selectedEvent]);
+  const distColor = mM(() => {
+    const m = {};
+    (selectedEvent && selectedEvent.distances || []).forEach((d, i) => { m[d.label] = d.color || M_DIST_FALLBACK[i % M_DIST_FALLBACK.length]; });
+    return Object.keys(m).length ? m : M_DIST;
+  }, [selectedEvent]);
   // Computed live from the event's schedule (see src/event-status.js) on
   // every render instead of trusting the stored status field, which is only
   // a snapshot from whenever Admin last hit save.
@@ -121,7 +136,8 @@ function LiveMonitorApp() {
 
   const geoRef = mR(null);
   const coursePathsRef = mR(null);
-  const cpKmsRef = mR(CP_KMS);
+  const overviewLabelRef = mR('29K');
+  const checkpointsRef = mR([]);
   const runnersRef = mR(null);
   const mapHostRef = mR(null);
   const mapRef = mR(null);
@@ -142,13 +158,21 @@ function LiveMonitorApp() {
       (async () => {
         const geo = window.courseGeo;
         geoRef.current = geo;
-        const { paths: coursePaths, cpKms } = await geo.buildEventCoursePaths(selectedEvent);
+        const { paths: coursePaths, overviewLabel, checkpoints } = await geo.buildEventCoursePaths(selectedEvent);
         coursePathsRef.current = coursePaths;
-        cpKmsRef.current = cpKms;
-        runnersRef.current = NAMES.map(([bib, name, distance, km, statusBase, gender]) => {
+        overviewLabelRef.current = overviewLabel;
+        checkpointsRef.current = checkpoints;
+        // Simulated demo runners are spread across whichever distances this
+        // event actually has (round-robin), with their demo km position
+        // rescaled proportionally onto that distance's real course length —
+        // these dots are still simulated positions (see the banner below),
+        // just no longer stuck on a fixed 29K/22K/11K assumption.
+        runnersRef.current = NAMES.map(([bib, name, origDist, km, statusBase, gender], i) => {
+          const distance = distLabels[i % distLabels.length];
           const pts = coursePaths[distance];
           const totalKm = pts[pts.length - 1].km;
-          return { bib, name, distance, km: Math.min(km, totalKm - 0.05), totalKm, statusBase, gender,
+          const frac = Math.min(1, km / (DEMO_MAX_KM[origDist] || totalKm));
+          return { bib, name, distance, km: Math.min(frac * totalKm, totalKm - 0.05), totalKm, statusBase, gender,
             basePace: 7 + Math.random() * 2.2,
             lastPingAt: Date.now() - (statusBase === 'missing' ? 26 * 60000 : 0) };
         });
@@ -156,32 +180,28 @@ function LiveMonitorApp() {
         setReady(true);
       })();
       return () => { cancelled = true; };
-    }, [eventId]);
+    }, [eventId, distLabels]);
   }
 
   mE(() => {
     if (!ready || !mapHostRef.current || mapRef.current) return;
-    const L = window.L, geo = geoRef.current, coursePaths = coursePathsRef.current, cpKms = cpKmsRef.current;
-    const c29 = coursePaths['29K'];
-    const latlngs = geo.coursePolylineLatLngs(c29);
-    const loopStart = c29.findIndex(p => p.km >= cpKms.a2_in);
-    const loopEnd = c29.findIndex(p => p.km >= cpKms.a2_out);
-    const loopLatLngs = latlngs.slice(loopStart, loopEnd + 1);
+    const L = window.L, geo = geoRef.current, coursePaths = coursePathsRef.current, checkpoints = checkpointsRef.current;
+    const cOverview = coursePaths[overviewLabelRef.current];
+    const latlngs = geo.coursePolylineLatLngs(cOverview);
     const bounds = L.latLngBounds(latlngs);
     const map = L.map(mapHostRef.current, { zoomControl: false, attributionControl: false }).fitBounds(bounds, { padding: [24, 24] });
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
     L.polyline(latlngs, { color: '#1f4d39', weight: 4, opacity: 0.8 }).addTo(map);
-    L.polyline(loopLatLngs, { color: '#1f4d39', weight: 4, opacity: 1, dashArray: '1 7' }).addTo(map);
-    [[0, 'START', 0], [cpKms.a1_out, 'A1 ↗', 0], [cpKms.a2_in, 'A2 ↑', -16], [cpKms.a2_out, 'A2 ↓', 16], [cpKms.a1_in, 'A1 ↙', 0], [c29[c29.length - 1].km, 'FINISH', -18]]
-      .forEach(([km, label, dx]) => {
-        const p = geo.pointAtKm(c29, km);
+    [[0, 'START'], ...checkpoints.map(cp => [parseFloat(cp.km) || 0, cp.label]), [cOverview[cOverview.length - 1].km, 'FINISH']]
+      .forEach(([km, label]) => {
+        const p = geo.pointAtKm(cOverview, km);
         L.marker([p.lat, p.lon], { icon: L.divIcon({ className: '', html:
-          `<div style="padding:2px 7px;background:#2d6a4f;color:#fff;border-radius:7px;font:600 10px 'JetBrains Mono',monospace;letter-spacing:0.04em;white-space:nowrap;transform:translate(calc(-50% + ${dx}px),-130%)">${label}</div>`,
+          `<div style="padding:2px 7px;background:#2d6a4f;color:#fff;border-radius:7px;font:600 10px 'JetBrains Mono',monospace;letter-spacing:0.04em;white-space:nowrap;transform:translate(-50%,-130%)">${label}</div>`,
           iconSize: [0, 0] }) }).addTo(map);
       });
     runnersRef.current.forEach(r => {
       const p = geo.pointAtKm(coursePaths[r.distance], r.km);
-      const color = colorFor(r);
+      const color = colorFor(r, distColor);
       const m = L.circleMarker([p.lat, p.lon], { radius: 7, color: '#fff', weight: 2, fillColor: color, fillOpacity: 1 }).addTo(map);
       m.bindTooltip(`#${r.bib} ${r.name}`, { direction: 'top', offset: [0, -8] });
       m.on('click', () => { setSelectedBib(r.bib); setFocusBib(null); });
@@ -202,7 +222,7 @@ function LiveMonitorApp() {
     if (selectedBib && markersRef.current.has(selectedBib)) {
       map.flyTo(markersRef.current.get(selectedBib).getLatLng(), 15, { duration: 0.5 });
     } else {
-      const bounds = window.L.latLngBounds(geoRef.current.coursePolylineLatLngs(coursePathsRef.current['29K']));
+      const bounds = window.L.latLngBounds(geoRef.current.coursePolylineLatLngs(coursePathsRef.current[overviewLabelRef.current]));
       map.flyToBounds(bounds, { padding: [24, 24], duration: 0.5 });
     }
   }
@@ -217,7 +237,8 @@ function LiveMonitorApp() {
   }
 
   const geo = geoRef.current, coursePaths = coursePathsRef.current;
-  const overviewProfile = useElevationProfile(geo, coursePaths, '29K');
+  const overviewLabel = overviewLabelRef.current;
+  const overviewProfile = useElevationProfile(geo, coursePaths, overviewLabel);
 
   const displays = mM(() => {
     if (!ready) return [];
@@ -227,8 +248,8 @@ function LiveMonitorApp() {
       const g = geo.gradientAtKm(pts, r.km);
       const status = r.km >= r.totalKm - 0.02 ? 'finished' : r.statusBase;
       const meta = statusMeta(status);
-      const physKm = geo.nearestKmOnTrack(coursePaths['29K'], p.lat, p.lon);
-      return { bib: r.bib, name: r.name, distance: r.distance, gender: r.gender, color: colorFor(r),
+      const physKm = geo.nearestKmOnTrack(coursePaths[overviewLabel], p.lat, p.lon);
+      return { bib: r.bib, name: r.name, distance: r.distance, gender: r.gender, color: colorFor(r, distColor),
         initial: r.name.slice(0, 1), km: r.km, totalKm: r.totalKm,
         pct: Math.min(100, (r.km / r.totalKm) * 100),
         pace: fmtPace(r.basePace * Math.max(0.55, g > 0 ? 1 + g * 0.035 : 1 + g * 0.012)),
@@ -263,9 +284,9 @@ function LiveMonitorApp() {
     const byDist = {};
     filtered.forEach(d => (byDist[d.distance] ||= []).push(d));
     const medal = n => n === 1 ? '🥇' : n === 2 ? '🥈' : n === 3 ? '🥉' : '';
-    return ['29K', '22K', '11K'].filter(ds => byDist[ds]).flatMap(ds =>
+    return distLabels.filter(ds => byDist[ds]).flatMap(ds =>
       byDist[ds].slice().sort((a, b) => b.pct - a.pct).map((d, i) => ({ ...d, rank: i + 1, medal: medal(i + 1), firstInGroup: i === 0, groupLabel: ds })));
-  }, [displays, distFilter, rankGender, search]);
+  }, [displays, distFilter, rankGender, search, distLabels]);
 
   return (
     <div style={{ maxWidth: 1440, margin: '0 auto', padding: '24px 20px 60px', fontFamily: "'Plus Jakarta Sans','Noto Sans Thai',ui-sans-serif,system-ui,sans-serif", color: '#1f2a1c' }}>
@@ -350,7 +371,7 @@ function LiveMonitorApp() {
         </div>
 
         <div style={{ display: 'flex', gap: 6, padding: '10px 18px', borderBottom: '1px solid #d8d2c2', background: '#faf8f2' }}>
-          {[null, '29K', '22K', '11K'].map(d => (
+          {[null, ...distLabels].map(d => (
             <div key={d || 'all'} onClick={() => setDistFilter(d)} style={{ padding: '7px 14px', borderRadius: 8,
               background: distFilter === d ? '#fff' : 'transparent', boxShadow: distFilter === d ? '0 1px 3px rgba(31,42,28,0.08)' : 'none',
               fontFamily: M_MONO, fontSize: 11, fontWeight: distFilter === d ? 700 : 600, color: distFilter === d ? '#1f4d39' : '#5d6b59', cursor: 'pointer' }}>{d || 'ทุกระยะ'}</div>
@@ -367,7 +388,7 @@ function LiveMonitorApp() {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', minHeight: 560 }}>
               <div style={{ position: 'relative', borderRight: '1px solid #d8d2c2' }}>
                 <div style={{ position: 'absolute', top: 12, left: 16, zIndex: 400, display: 'flex', gap: 16, background: 'rgba(255,255,255,0.92)', padding: '6px 12px', borderRadius: 10, boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
-                  {[['29K', M_DIST['29K']], ['22K', M_DIST['22K']], ['11K', M_DIST['11K']], ['ช้า', M_WARN], ['ขาดการติดต่อ', M_ALERT]].map(([label, color]) => (
+                  {[...distLabels.map(l => [l, distColor[l]]), ['ช้า', M_WARN], ['ขาดการติดต่อ', M_ALERT]].map(([label, color]) => (
                     <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                       <span style={{ width: 8, height: 8, borderRadius: 99, background: color }}/>
                       <span style={{ fontFamily: M_MONO, fontSize: 10, color: '#5d6b59' }}>{label}</span>
@@ -443,12 +464,12 @@ function LiveMonitorApp() {
 
             <div style={{ padding: '16px 20px 20px', borderTop: '1px solid #d8d2c2' }}>
               <div style={{ fontFamily: M_MONO, fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#5d6b59', marginBottom: 8 }}>
-                Elevation profile · ภาพรวมเส้นทาง 29K · {displays.length} นักวิ่ง
+                Elevation profile · ภาพรวมเส้นทาง {overviewLabel} · {displays.length} นักวิ่ง
               </div>
               {overviewProfile && (
                 <svg viewBox={`0 0 ${overviewProfile.w} ${overviewProfile.h}`} style={{ width: '100%', height: 180, display: 'block' }}>
                   <path d={overviewProfile.d} fill="oklch(0.9 0.03 145 / 0.5)" stroke="#1f4d39" strokeWidth="1.4"/>
-                  {[[0, 'START'], [cpKmsRef.current.a1_out, 'A1'], [cpKmsRef.current.a2_in, 'A2↑'], [cpKmsRef.current.a2_out, 'A2↓'], [cpKmsRef.current.a1_in, 'A1'], [overviewProfile.totalKm, 'FINISH']].map(([km, label], i) => (
+                  {[[0, 'START'], ...checkpointsRef.current.map(cp => [parseFloat(cp.km) || 0, cp.label]), [overviewProfile.totalKm, 'FINISH']].map(([km, label], i) => (
                     <g key={i}>
                       <line x1={overviewProfile.x(km)} y1={8} x2={overviewProfile.x(km)} y2={overviewProfile.baseY} stroke="#2d6a4f" strokeWidth="1" strokeDasharray="2 3" opacity="0.5"/>
                       <text x={overviewProfile.x(km)} y={overviewProfile.h} textAnchor="middle" fontFamily={M_MONO} fontSize="9" fill="#5d6b59">{label}</text>
@@ -469,7 +490,7 @@ function LiveMonitorApp() {
           <div style={{ display: 'flex', flexDirection: 'column', minHeight: 560 }}>
             <div style={{ display: 'flex', gap: 8, padding: '16px 20px 12px', flexWrap: 'wrap', alignItems: 'center', borderBottom: '1px solid #d8d2c2' }}>
               <span style={{ fontFamily: M_MONO, fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 600, marginRight: 6 }}>นักวิ่งทั้งหมด · {counts.total}</span>
-              {[null, '29K', '22K', '11K'].map(d => (
+              {[null, ...distLabels].map(d => (
                 <button key={d || 'all'} onClick={() => setDistFilter(d)} style={{ padding: '6px 12px', borderRadius: 999, border: `1px solid ${distFilter === d ? M_BRAND : '#d8d2c2'}`, background: distFilter === d ? M_BRAND : '#fff', color: distFilter === d ? '#fff' : '#1f2a1c', fontFamily: M_MONO, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>{d || 'ทั้งหมด'}</button>
               ))}
               <span style={{ width: 1, height: 18, background: '#d8d2c2' }}/>
