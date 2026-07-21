@@ -53,11 +53,20 @@ function getEvents() {
   return window.eventStore ? window.eventStore.loadEvents() : [];
 }
 
-function useCourse() {
+// Loads the real course for a specific event+distance (from GPX uploaded in
+// Admin — see src/course-geo.js buildEventCoursePaths) when both are known,
+// falling back to the bundled demo course otherwise (e.g. spectator not yet
+// following anyone, or an event with no GPX uploaded).
+function useCourse(ev, distLabel) {
   const [course, setCourse] = uS(null);
   uE(() => {
-    fetch('assets/course-track.json').then(r => r.json()).then(setCourse).catch(() => {});
-  }, []);
+    setCourse(null);
+    if (ev && distLabel && window.courseGeo) {
+      window.courseGeo.courseJsonForDistance(ev, distLabel).then(setCourse).catch(() => {});
+    } else {
+      fetch('assets/course-track.json').then(r => r.json()).then(setCourse).catch(() => {});
+    }
+  }, [ev && ev.id, distLabel]);
   return course;
 }
 
@@ -985,9 +994,13 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
   const [scanned, setScanned] = uS(null);
   const [pickingFav, setPickingFav] = uS(false);
   const [favBibs, setFavBibs] = uS(() => loadFavorites());
-  const course = useCourse();
   const snap = uM(() => (window.buildSnapshot ? window.buildSnapshot('mid') : null), []);
   const currentEventId = isSpectator ? session.followEventId : (session.runner && session.runner.eventId);
+  const currentEvent = uM(() => (currentEventId ? getEvents().find(e => e.id === currentEventId) : null), [currentEventId]);
+  const currentDist = isSpectator
+    ? (currentEventId && window.runnerStore ? (window.runnerStore.listRunners(currentEventId).find(r => r.bib === session.followBib) || {}).distance : null)
+    : (session.runner && session.runner.dist);
+  const course = useCourse(currentEvent, currentDist);
 
   function toggleFavorite(bib) {
     setFavBibs(list => {

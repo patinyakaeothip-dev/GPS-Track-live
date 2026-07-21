@@ -101,7 +101,58 @@
     return best.km;
   }
 
+  const DEMO_CP_KMS = { a1_out: 5.6, a2_in: 11.6, a2_out: 19, a1_in: 23.5 };
+
+  // Builds real per-distance course paths for an event from whatever GPX it
+  // actually has (src/admin-app.jsx GpxCard uploads → ev.gpxFiles, parsed by
+  // src/gpx-parse.js into the same {points:[[lat,lon,ele,km]],...} shape as
+  // assets/course-track.json), falling back to the bundled demo course for
+  // any distance that has nothing uploaded — so events with no GPX yet keep
+  // working exactly like before instead of breaking.
+  //
+  // Preference order per distance: (1) that distance's own uploaded GPX,
+  // used as-is since it's already the real route; (2) derived by splicing
+  // the event's own uploaded 29K GPX using its cpKms, same technique as the
+  // demo course; (3) the bundled demo course.
+  async function buildEventCoursePaths(ev) {
+    const cpKms = (ev && ev.cpKms) || DEMO_CP_KMS;
+    const gpxFiles = (ev && ev.gpxFiles) || {};
+
+    let baseTrack;
+    if (gpxFiles['29K']) {
+      baseTrack = reindexKm(gpxFiles['29K'].track.points.map(p => ({ lat: p[0], lon: p[1], ele: p[2], km: p[3] })));
+    } else {
+      baseTrack = await loadTrack();
+    }
+    const derived = buildCoursePaths(baseTrack, cpKms);
+
+    const paths = {};
+    ['11K', '22K', '29K'].forEach(label => {
+      if (gpxFiles[label]) {
+        paths[label] = reindexKm(gpxFiles[label].track.points.map(p => ({ lat: p[0], lon: p[1], ele: p[2], km: p[3] })));
+      } else {
+        paths[label] = derived[label];
+      }
+    });
+    return { paths, cpKms };
+  }
+
+  // Same per-distance resolution as buildEventCoursePaths, but returns the
+  // flat {points:[[lat,lon,ele,km]], totalKm, minEle, maxEle} JSON shape the
+  // runner app's Route tab (mobile-app.jsx useCourse/ElevationSvg) expects.
+  async function courseJsonForDistance(ev, distLabel) {
+    const { paths } = await buildEventCoursePaths(ev);
+    const pts = paths[distLabel] || paths['29K'];
+    const eles = pts.map(p => p.ele);
+    return {
+      points: pts.map(p => [p.lat, p.lon, p.ele, p.km]),
+      totalKm: pts[pts.length - 1].km,
+      minEle: Math.min(...eles),
+      maxEle: Math.max(...eles),
+    };
+  }
+
   Object.assign(window, {
-    courseGeo: { loadTrack, buildCoursePaths, pointAtKm, gradientAtKm, coursePolylineLatLngs, nearestKmOnTrack, haversineKm },
+    courseGeo: { loadTrack, buildCoursePaths, pointAtKm, gradientAtKm, coursePolylineLatLngs, nearestKmOnTrack, haversineKm, buildEventCoursePaths, courseJsonForDistance },
   });
 })();
