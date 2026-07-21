@@ -827,25 +827,32 @@ function RouteTab({ course, runner, event }) {
       <div ref={mapRef} style={{ flex: 1, minHeight: 260, background: '#eee' }}/>
       <div style={{ padding: '14px 18px 90px', background: '#fff' }}>
         <Kicker>Elevation</Kicker>
-        {course && <ElevationSvg course={course} progressKm={runner.progressKm}/>}
+        {course && <ElevationSvg course={course} progressKm={runner.progressKm} checkpoints={(event && event.checkpoints) || []}/>}
       </div>
     </div>
   );
 }
-function ElevationSvg({ course, progressKm }) {
-  const w = 340, h = 90, pad = 6;
+function ElevationSvg({ course, progressKm, checkpoints }) {
+  const w = 340, h = 104, pad = 6, padBottom = 20;
   const pts = course.points;
   const minE = course.minEle, maxE = course.maxEle;
+  const x = km => pad + (km / course.totalKm) * (w - pad * 2);
   const path = pts.map((p, i) => {
-    const x = pad + (p[3] / course.totalKm) * (w - pad * 2);
-    const y = h - pad - ((p[2] - minE) / (maxE - minE || 1)) * (h - pad * 2);
-    return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
+    const y = (h - padBottom) - ((p[2] - minE) / (maxE - minE || 1)) * (h - padBottom - pad);
+    return `${i === 0 ? 'M' : 'L'}${x(p[3]).toFixed(1)},${y.toFixed(1)}`;
   }).join(' ');
-  const markX = pad + (Math.min(progressKm, course.totalKm) / course.totalKm) * (w - pad * 2);
+  const markX = x(Math.min(progressKm, course.totalKm));
+  const marks = [[0, 'START'], ...(checkpoints || []).map(cp => [parseFloat(cp.km) || 0, cp.label]), [course.totalKm, 'FINISH']];
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} style={{ width: '100%', height: 90, marginTop: 6 }}>
+    <svg viewBox={`0 0 ${w} ${h}`} style={{ width: '100%', height: 104, marginTop: 6 }}>
       <path d={path} fill="none" stroke={C.brand} strokeWidth="2"/>
-      <line x1={markX} y1="0" x2={markX} y2={h} stroke={C.orange} strokeWidth="1.5" strokeDasharray="3 3"/>
+      <line x1={markX} y1="0" x2={markX} y2={h - padBottom} stroke={C.orange} strokeWidth="1.5" strokeDasharray="3 3"/>
+      {marks.map(([km, label], i) => (
+        <g key={i}>
+          <line x1={x(km)} y1="0" x2={x(km)} y2={h - padBottom} stroke={C.brand} strokeWidth="1" strokeDasharray="2 3" opacity="0.35"/>
+          <text x={x(km)} y={h - 6} textAnchor="middle" fontFamily={C.mono} fontSize="8" fill={C.muted}>{label}</text>
+        </g>
+      ))}
     </svg>
   );
 }
