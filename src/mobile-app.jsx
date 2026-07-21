@@ -767,20 +767,43 @@ function Stat({ label, value, accent }) {
   return <div style={{ flex: 1 }}><Kicker>{label}</Kicker><div style={{ fontSize: 15, fontWeight: 700, color: accent || C.text, marginTop: 2 }}>{value}</div></div>;
 }
 
-function RouteTab({ course, runner }) {
+function RouteTab({ course, runner, event }) {
   const mapRef = uR(null);
   const mapObj = uR(null);
   uE(() => {
     if (!course || !window.L || !mapRef.current || mapObj.current) return;
+    const L = window.L;
     const pts = course.points.map(p => [p[0], p[1]]);
-    const map = window.L.map(mapRef.current, { zoomControl: false, attributionControl: false }).fitBounds(pts);
-    window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-    window.L.polyline(pts, { color: C.brand, weight: 4 }).addTo(map);
+    const map = L.map(mapRef.current, { zoomControl: false, attributionControl: false }).fitBounds(pts);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+    L.polyline(pts, { color: C.brand, weight: 4 }).addTo(map);
+
+    // Label start / each checkpoint / finish along the route at the km
+    // where they actually sit on this course, same source (ev.checkpoints)
+    // as the QR check-in flow — so the map always matches what's really
+    // set up for this event instead of a fixed A1/A2 layout.
+    function nearestPoint(km) {
+      let best = course.points[0], bestDiff = Infinity;
+      for (const p of course.points) {
+        const diff = Math.abs(p[3] - km);
+        if (diff < bestDiff) { bestDiff = diff; best = p; }
+      }
+      return best;
+    }
+    function addCpMarker(km, label, color) {
+      const p = nearestPoint(km);
+      L.marker([p[0], p[1]], { icon: L.divIcon({ className: '', iconSize: null, html:
+        `<div style="transform:translate(-50%,-100%);background:${color};color:#fff;font:700 10px 'JetBrains Mono',monospace;padding:3px 7px;border-radius:999px;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.35);white-space:nowrap;">${label}</div>` }) }).addTo(map);
+    }
+    addCpMarker(0, 'START', C.brand);
+    ((event && event.checkpoints) || []).forEach(cp => addCpMarker(parseFloat(cp.km) || 0, cp.label, C.orange));
+    addCpMarker(course.totalKm, 'FINISH', '#9b1c10');
+
     const idx = Math.min(course.points.length - 1, Math.round((runner.progressKm / course.totalKm) * course.points.length));
     const pos = course.points[idx];
-    window.L.circleMarker([pos[0], pos[1]], { radius: 8, color: '#fff', weight: 2, fillColor: C.orange, fillOpacity: 1 }).addTo(map);
+    L.circleMarker([pos[0], pos[1]], { radius: 8, color: '#fff', weight: 2, fillColor: C.orange, fillOpacity: 1 }).addTo(map);
     mapObj.current = map;
-  }, [course]);
+  }, [course, event]);
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
       <div ref={mapRef} style={{ flex: 1, minHeight: 260, background: '#eee' }}/>
@@ -1125,7 +1148,7 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
       {!isSpectator && tab === 'track' && <TrackTab runner={{ ...session.runner,
         pace: session.runner.checkins.length ? "6'42\"/กม." : '—',
         gradient: session.runner.checkins.length ? '+4.2%' : '—' }} event={currentEvent} onScan={doScan} onSos={onSos} onDnf={onDnf}/>}
-      {tab === 'route' && <RouteTab course={course} runner={isSpectator ? (followedRunner ? { dist: followedRunner.distance, progressKm: followedRunner.progressKm } : { dist: '22K', progressKm: 0 }) : session.runner}/>}
+      {tab === 'route' && <RouteTab course={course} event={currentEvent} runner={isSpectator ? (followedRunner ? { dist: followedRunner.distance, progressKm: followedRunner.progressKm } : { dist: '22K', progressKm: 0 }) : session.runner}/>}
       {tab === 'ranking' && <RankingTab snap={snap} eventId={!isSpectator ? session.runner.eventId : null} event={currentEvent}/>}
       {tab === 'friends' && <FriendsTab eventId={currentEventId} followedBib={isSpectator ? session.followBib : (session.runner && session.runner.bib)} favBibs={favBibs} onAddFavorite={() => setPickingFav(true)} onRemoveFavorite={toggleFavorite}/>}
       <div style={{ flexShrink: 0, display: 'flex', borderTop: `1px solid #d8d2c2`, background: '#fff', padding: '6px 4px 20px' }}>
