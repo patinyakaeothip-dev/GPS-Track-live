@@ -22,6 +22,14 @@ function formatThaiDateTime(localDT) {
   return timePart ? `${dateStr} ${timePart} น.` : dateStr;
 }
 
+function addMinutesToTime(hhmm, minutes) {
+  const mins = parseInt(minutes, 10);
+  if (!hhmm || !/^\d{2}:\d{2}$/.test(hhmm) || Number.isNaN(mins)) return '';
+  const [h, m] = hhmm.split(':').map(Number);
+  const wrapped = ((h * 60 + m + mins) % 1440 + 1440) % 1440;
+  return `${String(Math.floor(wrapped / 60)).padStart(2, '0')}:${String(wrapped % 60).padStart(2, '0')}`;
+}
+
 // Status ("upcoming"/"live"/"past") and whether registration is closed are
 // both derived from real dates/times instead of being picked manually — see
 // src/event-status.js for the shared computeStatus/computeClosed logic used
@@ -145,13 +153,32 @@ function blankEvent() {
 
 function EventForm({ initial, onCancel, onSave, onSaveInPlace, onDelete }) {
   const isNew = !initial;
-  const [ev, setEv] = aS(() => initial ? { ...blankEvent(), ...initial, distances: (initial.distances || blankEvent().distances).map((d, i) => ({ capacity: '', registered: '0', ...d, id: d.id || `d${i}-${d.label}`, cpTimes: d.cpTimes || blankCpTimes('', '') })) } : blankEvent());
+  const [ev, setEv] = aS(() => initial ? { ...blankEvent(), ...initial, distances: (initial.distances || blankEvent().distances).map((d, i) => {
+    const cpTimes = d.cpTimes || blankCpTimes('', '');
+    // Self-heal any distance whose stored finish cutoff disagrees with
+    // start + cut-off minutes (e.g. legacy data entered before the two
+    // were linked, or edited independently).
+    return { capacity: '', registered: '0', ...d, id: d.id || `d${i}-${d.label}`, cpTimes: { ...cpTimes, finish: addMinutesToTime(cpTimes.start, d.cutoff) || cpTimes.finish } };
+  }) } : blankEvent());
   const [gpx11k, setGpx11k] = aS(null);
   const [toast, setToast] = aS(null);
 
   function set(patch) { setEv(e => ({ ...e, ...patch })); }
   function updateDist(id, patch) { setEv(e => ({ ...e, distances: e.distances.map(d => d.id === id ? { ...d, ...patch } : d) })); }
   function updateDistCp(id, key, val) { setEv(e => ({ ...e, distances: e.distances.map(d => d.id === id ? { ...d, cpTimes: { ...d.cpTimes, [key]: val } } : d) })); }
+  // Finish cutoff (clock time) is derived from start + cut-off (minutes) —
+  // the two used to be independent fields that could silently disagree
+  // (e.g. start 07:00 + 150-min cutoff showing a leftover 12:00 finish).
+  // Recompute it whenever either input changes instead of leaving it
+  // editable on its own.
+  function updateDistStart(id, val) {
+    setEv(e => ({ ...e, distances: e.distances.map(d => d.id === id
+      ? { ...d, cpTimes: { ...d.cpTimes, start: val, finish: addMinutesToTime(val, d.cutoff) } } : d) }));
+  }
+  function updateDistCutoff(id, val) {
+    setEv(e => ({ ...e, distances: e.distances.map(d => d.id === id
+      ? { ...d, cutoff: val, cpTimes: { ...d.cpTimes, finish: addMinutesToTime(d.cpTimes.start, val) } } : d) }));
+  }
   function removeDist(id) { setEv(e => ({ ...e, distances: e.distances.filter(d => d.id !== id) })); }
   function addDist() {
     const colors = ['#3a86c4', '#e07a3e', '#1f4d39', '#7c4a03', '#9b1c10'];
@@ -292,7 +319,7 @@ function EventForm({ initial, onCancel, onSave, onSaveInPlace, onDelete }) {
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
                 <div style={{ width: 84 }}>
                   <div style={{ fontFamily: A_MONO, fontSize: 9, color: '#5d6b59', marginBottom: 3 }}>สตาร์ท</div>
-                  <input type="time" value={de.cpTimes.start} onChange={e => updateDistCp(de.id, 'start', e.target.value)}
+                  <input type="time" value={de.cpTimes.start} onChange={e => updateDistStart(de.id, e.target.value)}
                     style={{ width: '100%', padding: '7px 8px', background: '#fff', border: '1px solid #e5e0d3', borderRadius: 8, fontFamily: A_MONO, fontSize: 12, textAlign: 'center' }}/>
                 </div>
                 {cpEditor.map(cpe => (
@@ -304,8 +331,7 @@ function EventForm({ initial, onCancel, onSave, onSaveInPlace, onDelete }) {
                 ))}
                 <div style={{ width: 84 }}>
                   <div style={{ fontFamily: A_MONO, fontSize: 9, color: '#5d6b59', marginBottom: 3 }}>Finish cutoff</div>
-                  <input type="time" value={de.cpTimes.finish} onChange={e => updateDistCp(de.id, 'finish', e.target.value)}
-                    style={{ width: '100%', padding: '7px 8px', background: '#fff', border: '1px solid #e5e0d3', borderRadius: 8, fontFamily: A_MONO, fontSize: 12, textAlign: 'center' }}/>
+                  <div title="คำนวณจากสตาร์ท + cut-off (นาที) ในการ์ดโควตาด้านล่าง — ไม่ต้องกรอกเอง" style={{ width: '100%', padding: '7px 8px', background: '#f0ede3', border: '1px solid #e5e0d3', borderRadius: 8, fontFamily: A_MONO, fontSize: 12, textAlign: 'center', color: de.cpTimes.finish ? '#1f2a1c' : '#a8a396' }}>{de.cpTimes.finish || '--:--'}</div>
                 </div>
               </div>
             </div>
@@ -328,7 +354,7 @@ function EventForm({ initial, onCancel, onSave, onSaveInPlace, onDelete }) {
                   style={{ width: 70, padding: '8px 9px', background: '#fff', border: '1px solid #e5e0d3', borderRadius: 8, boxShadow: '0 1px 3px rgba(31,42,28,0.08)', fontFamily: A_MONO, fontSize: 13, fontWeight: 700, color: de.color, textAlign: 'center' }}/>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <span style={{ fontFamily: A_MONO, fontSize: 10, color: '#5d6b59' }}>cut-off</span>
-                  <input value={de.cutoff} onChange={e => updateDist(de.id, { cutoff: e.target.value })}
+                  <input value={de.cutoff} onChange={e => updateDistCutoff(de.id, e.target.value)}
                     style={{ width: 52, padding: '8px 7px', background: '#fff', border: '1px solid #e5e0d3', borderRadius: 8, boxShadow: '0 1px 3px rgba(31,42,28,0.08)', fontFamily: A_MONO, fontSize: 12, textAlign: 'center' }}/>
                   <span style={{ fontFamily: A_MONO, fontSize: 10, color: '#5d6b59' }}>นาที</span>
                 </div>
