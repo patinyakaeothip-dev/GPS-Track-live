@@ -123,57 +123,25 @@ function QrCard({ eventId, cpKey, label }) {
 // Real registered runners for this event — separate from the "สมัครแล้ว"
 // quota counter (which just tracks a number) and from the fully-simulated
 // demo names shown on the Live Monitor map. See src/runner-store.js.
-function RunnerRoster({ eventId, distances }) {
-  const [runners, setRunners] = aS(() => (window.runnerStore ? window.runnerStore.listRunners(eventId) : []));
-  const [q, setQ] = aS('');
-  const [distFilter, setDistFilter] = aS('all');
+// Full search/edit/cancel/DNF/CSV-export management now lives on its own
+// page (admin/runners.html, src/admin-runners.jsx) instead of being crammed
+// into this already-busy event form — this is just a quick summary + link.
+function RunnerRosterLink({ eventId }) {
+  const [count, setCount] = aS(() => (window.runnerStore ? window.runnerStore.listRunners(eventId).length : 0));
   aE(() => {
-    const refresh = () => setRunners(window.runnerStore ? window.runnerStore.listRunners(eventId) : []);
+    const refresh = () => setCount(window.runnerStore ? window.runnerStore.listRunners(eventId).length : 0);
     refresh();
     window.addEventListener('trt:runners-updated', refresh);
     return () => window.removeEventListener('trt:runners-updated', refresh);
   }, [eventId]);
 
-  const query = q.trim().toLowerCase();
-  const filtered = runners
-    .filter(r => distFilter === 'all' || r.distance === distFilter)
-    .filter(r => !query || r.nickname.toLowerCase().includes(query) || r.bib.includes(query))
-    .sort((a, b) => a.bib.localeCompare(b.bib, undefined, { numeric: true }));
-
   return (
-    <div style={{ marginBottom: 20 }}>
-      <div style={{ fontFamily: A_MONO, fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#5d6b59', marginBottom: 4 }}>นักวิ่งที่ลงทะเบียนจริง ({runners.length})</div>
-      <div style={{ fontFamily: A_MONO, fontSize: 10, color: '#5d6b59', marginBottom: 8, lineHeight: 1.5 }}>
-        รายชื่อจริงจากนักวิ่งที่กดลงทะเบียนในแอป (คนละส่วนกับตัวเลข "สมัครแล้ว" ด้านล่าง ซึ่งเป็นแค่ตัวนับ) — บิบเลขนี้คือบิบจริงของนักวิ่งคนนั้น
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '12px 14px', background: '#fafaf8', border: '1px solid #ece7da', borderRadius: 10, marginBottom: 20 }}>
+      <div>
+        <div style={{ fontSize: 13, fontWeight: 700 }}>นักวิ่งที่ลงทะเบียนจริง</div>
+        <div style={{ fontFamily: A_MONO, fontSize: 10.5, color: '#5d6b59', marginTop: 2 }}>{count} คน · แก้ไข/ยกเลิก/mark DNF/export CSV ได้ที่หน้าจัดการนักวิ่ง</div>
       </div>
-      {runners.length > 0 && (
-        <div style={{ display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
-          <input value={q} onChange={e => setQ(e.target.value)} placeholder="🔍 ค้นหาชื่อ หรือ บิบ"
-            style={{ flex: 1, minWidth: 160, padding: '7px 10px', background: '#fff', border: '1px solid #e5e0d3', borderRadius: 8, fontSize: 12.5 }}/>
-          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-            {['all', ...(distances || []).map(d => d.label)].map(v => (
-              <button key={v} onClick={() => setDistFilter(v)} style={{ padding: '6px 10px', borderRadius: 999, border: `1px solid ${distFilter === v ? A_BRAND : '#e5e0d3'}`,
-                background: distFilter === v ? A_BRAND : '#fff', color: distFilter === v ? '#fff' : '#5d6b59', fontFamily: A_MONO, fontSize: 10.5, fontWeight: 700, cursor: 'pointer' }}>
-                {v === 'all' ? 'ทั้งหมด' : v}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-      {runners.length === 0 && <div style={{ padding: 16, background: '#fafaf8', border: '1px solid #ece7da', borderRadius: 10, textAlign: 'center', fontSize: 12, color: '#5d6b59' }}>ยังไม่มีใครลงทะเบียนงานนี้</div>}
-      {runners.length > 0 && filtered.length === 0 && <div style={{ padding: 16, background: '#fafaf8', border: '1px solid #ece7da', borderRadius: 10, textAlign: 'center', fontSize: 12, color: '#5d6b59' }}>ไม่พบนักวิ่งที่ค้นหา</div>}
-      {filtered.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 320, overflowY: 'auto', paddingRight: 4 }}>
-          {filtered.map(r => (
-            <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: '#fafaf8', border: '1px solid #ece7da', borderRadius: 10 }}>
-              <span style={{ fontFamily: A_MONO, fontSize: 12, fontWeight: 700, width: 46 }}>#{r.bib}</span>
-              <span style={{ fontSize: 12.5, fontWeight: 600, flex: 1, minWidth: 0 }}>{r.nickname}</span>
-              <span style={{ fontFamily: A_MONO, fontSize: 10.5, color: '#5d6b59' }}>{r.distance}</span>
-              <span style={{ fontFamily: A_MONO, fontSize: 10.5, color: '#5d6b59', width: 90, textAlign: 'right' }}>{(r.checkins || []).length} เช็คอิน</span>
-            </div>
-          ))}
-        </div>
-      )}
+      <a href={`runners.html?event=${encodeURIComponent(eventId)}`} target="_blank" rel="noopener" style={{ padding: '9px 14px', background: A_BRAND, color: '#fff', borderRadius: 8, fontFamily: A_MONO, fontSize: 11, fontWeight: 700, textDecoration: 'none', whiteSpace: 'nowrap' }}>👥 จัดการนักวิ่ง →</a>
     </div>
   );
 }
@@ -209,6 +177,7 @@ function EventList({ events, onEdit, onDelete, onCreate }) {
                 </div>
               </div>
               <span style={{ fontFamily: A_MONO, fontSize: 10.5, fontWeight: 700, color: meta.color, whiteSpace: 'nowrap' }}>{meta.label}</span>
+              <a href={`runners.html?event=${encodeURIComponent(ev.id)}`} target="_blank" rel="noopener" style={{ padding: '8px 12px', background: 'transparent', border: '1px solid #bdb6a4', color: '#1f2a1c', borderRadius: 8, fontFamily: A_MONO, fontSize: 11, fontWeight: 700, textDecoration: 'none', whiteSpace: 'nowrap' }}>👥 นักวิ่ง</a>
               <button onClick={() => onEdit(ev)} style={{ padding: '8px 12px', background: 'transparent', border: `1px solid ${A_BRAND}`, color: A_BRAND, borderRadius: 8, fontFamily: A_MONO, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>แก้ไข</button>
               <button onClick={() => onDelete(ev.id)} style={{ padding: '8px 10px', background: 'transparent', border: '1px solid #f0c9c4', color: '#b91c1c', borderRadius: 8, fontFamily: A_MONO, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>ลบ</button>
             </div>
@@ -437,7 +406,7 @@ function EventForm({ initial, onCancel, onSave, onSaveInPlace, onDelete }) {
           ))}
         </div>
 
-        {!isNew && <RunnerRoster eventId={ev.id} distances={ev.distances}/>}
+        {!isNew && <RunnerRosterLink eventId={ev.id}/>}
 
         <div style={{ fontFamily: A_MONO, fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#5d6b59', marginBottom: 4 }}>ระยะที่เปิดรับสมัคร + cut-off + โควตา (แก้ไขระยะได้เอง)</div>
         <div style={{ fontFamily: A_MONO, fontSize: 10, color: '#5d6b59', marginBottom: 8, lineHeight: 1.5 }}>

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#2d6a4f"/>
   <meta name="robots" content="noindex,nofollow"/>
-  <title>Trail Run Tracker · Admin</title>
+  <title>Trail Run Tracker · จัดการนักวิ่ง</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&family=Noto+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -13,7 +13,6 @@
   <script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js"></script>
-  <script src="https://unpkg.com/qrcode-generator@1.4.4/qrcode.js"></script>
 
   <style>
     html, body, #root { margin:0; padding:0; min-height:100%; }
@@ -33,8 +32,8 @@
     <a href="../">📱 App</a>
     <a href="../monitor.html">🖥 Live Monitor</a>
     <a href="../results/">📊 Results</a>
-    <a class="active" href="./">🔧 Admin</a>
-    <a href="./runners.html">👥 จัดการนักวิ่ง</a>
+    <a href="./">🔧 Admin</a>
+    <a class="active" href="./runners.html">👥 จัดการนักวิ่ง</a>
   </nav>
   <div id="root"></div>
 
@@ -43,10 +42,9 @@
   <script src="../src/event-status.js"></script>
   <script src="../src/event-store.js"></script>
   <script src="../src/runner-store.js"></script>
-  <script src="../src/gpx-parse.js"></script>
-  <script type="text/babel" src="../src/admin-app.jsx"></script>
+  <script type="text/babel" src="../src/admin-runners.jsx"></script>
   <script type="text/babel">
-    ReactDOM.createRoot(document.getElementById('root')).render(<AdminGate/>);
+    ReactDOM.createRoot(document.getElementById('root')).render(<RunnerManagerGate/>);
   </script>
 </body>
 </html>

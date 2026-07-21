@@ -99,7 +99,7 @@
         const totalMs = (startMs != null && finishMs != null) ? finishMs - startMs : null;
         const distKm = parseInt(r.distance, 10) || 0;
         const paceMinPerKm = (totalMs && distKm) ? (totalMs / 60000) / distKm : null;
-        const status = finish ? 'finished' : cks.length ? 'active' : 'not_started';
+        const status = r.dnf ? 'dnf' : finish ? 'finished' : cks.length ? 'active' : 'not_started';
         return {
           id: r.id,
           name: r.nickname,
