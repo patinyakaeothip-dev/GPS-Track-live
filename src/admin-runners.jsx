@@ -177,6 +177,17 @@ function RunnerManagerApp({ adminEmail, onLogout }) {
               <input value={r.nickname} onChange={e => editRunner(r, { nickname: e.target.value })} style={inputStyle}/>
               <input value={r.phone} onChange={e => editRunner(r, { phone: e.target.value })} style={{ ...inputStyle, fontFamily: R_MONO }}/>
               <select value={r.distance} onChange={e => editRunner(r, { distance: e.target.value })} style={{ ...inputStyle, fontFamily: R_MONO }}>
+                {/* If this runner's stored distance doesn't match any of the
+                    event's current distances (e.g. registered before Admin
+                    renamed/removed that distance label), a plain <select>
+                    would silently fall back to showing the first option as
+                    "selected" without actually changing the stored value —
+                    hiding the mismatch instead of surfacing it. Add the
+                    stale value as its own flagged option so it's visible and
+                    RD can deliberately correct it. */}
+                {selectedEvent && !(selectedEvent.distances || []).some(d => d.label === r.distance) && (
+                  <option value={r.distance}>⚠ {r.distance} (ไม่ตรงกับระยะปัจจุบันของงาน)</option>
+                )}
                 {(selectedEvent && selectedEvent.distances || []).map(d => <option key={d.id} value={d.label}>{d.label}</option>)}
               </select>
               <select value={r.gender || ''} onChange={e => editRunner(r, { gender: e.target.value })} style={{ ...inputStyle, fontFamily: R_MONO }}>
