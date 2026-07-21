@@ -44,6 +44,7 @@
       uid: data.uid || '',
       checkins: [],
       progressKm: 0,
+      dnf: false,
       registeredAt: Date.now(),
     };
     const list = loadRunners().slice();
@@ -54,6 +55,9 @@
     return runner;
   }
 
+  // Generic patch — used both by the app syncing checkin/progress after a
+  // QR scan, and by Admin's runner-management page editing name/phone/
+  // distance/bib or marking DNF.
   function updateRunnerProgress(id, patch) {
     const list = loadRunners().slice();
     const idx = list.findIndex(r => r.id === id);
@@ -61,6 +65,17 @@
     list[idx] = { ...list[idx], ...patch };
     saveRunners(list);
     if (window.fb) window.fb.setDocById('runners', id, list[idx]).catch(err => console.warn('[runner-store] Firestore write failed', err));
+    notifyUpdated();
+    return list[idx];
+  }
+
+  // Cancels a registration outright (mis-registration, duplicate, etc).
+  // Caller is responsible for also calling eventStore.decrementRegistration
+  // so the quota count stays in sync.
+  function deleteRunner(id) {
+    const list = loadRunners().filter(r => r.id !== id);
+    saveRunners(list);
+    if (window.fb) window.fb.deleteDocById('runners', id).catch(err => console.warn('[runner-store] Firestore delete failed', err));
     notifyUpdated();
   }
 
@@ -77,5 +92,5 @@
   if (window.fb) startFirestoreSync();
   else window.addEventListener('trt:firebase-ready', startFirestoreSync, { once: true });
 
-  Object.assign(window, { runnerStore: { listRunners, registerRunner, updateRunnerProgress } });
+  Object.assign(window, { runnerStore: { listRunners, registerRunner, updateRunnerProgress, deleteRunner } });
 })();

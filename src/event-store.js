@@ -75,6 +75,16 @@
       d.label === distLabel ? { ...d, registered: String((parseInt(d.registered, 10) || 0) + 1) } : d);
     upsertEvent({ ...ev, distances });
   }
+  // Mirror of incrementRegistration — called when Admin cancels/deletes a
+  // runner's registration (see admin/runners.html) so the quota count stays
+  // in sync instead of only ever going up.
+  function decrementRegistration(eventId, distLabel) {
+    const ev = loadEvents().find(e => e.id === eventId);
+    if (!ev) return;
+    const distances = (ev.distances || []).map(d =>
+      d.label === distLabel ? { ...d, registered: String(Math.max(0, (parseInt(d.registered, 10) || 0) - 1)) } : d);
+    upsertEvent({ ...ev, distances });
+  }
 
   // Best-effort: once Firebase is configured, pull the real remote list on
   // load and keep listening for changes made from other devices, so every
@@ -102,5 +112,5 @@
   if (window.fb) startFirestoreSync();
   else window.addEventListener('trt:firebase-ready', startFirestoreSync, { once: true });
 
-  Object.assign(window, { eventStore: { loadEvents, saveEvents, upsertEvent, deleteEvent, newEventId, incrementRegistration } });
+  Object.assign(window, { eventStore: { loadEvents, saveEvents, upsertEvent, deleteEvent, newEventId, incrementRegistration, decrementRegistration } });
 })();
