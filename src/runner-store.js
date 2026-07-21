@@ -20,13 +20,13 @@
     return loadRunners().filter(r => r.eventId === eventId);
   }
 
-  // Bibs are assigned per distance using that distance's numeric prefix
-  // (100s for the 1st distance in the event, 200s for the 2nd, ...) so they
-  // stay stable and readable instead of a random id, similar to how the
-  // demo NAMES bibs are laid out (101, 102, ... 201, 202, ...).
+  // Bibs are 4-digit, assigned per distance using that distance's numeric
+  // prefix (1000s for the 1st distance in the event, 2000s for the 2nd,
+  // ...) so they stay stable and readable instead of a random id — e.g.
+  // 1001, 1002, ... 2001, 2002, ...
   function nextBib(eventId, ev, distLabel) {
     const distIdx = Math.max(0, (ev.distances || []).findIndex(d => d.label === distLabel));
-    const base = (distIdx + 1) * 100;
+    const base = (distIdx + 1) * 1000;
     const taken = listRunners(eventId).filter(r => r.distance === distLabel).length;
     return String(base + taken + 1);
   }
