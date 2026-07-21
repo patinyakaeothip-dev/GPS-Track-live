@@ -545,7 +545,8 @@ function PreRaceScreen({ event, dist, onScan, onBack }) {
     return () => clearInterval(id);
   }, [startAt]);
   const remaining = Math.max(0, secs || 0);
-  const h = String(Math.floor(remaining / 3600)).padStart(2, '0');
+  const d = Math.floor(remaining / 86400);
+  const h = String(Math.floor((remaining % 86400) / 3600)).padStart(2, '0');
   const m = String(Math.floor((remaining % 3600) / 60)).padStart(2, '0');
   const s = String(remaining % 60).padStart(2, '0');
   return (
@@ -559,7 +560,7 @@ function PreRaceScreen({ event, dist, onScan, onBack }) {
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
         {secs === null
           ? <div style={{ fontFamily: C.mono, fontSize: 15, color: 'rgba(255,255,255,0.7)' }}>ยังไม่มีเวลาปล่อยตัวของระยะนี้ — สแกน QR ได้เลยเมื่อกรรมการปล่อยตัว</div>
-          : <div style={{ fontFamily: C.mono, fontSize: 44, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{h}:{m}:{s}</div>}
+          : <div style={{ fontFamily: C.mono, fontSize: d > 0 ? 32 : 44, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{d > 0 ? `${d} วัน ${h}:${m}:${s}` : `${h}:${m}:${s}`}</div>}
         {startClock && <div style={{ fontFamily: C.mono, fontSize: 11, color: 'rgba(255,255,255,0.6)' }}>ปล่อยตัวเวลา {startClock} น.</div>}
       </div>
       <div style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 12, padding: '12px 14px', marginBottom: 16, fontSize: 12, lineHeight: 1.6, color: 'rgba(255,255,255,0.85)' }}>
