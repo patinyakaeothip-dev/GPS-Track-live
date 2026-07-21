@@ -187,15 +187,25 @@ function LoginScreen({ onLogin }) {
     return () => { cancelled = true; window.removeEventListener('trt:firebase-ready', checkRedirect); };
   }, []);
 
-  // signInWithGoogle() always redirects (navigates the page away to Google
-  // and back) — it doesn't resolve with a usable result here, the page
-  // unloads before that could happen. The actual login completes in the
-  // getGoogleRedirectResult() effect above once the redirect brings the
-  // page back.
-  function googleLogin() {
+  // signInWithGoogle() tries popup first (resolves right here with a
+  // usable result) and only falls back to a redirect (navigates the page
+  // away — nothing to do with a return value here, the page unloads before
+  // that could happen) for environments that block popups. The redirect
+  // case is handled by the getGoogleRedirectResult() effect above once the
+  // page comes back.
+  async function googleLogin() {
     if (!window.fb) { onLogin({ name: 'มิ้น', provider: 'google' }); return; }
     setBusy(true); setError(null);
-    window.fb.signInWithGoogle().catch(() => { setError('เข้าสู่ระบบไม่สำเร็จ ลองอีกครั้ง'); setBusy(false); });
+    try {
+      const result = await window.fb.signInWithGoogle();
+      if (result && result.user) {
+        const u = result.user;
+        onLogin({ uid: u.uid, name: u.displayName || 'นักวิ่ง', email: u.email, photo: u.photoURL, provider: 'google' });
+      }
+    } catch (e) {
+      setError('เข้าสู่ระบบไม่สำเร็จ ลองอีกครั้ง');
+      setBusy(false);
+    }
   }
 
   return (

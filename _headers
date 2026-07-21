@@ -12,6 +12,7 @@
 
 /*
   Cache-Control: no-cache
+  Cross-Origin-Opener-Policy: same-origin-allow-popups
 
 /assets/*
   Cache-Control: public, max-age=3600
