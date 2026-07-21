@@ -375,6 +375,7 @@ function RegisterScreen({ onDone, onBack }) {
   const [nick, setNick] = uS('');
   const [phone, setPhone] = uS('');
   const [dist, setDist] = uS('22K');
+  const [gender, setGender] = uS('m');
   const [emg, setEmg] = uS('');
   const canSubmit = nick.trim() && phone.trim();
   return (
@@ -399,12 +400,20 @@ function RegisterScreen({ onDone, onBack }) {
             ))}
           </div>
         </Field>
+        <Field label="เพศ (ใช้จัดอันดับแยกชาย/หญิง)">
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+            {[['m', 'ชาย'], ['f', 'หญิง']].map(([v, l]) => (
+              <div key={v} onClick={() => setGender(v)} style={{ padding: 12, textAlign: 'center', borderRadius: 10, fontWeight: 600, cursor: 'pointer',
+                background: gender === v ? C.brand : '#fff', color: gender === v ? '#fff' : C.text, border: `1px solid ${gender === v ? C.brand : '#bdb6a4'}` }}>{l}</div>
+            ))}
+          </div>
+        </Field>
         <Field label="เบอร์ติดต่อฉุกเฉิน"><input value={emg} onChange={e => setEmg(e.target.value)} placeholder="คนใกล้ตัว · กรณีจำเป็น" style={{ ...fieldStyle(), fontFamily: C.mono }}/></Field>
         <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginTop: 4 }}>
           <input type="checkbox" defaultChecked style={{ marginTop: 2 }}/>
           <span style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.5 }}>ยินยอมให้ระบบเก็บพิกัด GPS ระหว่างแข่งเพื่อความปลอดภัย · ลบทิ้งหลังจบงาน 7 วัน</span>
         </label>
-        <Btn style={{ marginTop: 8 }} disabled={!canSubmit} onClick={() => onDone({ nick, phone, dist, emg })}>ยืนยันลงทะเบียน →</Btn>
+        <Btn style={{ marginTop: 8 }} disabled={!canSubmit} onClick={() => onDone({ nick, phone, dist, gender, emg })}>ยืนยันลงทะเบียน →</Btn>
       </div>
     </div>
   );
@@ -711,15 +720,38 @@ function ElevationSvg({ course, progressKm }) {
   );
 }
 
-function RankingTab({ snap }) {
+function RankingTab({ snap, eventId }) {
   const [dist, setDist] = uS('22K');
   const [gender, setGender] = uS('all');
+  // When we know the real event (registered runner), rank the real roster
+  // (src/runner-store.js) the same way Results does — finished first by
+  // elapsed progress, then by checkpoint progress — instead of the fully
+  // simulated demo snapshot, which is what Results already switched to.
+  // Spectators following the demo course (no real eventId yet) still see
+  // the simulated ranking as a fallback.
+  const [realRunners, setRealRunners] = uS(() => (eventId && window.runnerStore ? window.runnerStore.listRunners(eventId) : null));
+  uE(() => {
+    if (!eventId || !window.runnerStore) { setRealRunners(null); return; }
+    const refresh = () => setRealRunners(window.runnerStore.listRunners(eventId));
+    refresh();
+    window.addEventListener('trt:runners-updated', refresh);
+    return () => window.removeEventListener('trt:runners-updated', refresh);
+  }, [eventId]);
+
   const rows = uM(() => {
+    if (realRunners) {
+      return realRunners
+        .filter(r => r.distance === dist && !r.dnf && (gender === 'all' || r.gender === gender))
+        .map(r => ({ bib: r.bib, name: r.nickname, progressKm: r.progressKm, finished: (r.checkins || []).some(c => c.cp === 'finish') }))
+        .sort((a, b) => (a.finished === b.finished ? 0 : a.finished ? -1 : 1) || b.progressKm - a.progressKm)
+        .slice(0, 30);
+    }
     if (!snap) return [];
-    return snap.runners.filter(r => r.distance === dist)
+    return snap.runners.filter(r => r.distance === dist && (gender === 'all' || r.gender === gender))
       .sort((a, b) => (a.status === 'finished' ? 0 : 1) - (b.status === 'finished' ? 0 : 1) || b.progressKm - a.progressKm)
-      .slice(0, 30);
-  }, [snap, dist]);
+      .slice(0, 30)
+      .map(r => ({ bib: r.bib, name: `${r.firstName} ${r.lastName}`, progressKm: r.progressKm }));
+  }, [realRunners, snap, dist, gender]);
   return (
     <div style={{ flex: 1, overflow: 'auto', padding: '14px 18px 90px' }}>
       <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
@@ -740,7 +772,7 @@ function RankingTab({ snap }) {
           <span style={{ width: 26, fontFamily: C.mono, fontWeight: 700, color: i < 3 ? C.brandDk : C.muted, fontSize: 13 }}>
             {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`}
           </span>
-          <span style={{ flex: 1, fontSize: 13.5 }}>{r.firstName} {r.lastName}</span>
+          <span style={{ flex: 1, fontSize: 13.5 }}>{r.name}</span>
           <span style={{ fontFamily: C.mono, fontSize: 11, color: C.muted }}>{r.progressKm.toFixed(1)}K</span>
         </div>
       ))}
@@ -980,7 +1012,7 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
       </div>
       {!isSpectator && tab === 'track' && <TrackTab runner={{ ...session.runner, pace: "6'42\"/กม.", gradient: '+4.2%' }} onScan={doScan} onSos={onSos} onDnf={onDnf}/>}
       {tab === 'route' && <RouteTab course={course} runner={isSpectator ? (followedRunner ? { dist: followedRunner.distance, progressKm: followedRunner.progressKm } : { dist: '22K', progressKm: 0 }) : session.runner}/>}
-      {tab === 'ranking' && <RankingTab snap={snap}/>}
+      {tab === 'ranking' && <RankingTab snap={snap} eventId={!isSpectator ? session.runner.eventId : null}/>}
       {tab === 'friends' && <FriendsTab snap={snap} followedBib={isSpectator ? session.followBib : (snap && snap.runners[10] && snap.runners[10].bib)} favBibs={favBibs} onAddFavorite={() => setPickingFav(true)} onRemoveFavorite={toggleFavorite}/>}
       <div style={{ flexShrink: 0, display: 'flex', borderTop: `1px solid #d8d2c2`, background: '#fff', padding: '6px 4px 20px' }}>
         {TABS.map(([k, icon, label]) => (
@@ -1033,7 +1065,7 @@ function MobileApp() {
       // src/runner-store.js.
       if (window.runnerStore) {
         const rosterEntry = window.runnerStore.registerRunner(pendingEvent, {
-          distance: data.dist, nickname: data.nick, phone: data.phone, emgPhone: data.emg, uid: session.user.uid,
+          distance: data.dist, nickname: data.nick, phone: data.phone, gender: data.gender, emgPhone: data.emg, uid: session.user.uid,
         });
         runner = { ...runner, bib: rosterEntry.bib, rosterId: rosterEntry.id };
       }
