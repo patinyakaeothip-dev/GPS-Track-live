@@ -409,10 +409,11 @@ function FavoritePickerScreen({ eventId, onBack, favBibs, onToggle }) {
 }
 
 // ── Screen: Registration ─────────────────────────────────────────────────
-function RegisterScreen({ onDone, onBack }) {
+function RegisterScreen({ event, onDone, onBack }) {
+  const distLabels = (event && event.distances && event.distances.length) ? event.distances.map(d => d.label) : ['11K', '22K', '29K'];
   const [nick, setNick] = uS('');
   const [phone, setPhone] = uS('');
-  const [dist, setDist] = uS('22K');
+  const [dist, setDist] = uS(distLabels[0]);
   const [gender, setGender] = uS('m');
   const [emg, setEmg] = uS('');
   const canSubmit = nick.trim() && phone.trim();
@@ -421,9 +422,9 @@ function RegisterScreen({ onDone, onBack }) {
       <div style={{ padding: '40px 24px 18px', background: C.brand, color: '#fff' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
           <BackBtn onClick={onBack} dark inline/>
-          <Logo/><span style={{ fontSize: 11.5, fontWeight: 700 }}>Rayong Trail Running</span>
+          <Logo/><span style={{ fontSize: 11.5, fontWeight: 700 }}>{(event && event.name) || 'Rayong Trail Running'}</span>
         </div>
-        <Kicker><span style={{ color: 'rgba(255,255,255,0.65)' }}>RAYONG TRAIL · ลงทะเบียน</span></Kicker>
+        <Kicker><span style={{ color: 'rgba(255,255,255,0.65)' }}>ลงทะเบียน</span></Kicker>
         <div style={{ fontSize: 22, fontWeight: 800, marginTop: 8 }}>สวัสดี! กรอกข้อมูลก่อนเริ่มวิ่ง</div>
         <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.8)', marginTop: 6 }}>ใช้ครั้งเดียว · ระบบผูกเบอร์โทรกับอุปกรณ์นี้ให้อัตโนมัติ</div>
       </div>
@@ -431,8 +432,8 @@ function RegisterScreen({ onDone, onBack }) {
         <Field label="ชื่อเล่น"><input value={nick} onChange={e => setNick(e.target.value)} placeholder="เช่น ธีระ" style={fieldStyle()}/></Field>
         <Field label="เบอร์โทร"><input value={phone} onChange={e => setPhone(e.target.value)} placeholder="08X-XXX-XXXX" style={{ ...fieldStyle(), fontFamily: C.mono }}/></Field>
         <Field label="ระยะที่ลงวิ่ง">
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
-            {['11K', '22K', '29K'].map(d => (
+          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${distLabels.length}, 1fr)`, gap: 6 }}>
+            {distLabels.map(d => (
               <div key={d} onClick={() => setDist(d)} style={{ padding: 12, textAlign: 'center', borderRadius: 10, fontWeight: 600, cursor: 'pointer',
                 background: dist === d ? C.brand : '#fff', color: dist === d ? '#fff' : C.text, border: `1px solid ${dist === d ? C.brand : '#bdb6a4'}` }}>{d}</div>
             ))}
@@ -773,8 +774,9 @@ function ElevationSvg({ course, progressKm }) {
   );
 }
 
-function RankingTab({ snap, eventId }) {
-  const [dist, setDist] = uS('22K');
+function RankingTab({ snap, eventId, event }) {
+  const distLabels = (event && event.distances && event.distances.length) ? event.distances.map(d => d.label) : ['11K', '22K', '29K'];
+  const [dist, setDist] = uS(distLabels[0]);
   const [gender, setGender] = uS('all');
   // When we know the real event (registered runner), rank the real roster
   // (src/runner-store.js) the same way Results does — finished first by
@@ -808,7 +810,7 @@ function RankingTab({ snap, eventId }) {
   return (
     <div style={{ flex: 1, overflow: 'auto', padding: '14px 18px 90px' }}>
       <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
-        {['11K', '22K', '29K'].map(d => (
+        {distLabels.map(d => (
           <div key={d} onClick={() => setDist(d)} style={{ padding: '6px 12px', borderRadius: 999, fontSize: 12, fontWeight: 700, cursor: 'pointer',
             background: dist === d ? C.brand : '#fff', color: dist === d ? '#fff' : C.text, border: `1px solid ${dist === d ? C.brand : C.border}` }}>{d}</div>
         ))}
@@ -1087,7 +1089,7 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
       </div>
       {!isSpectator && tab === 'track' && <TrackTab runner={{ ...session.runner, pace: "6'42\"/กม.", gradient: '+4.2%' }} event={currentEvent} onScan={doScan} onSos={onSos} onDnf={onDnf}/>}
       {tab === 'route' && <RouteTab course={course} runner={isSpectator ? (followedRunner ? { dist: followedRunner.distance, progressKm: followedRunner.progressKm } : { dist: '22K', progressKm: 0 }) : session.runner}/>}
-      {tab === 'ranking' && <RankingTab snap={snap} eventId={!isSpectator ? session.runner.eventId : null}/>}
+      {tab === 'ranking' && <RankingTab snap={snap} eventId={!isSpectator ? session.runner.eventId : null} event={currentEvent}/>}
       {tab === 'friends' && <FriendsTab eventId={currentEventId} followedBib={isSpectator ? session.followBib : (session.runner && session.runner.bib)} favBibs={favBibs} onAddFavorite={() => setPickingFav(true)} onRemoveFavorite={toggleFavorite}/>}
       <div style={{ flexShrink: 0, display: 'flex', borderTop: `1px solid #d8d2c2`, background: '#fff', padding: '6px 4px 20px' }}>
         {TABS.map(([k, icon, label]) => (
@@ -1228,7 +1230,7 @@ function MobileApp() {
     persist({ ...session, spectator: true, followBib: bib, followEventId: pendingEvent && pendingEvent.id, runner: null });
     setScreen('app');
   }}/>;
-  else if (screen === 'register') body = <RegisterScreen onDone={afterRegister} onBack={() => setScreen('events')}/>;
+  else if (screen === 'register') body = <RegisterScreen event={pendingEvent} onDone={afterRegister} onBack={() => setScreen('events')}/>;
   else if (screen === 'register-success') body = <RegisterSuccessScreen dist={session.runner.dist} onContinue={() => setScreen('gps')}/>;
   else if (screen === 'gps') body = <GpsPermissionScreen onAllow={() => setScreen('prerace')} onBack={() => setScreen('register')}/>;
   else if (screen === 'prerace') body = <PreRaceScreen dist={session.runner.dist} onBack={() => setScreen('events')} onScan={() => setScreen('qr-start')}/>;
