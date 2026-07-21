@@ -1082,6 +1082,29 @@ function MobileApp() {
 
   function persist(next) { setSession(next); saveSession(next); }
 
+  // Recovers "you already registered" across devices/browsers instead of
+  // only trusting this device's local session — looks up the roster by the
+  // logged-in Google account's uid (see runnerStore.listRunnersByUid) and
+  // restores it into the session if this device doesn't already know about
+  // a registration. Re-checks when runner data syncs in from Firestore
+  // (e.g. right after login, before the initial fetch has landed).
+  uE(() => {
+    function tryRecover() {
+      if (!session || !session.user || !session.user.uid || session.runner || session.spectator) return;
+      if (!window.runnerStore) return;
+      const mine = window.runnerStore.listRunnersByUid(session.user.uid);
+      if (!mine.length) return;
+      const rec = mine.slice().sort((a, b) => (b.registeredAt || 0) - (a.registeredAt || 0))[0];
+      persist({
+        ...session,
+        runner: { dist: rec.distance, name: rec.nickname, checkins: rec.checkins || [], progressKm: rec.progressKm || 0, eventId: rec.eventId, bib: rec.bib, rosterId: rec.id },
+      });
+    }
+    tryRecover();
+    window.addEventListener('trt:runners-updated', tryRecover);
+    return () => window.removeEventListener('trt:runners-updated', tryRecover);
+  }, [session && session.user && session.user.uid]);
+
   function handleLogin(authedUser) {
     const profile = loadProfile();
     persist({ user: { ...authedUser, ...(profile || {}) }, runner: null });
