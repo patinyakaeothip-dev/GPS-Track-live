@@ -832,11 +832,73 @@ function RouteTab({ course, runner, event }) {
     </div>
   );
 }
+// Pan by dragging (one finger/mouse), zoom by pinch (two fingers) or the
+// mouse wheel — all done by hand with Pointer Events since this is a plain
+// inline SVG, not a charting library. `zoom` is how many times narrower the
+// visible km window is than the full course; `panKm` is that window's left
+// edge, always clamped so it can't scroll past either end.
 function ElevationSvg({ course, progressKm, checkpoints }) {
   const w = 340, h = 104, pad = 6, padBottom = 20;
   const pts = course.points;
   const minE = course.minEle, maxE = course.maxEle;
-  const x = km => pad + (km / course.totalKm) * (w - pad * 2);
+  const totalKm = course.totalKm;
+
+  const [zoom, setZoom] = uS(1);
+  const [panKm, setPanKm] = uS(0);
+  const pointers = uR(new Map());
+  const pinchStart = uR(null); // { dist, zoom }
+  const dragStart = uR(null); // { x, panKm }
+
+  const visibleKm = totalKm / zoom;
+  const clampPan = p => Math.max(0, Math.min(Math.max(0, totalKm - visibleKm), p));
+  const x = km => pad + ((km - panKm) / visibleKm) * (w - pad * 2);
+
+  function zoomAround(nextZoomRaw, anchorKm) {
+    const nextZoom = Math.min(10, Math.max(1, nextZoomRaw));
+    const nextVisible = totalKm / nextZoom;
+    const frac = visibleKm ? (anchorKm - panKm) / visibleKm : 0;
+    setZoom(nextZoom);
+    setPanKm(clampPan(anchorKm - frac * nextVisible));
+  }
+
+  function onWheel(e) {
+    e.preventDefault();
+    const rect = e.currentTarget.getBoundingClientRect();
+    const svgX = ((e.clientX - rect.left) / rect.width) * w;
+    const anchorKm = panKm + Math.max(0, (svgX - pad) / (w - pad * 2)) * visibleKm;
+    zoomAround(zoom * (e.deltaY < 0 ? 1.25 : 1 / 1.25), anchorKm);
+  }
+  function onPointerDown(e) {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    pointers.current.set(e.pointerId, e.clientX);
+    if (pointers.current.size === 1) dragStart.current = { x: e.clientX, panKm };
+    else if (pointers.current.size === 2) {
+      const [a, b] = [...pointers.current.values()];
+      pinchStart.current = { dist: Math.abs(a - b) || 1, zoom };
+      dragStart.current = null;
+    }
+  }
+  function onPointerMove(e) {
+    if (!pointers.current.has(e.pointerId)) return;
+    pointers.current.set(e.pointerId, e.clientX);
+    if (pointers.current.size === 2 && pinchStart.current) {
+      const [a, b] = [...pointers.current.values()];
+      const dist = Math.abs(a - b) || 1;
+      zoomAround(pinchStart.current.zoom * (dist / pinchStart.current.dist), panKm + visibleKm / 2);
+    } else if (pointers.current.size === 1 && dragStart.current) {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const dxKm = ((e.clientX - dragStart.current.x) / rect.width) * w / (w - pad * 2) * visibleKm;
+      setPanKm(clampPan(dragStart.current.panKm - dxKm));
+    }
+  }
+  function onPointerUp(e) {
+    pointers.current.delete(e.pointerId);
+    pinchStart.current = null;
+    dragStart.current = pointers.current.size === 1
+      ? { x: [...pointers.current.values()][0], panKm } : null;
+  }
+  function resetZoom() { setZoom(1); setPanKm(0); }
+
   const path = pts.map((p, i) => {
     const y = (h - padBottom) - ((p[2] - minE) / (maxE - minE || 1)) * (h - padBottom - pad);
     return `${i === 0 ? 'M' : 'L'}${x(p[3]).toFixed(1)},${y.toFixed(1)}`;
@@ -844,16 +906,22 @@ function ElevationSvg({ course, progressKm, checkpoints }) {
   const markX = x(Math.min(progressKm, course.totalKm));
   const marks = [[0, 'START'], ...(checkpoints || []).map(cp => [parseFloat(cp.km) || 0, cp.label]), [course.totalKm, 'FINISH']];
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} style={{ width: '100%', height: 104, marginTop: 6 }}>
-      <path d={path} fill="none" stroke={C.brand} strokeWidth="2"/>
-      <line x1={markX} y1="0" x2={markX} y2={h - padBottom} stroke={C.orange} strokeWidth="1.5" strokeDasharray="3 3"/>
-      {marks.map(([km, label], i) => (
-        <g key={i}>
-          <line x1={x(km)} y1="0" x2={x(km)} y2={h - padBottom} stroke={C.brand} strokeWidth="1" strokeDasharray="2 3" opacity="0.35"/>
-          <text x={x(km)} y={h - 6} textAnchor="middle" fontFamily={C.mono} fontSize="8" fill={C.muted}>{label}</text>
-        </g>
-      ))}
-    </svg>
+    <div style={{ position: 'relative' }}>
+      <svg viewBox={`0 0 ${w} ${h}`} style={{ width: '100%', height: 104, marginTop: 6, touchAction: 'none', cursor: zoom > 1 ? 'grab' : 'default' }}
+        onWheel={onWheel} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}>
+        <path d={path} fill="none" stroke={C.brand} strokeWidth="2"/>
+        <line x1={markX} y1="0" x2={markX} y2={h - padBottom} stroke={C.orange} strokeWidth="1.5" strokeDasharray="3 3"/>
+        {marks.map(([km, label], i) => (
+          <g key={i}>
+            <line x1={x(km)} y1="0" x2={x(km)} y2={h - padBottom} stroke={C.brand} strokeWidth="1" strokeDasharray="2 3" opacity="0.35"/>
+            <text x={x(km)} y={h - 6} textAnchor="middle" fontFamily={C.mono} fontSize="8" fill={C.muted}>{label}</text>
+          </g>
+        ))}
+      </svg>
+      {zoom > 1.02 && (
+        <div onClick={resetZoom} style={{ position: 'absolute', top: 2, right: 2, padding: '3px 8px', background: '#fff', border: `1px solid ${C.border}`, borderRadius: 999, fontFamily: C.mono, fontSize: 9.5, color: C.muted, cursor: 'pointer', boxShadow: '0 1px 3px rgba(31,42,28,0.1)' }}>↺ รีเซ็ตซูม</div>
+      )}
+    </div>
   );
 }
 
