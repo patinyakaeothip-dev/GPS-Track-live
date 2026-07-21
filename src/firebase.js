@@ -9,7 +9,7 @@
 
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
 import {
-  getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged,
+  getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signOut, onAuthStateChanged,
 } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
 import {
   getFirestore, collection, doc, getDocs, setDoc, deleteDoc, onSnapshot,
@@ -26,10 +26,21 @@ if (!configured) {
   const auth = getAuth(app);
   const db = getFirestore(app);
   const googleProvider = new GoogleAuthProvider();
+  // signInWithPopup opens about:blank in a separate window context — most
+  // mobile browsers (and every in-app webview: Line, Facebook, etc.) either
+  // block that outright or leave it stuck on a blank page after login, as
+  // reported on iOS Safari. Redirect navigates the current tab instead,
+  // which works everywhere; keep popup on desktop since it's the smoother
+  // experience there (no full page reload).
+  const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
 
   window.fb = {
     app, auth, db,
-    signInWithGoogle: () => signInWithPopup(auth, googleProvider),
+    signInWithGoogle: () => isMobile ? signInWithRedirect(auth, googleProvider) : signInWithPopup(auth, googleProvider),
+    // Only relevant on the redirect path — call on page load to pick up the
+    // result of a Google sign-in that just navigated back. Resolves to null
+    // when there's no pending redirect sign-in.
+    getGoogleRedirectResult: () => getRedirectResult(auth),
     signOutUser: () => signOut(auth),
     onAuthChange: (cb) => onAuthStateChanged(auth, cb),
     // Collection helpers used by src/event-store.js and friends.
