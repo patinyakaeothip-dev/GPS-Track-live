@@ -1149,11 +1149,11 @@ function initialScreenFor(session, savedScreen) {
   if (!session) return 'splash';
   if (session.spectator) return savedScreen === 'events' ? 'events' : 'app';
   if (session.runner) {
+    if (savedScreen === 'events') return 'events';
     const started = (session.runner.checkins || []).some(c => c.cp === 'start');
-    if (!started) return 'prerace';
-    // Once actually racing, resume whichever resumable screen (events or
-    // app) they last had open instead of always jumping to Track.
-    return savedScreen === 'events' ? 'events' : 'app';
+    // Not started and not sitting on the event picker — always the pre-race
+    // countdown, never straight into Track.
+    return started ? 'app' : 'prerace';
   }
   return 'events';
 }
