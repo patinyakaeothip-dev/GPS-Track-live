@@ -278,16 +278,23 @@ function EventPickerScreen({ user, session, onOpenApp, onFollow, onProfile }) {
 }
 
 // ── Screen: Follow the race · pick a registered runner to follow ─────────
-function FollowPickerScreen({ onBack, onPick }) {
+function FollowPickerScreen({ eventId, onBack, onPick }) {
   const [q, setQ] = uS('');
-  const snap = uM(() => (window.buildSnapshot ? window.buildSnapshot('mid') : null), []);
-  const runners = uM(() => {
-    if (!snap) return [];
+  const [runners, setRunners] = uS(() => (eventId && window.runnerStore ? window.runnerStore.listRunners(eventId) : []));
+  uE(() => {
+    if (!eventId || !window.runnerStore) return;
+    const refresh = () => setRunners(window.runnerStore.listRunners(eventId));
+    refresh();
+    window.addEventListener('trt:runners-updated', refresh);
+    return () => window.removeEventListener('trt:runners-updated', refresh);
+  }, [eventId]);
+  const filtered = uM(() => {
     const query = q.trim().toLowerCase();
-    return snap.runners
-      .filter(r => !query || r.bib.includes(query) || `${r.firstName} ${r.lastName}`.toLowerCase().includes(query))
+    return runners
+      .filter(r => !query || r.bib.includes(query) || r.nickname.toLowerCase().includes(query))
+      .sort((a, b) => a.bib.localeCompare(b.bib, undefined, { numeric: true }))
       .slice(0, 40);
-  }, [snap, q]);
+  }, [runners, q]);
   return (
     <div style={{ height: '100%', background: C.bg, fontFamily: C.font, display: 'flex', flexDirection: 'column' }}>
       <div style={{ padding: '40px 20px 14px' }}>
@@ -305,13 +312,12 @@ function FollowPickerScreen({ onBack, onPick }) {
         </div>
       </div>
       <div style={{ flex: 1, overflow: 'auto', padding: '0 18px 18px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {!snap && <div style={{ textAlign: 'center', color: C.muted, fontSize: 13, padding: 30 }}>กำลังโหลดรายชื่อนักวิ่ง…</div>}
-        {snap && runners.length === 0 && <div style={{ textAlign: 'center', color: C.muted, fontSize: 13, padding: 30 }}>ไม่พบนักวิ่งที่ค้นหา</div>}
-        {runners.map(r => (
+        {filtered.length === 0 && <div style={{ textAlign: 'center', color: C.muted, fontSize: 13, padding: 30 }}>{runners.length === 0 ? 'ยังไม่มีใครลงทะเบียนงานนี้' : 'ไม่พบนักวิ่งที่ค้นหา'}</div>}
+        {filtered.map(r => (
           <div key={r.bib} onClick={() => onPick(r.bib)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 12, background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, boxShadow: '0 1px 3px rgba(31,42,28,0.08)', cursor: 'pointer' }}>
-            <div style={{ width: 36, height: 36, borderRadius: 999, background: C.orange, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 600, flexShrink: 0 }}>{r.firstName[0]}</div>
+            <div style={{ width: 36, height: 36, borderRadius: 999, background: C.orange, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 600, flexShrink: 0 }}>{r.nickname[0]}</div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 14, fontWeight: 600 }}>{r.firstName} {r.lastName}</div>
+              <div style={{ fontSize: 14, fontWeight: 600 }}>{r.nickname}</div>
               <div style={{ fontFamily: C.mono, fontSize: 10.5, color: C.muted }}>bib {r.bib} · {r.distance}</div>
             </div>
             <span style={{ fontSize: 16, color: C.mute2 }}>›</span>
@@ -323,16 +329,23 @@ function FollowPickerScreen({ onBack, onPick }) {
 }
 
 // ── Screen: pick registered runners to favourite (❤) for the Friends tab ──
-function FavoritePickerScreen({ onBack, favBibs, onToggle }) {
+function FavoritePickerScreen({ eventId, onBack, favBibs, onToggle }) {
   const [q, setQ] = uS('');
-  const snap = uM(() => (window.buildSnapshot ? window.buildSnapshot('mid') : null), []);
-  const runners = uM(() => {
-    if (!snap) return [];
+  const [runners, setRunners] = uS(() => (eventId && window.runnerStore ? window.runnerStore.listRunners(eventId) : []));
+  uE(() => {
+    if (!eventId || !window.runnerStore) return;
+    const refresh = () => setRunners(window.runnerStore.listRunners(eventId));
+    refresh();
+    window.addEventListener('trt:runners-updated', refresh);
+    return () => window.removeEventListener('trt:runners-updated', refresh);
+  }, [eventId]);
+  const filtered = uM(() => {
     const query = q.trim().toLowerCase();
-    return snap.runners
-      .filter(r => !query || r.bib.includes(query) || `${r.firstName} ${r.lastName}`.toLowerCase().includes(query))
+    return runners
+      .filter(r => !query || r.bib.includes(query) || r.nickname.toLowerCase().includes(query))
+      .sort((a, b) => a.bib.localeCompare(b.bib, undefined, { numeric: true }))
       .slice(0, 40);
-  }, [snap, q]);
+  }, [runners, q]);
   return (
     <div style={{ height: '100%', background: C.bg, fontFamily: C.font, display: 'flex', flexDirection: 'column' }}>
       <div style={{ padding: '40px 20px 14px' }}>
@@ -350,15 +363,14 @@ function FavoritePickerScreen({ onBack, favBibs, onToggle }) {
         </div>
       </div>
       <div style={{ flex: 1, overflow: 'auto', padding: '0 18px 18px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {!snap && <div style={{ textAlign: 'center', color: C.muted, fontSize: 13, padding: 30 }}>กำลังโหลดรายชื่อนักวิ่ง…</div>}
-        {snap && runners.length === 0 && <div style={{ textAlign: 'center', color: C.muted, fontSize: 13, padding: 30 }}>ไม่พบนักวิ่งที่ค้นหา</div>}
-        {runners.map(r => {
+        {filtered.length === 0 && <div style={{ textAlign: 'center', color: C.muted, fontSize: 13, padding: 30 }}>{runners.length === 0 ? 'ยังไม่มีใครลงทะเบียนงานนี้' : 'ไม่พบนักวิ่งที่ค้นหา'}</div>}
+        {filtered.map(r => {
           const fav = favBibs.includes(r.bib);
           return (
             <div key={r.bib} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 12, background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, boxShadow: '0 1px 3px rgba(31,42,28,0.08)' }}>
-              <div style={{ width: 36, height: 36, borderRadius: 999, background: C.orange, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 600, flexShrink: 0 }}>{r.firstName[0]}</div>
+              <div style={{ width: 36, height: 36, borderRadius: 999, background: C.orange, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 600, flexShrink: 0 }}>{r.nickname[0]}</div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 14, fontWeight: 600 }}>{r.firstName} {r.lastName}</div>
+                <div style={{ fontSize: 14, fontWeight: 600 }}>{r.nickname}</div>
                 <div style={{ fontFamily: C.mono, fontSize: 10.5, color: C.muted }}>bib {r.bib} · {r.distance}</div>
               </div>
               <span onClick={() => onToggle(r.bib)} style={{ fontSize: 20, cursor: 'pointer', color: fav ? '#e0453e' : C.mute2, lineHeight: 1 }}>{fav ? '♥' : '♡'}</span>
@@ -780,22 +792,39 @@ function RankingTab({ snap, eventId }) {
   );
 }
 
-function FriendsTab({ snap, followedBib, favBibs, onAddFavorite, onRemoveFavorite }) {
-  const followed = snap && snap.runners.find(r => r.bib === followedBib);
-  const favs = uM(() => {
-    if (!snap) return [];
-    return favBibs.map(bib => snap.runners.find(r => r.bib === bib)).filter(Boolean);
-  }, [snap, favBibs]);
+// Status text for a real runner-store record (no live GPS position yet —
+// see AppShell's Track tab notes — so this reflects checkpoint progress,
+// same basis as Results/Ranking).
+function runnerStatusLabel(r) {
+  if (r.dnf) return 'DNF';
+  if ((r.checkins || []).some(c => c.cp === 'finish')) return 'เข้าเส้นชัยแล้ว';
+  if ((r.checkins || []).length) return 'กำลังวิ่งอยู่';
+  return 'ยังไม่เริ่ม';
+}
+
+function FriendsTab({ eventId, followedBib, favBibs, onAddFavorite, onRemoveFavorite }) {
+  const [runners, setRunners] = uS(() => (eventId && window.runnerStore ? window.runnerStore.listRunners(eventId) : []));
+  uE(() => {
+    if (!eventId || !window.runnerStore) return;
+    const refresh = () => setRunners(window.runnerStore.listRunners(eventId));
+    refresh();
+    window.addEventListener('trt:runners-updated', refresh);
+    return () => window.removeEventListener('trt:runners-updated', refresh);
+  }, [eventId]);
+
+  const followed = runners.find(r => r.bib === followedBib);
+  const favs = uM(() => favBibs.map(bib => runners.find(r => r.bib === bib)).filter(Boolean), [runners, favBibs]);
+
   return (
     <div style={{ flex: 1, overflow: 'auto', padding: '14px 18px 90px', display: 'flex', flexDirection: 'column', gap: 14 }}>
       {followed && (
         <div>
           <div style={{ fontFamily: C.mono, fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted, marginBottom: 6 }}>กำลังติดตามอยู่</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 10, background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, boxShadow: '0 1px 3px rgba(31,42,28,0.08)' }}>
-            <div style={{ width: 36, height: 36, borderRadius: 999, background: C.orange, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 600 }}>{followed.firstName[0]}</div>
+            <div style={{ width: 36, height: 36, borderRadius: 999, background: C.orange, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 600 }}>{followed.nickname[0]}</div>
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 14, fontWeight: 600 }}>{followed.firstName} {followed.lastName}</div>
-              <div style={{ fontFamily: C.mono, fontSize: 10.5, color: C.muted }}>{followed.distance} · {followed.progressKm.toFixed(1)}/{followed.course.distance}K · {followed.status}</div>
+              <div style={{ fontSize: 14, fontWeight: 600 }}>{followed.nickname}</div>
+              <div style={{ fontFamily: C.mono, fontSize: 10.5, color: C.muted }}>bib {followed.bib} · {followed.distance} · {runnerStatusLabel(followed)}</div>
             </div>
           </div>
         </div>
@@ -811,10 +840,10 @@ function FriendsTab({ snap, followedBib, favBibs, onAddFavorite, onRemoveFavorit
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {favs.map(r => (
               <div key={r.bib} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 10, background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, boxShadow: '0 1px 3px rgba(31,42,28,0.08)' }}>
-                <div style={{ width: 36, height: 36, borderRadius: 999, background: C.orange, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 600, flexShrink: 0 }}>{r.firstName[0]}</div>
+                <div style={{ width: 36, height: 36, borderRadius: 999, background: C.orange, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 600, flexShrink: 0 }}>{r.nickname[0]}</div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 14, fontWeight: 600 }}>{r.firstName} {r.lastName}</div>
-                  <div style={{ fontFamily: C.mono, fontSize: 10.5, color: C.muted }}>{r.distance} · {r.progressKm.toFixed(1)}/{r.course.distance}K · {r.status}</div>
+                  <div style={{ fontSize: 14, fontWeight: 600 }}>{r.nickname}</div>
+                  <div style={{ fontFamily: C.mono, fontSize: 10.5, color: C.muted }}>bib {r.bib} · {r.distance} · {runnerStatusLabel(r)}</div>
                 </div>
                 <span onClick={() => onRemoveFavorite(r.bib)} style={{ fontSize: 18, cursor: 'pointer', color: '#e0453e', lineHeight: 1 }}>♥</span>
               </div>
@@ -958,6 +987,7 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
   const [favBibs, setFavBibs] = uS(() => loadFavorites());
   const course = useCourse();
   const snap = uM(() => (window.buildSnapshot ? window.buildSnapshot('mid') : null), []);
+  const currentEventId = isSpectator ? session.followEventId : (session.runner && session.runner.eventId);
 
   function toggleFavorite(bib) {
     setFavBibs(list => {
@@ -994,7 +1024,7 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
   if (scanning) return <QrScanScreen label={nextCp === 'start' ? 'จุดสตาร์ท' : CP_LABEL[nextCp]}
     expectedCode={`TRT:${session.runner.eventId}:${nextCp}`} onBack={() => setScanning(false)} onScanned={scanComplete}/>;
   if (scanned) return <ScanSuccessScreen cp={scanned.cp} km={scanned.km} onDone={() => setScanned(null)}/>;
-  if (pickingFav) return <FavoritePickerScreen onBack={() => setPickingFav(false)} favBibs={favBibs} onToggle={toggleFavorite}/>;
+  if (pickingFav) return <FavoritePickerScreen eventId={currentEventId} onBack={() => setPickingFav(false)} favBibs={favBibs} onToggle={toggleFavorite}/>;
 
   const followedRunner = isSpectator && snap && snap.runners.find(r => r.bib === session.followBib);
 
@@ -1013,7 +1043,7 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
       {!isSpectator && tab === 'track' && <TrackTab runner={{ ...session.runner, pace: "6'42\"/กม.", gradient: '+4.2%' }} onScan={doScan} onSos={onSos} onDnf={onDnf}/>}
       {tab === 'route' && <RouteTab course={course} runner={isSpectator ? (followedRunner ? { dist: followedRunner.distance, progressKm: followedRunner.progressKm } : { dist: '22K', progressKm: 0 }) : session.runner}/>}
       {tab === 'ranking' && <RankingTab snap={snap} eventId={!isSpectator ? session.runner.eventId : null}/>}
-      {tab === 'friends' && <FriendsTab snap={snap} followedBib={isSpectator ? session.followBib : (snap && snap.runners[10] && snap.runners[10].bib)} favBibs={favBibs} onAddFavorite={() => setPickingFav(true)} onRemoveFavorite={toggleFavorite}/>}
+      {tab === 'friends' && <FriendsTab eventId={currentEventId} followedBib={isSpectator ? session.followBib : (session.runner && session.runner.bib)} favBibs={favBibs} onAddFavorite={() => setPickingFav(true)} onRemoveFavorite={toggleFavorite}/>}
       <div style={{ flexShrink: 0, display: 'flex', borderTop: `1px solid #d8d2c2`, background: '#fff', padding: '6px 4px 20px' }}>
         {TABS.map(([k, icon, label]) => (
           <div key={k} onClick={() => k === 'event' ? onHome() : setTab(k)} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, padding: '6px 0', color: tab === k ? C.brand : C.mute2, cursor: 'pointer' }}>
@@ -1103,10 +1133,10 @@ function MobileApp() {
   else if (screen === 'onboard') body = <ProfileScreen user={session.user} onboard onSave={finishOnboard}/>;
   else if (screen === 'events') body = <EventPickerScreen user={session.user} session={session}
     onOpenApp={openRunnerSpace}
-    onFollow={() => setScreen('follow-picker')}
+    onFollow={(ev) => { setPendingEvent(ev); setScreen('follow-picker'); }}
     onProfile={() => setModal('profile')}/>;
-  else if (screen === 'follow-picker') body = <FollowPickerScreen onBack={() => setScreen('events')} onPick={(bib) => {
-    persist({ ...session, spectator: true, followBib: bib, runner: null });
+  else if (screen === 'follow-picker') body = <FollowPickerScreen eventId={pendingEvent && pendingEvent.id} onBack={() => setScreen('events')} onPick={(bib) => {
+    persist({ ...session, spectator: true, followBib: bib, followEventId: pendingEvent && pendingEvent.id, runner: null });
     setScreen('app');
   }}/>;
   else if (screen === 'register') body = <RegisterScreen onDone={afterRegister} onBack={() => setScreen('events')}/>;
@@ -1127,7 +1157,11 @@ function MobileApp() {
         onSave={updateUser}
         onLogout={() => { if (window.fb) window.fb.signOutUser().catch(() => {}); clearSession(); setSession(null); setModal(null); setScreen('login'); }}/></Overlay>}
       {modal === 'sos' && <Overlay><SosScreen onCancel={() => setModal(null)} onSent={() => setModal(null)}/></Overlay>}
-      {modal === 'dnf' && <Overlay><DnfScreen onCancel={() => setModal(null)} onConfirm={() => { if (window.trtGpsTracker) window.trtGpsTracker.stop(); setModal(null); }}/></Overlay>}
+      {modal === 'dnf' && <Overlay><DnfScreen onCancel={() => setModal(null)} onConfirm={() => {
+        if (window.trtGpsTracker) window.trtGpsTracker.stop();
+        if (session.runner && session.runner.rosterId && window.runnerStore) window.runnerStore.updateRunnerProgress(session.runner.rosterId, { dnf: true });
+        setModal(null);
+      }}/></Overlay>}
     </div>
   );
 }
