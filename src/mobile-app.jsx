@@ -140,6 +140,23 @@ function LoginScreen({ onLogin }) {
   const [busy, setBusy] = uS(false);
   const [error, setError] = uS(null);
 
+  // On mobile, signInWithGoogle() navigates away (signInWithRedirect) and
+  // back instead of resolving a popup promise — pick up that result here
+  // once the page reloads, so login completes the same way as the desktop
+  // popup flow below.
+  uE(() => {
+    if (!window.fb || !window.fb.getGoogleRedirectResult) return;
+    setBusy(true);
+    window.fb.getGoogleRedirectResult().then(result => {
+      if (result && result.user) {
+        const u = result.user;
+        onLogin({ uid: u.uid, name: u.displayName || 'นักวิ่ง', email: u.email, photo: u.photoURL, provider: 'google' });
+      } else {
+        setBusy(false);
+      }
+    }).catch(() => { setError('เข้าสู่ระบบไม่สำเร็จ ลองอีกครั้ง'); setBusy(false); });
+  }, []);
+
   async function googleLogin() {
     if (!window.fb) { onLogin({ name: 'มิ้น', provider: 'google' }); return; }
     setBusy(true); setError(null);
