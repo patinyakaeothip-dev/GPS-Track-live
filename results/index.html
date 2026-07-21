@@ -47,6 +47,7 @@
   <script type="module" src="../src/firebase.js"></script>
   <script src="../src/event-status.js"></script>
   <script src="../src/event-store.js"></script>
+  <script src="../src/runner-store.js"></script>
 
   <script type="text/babel">
     const { useState, useEffect, useMemo } = React;
@@ -197,20 +198,24 @@
         return out;
       }, [items, distFilter, statusFilter, query]);
 
+      // Distance breakdown follows whatever distances the selected event
+      // actually has (ev.distances) instead of a fixed 29K/22K/11K list, so
+      // events with different distances still show correct filters/counts.
+      const distLabels = (selectedEvent && selectedEvent.distances && selectedEvent.distances.length)
+        ? selectedEvent.distances.map(d => d.label) : ['29K', '22K', '11K'];
       const counts = useMemo(() => {
-        const c = { total: items?.length || 0, finished: 0, active: 0, dnf: 0, not_started: 0,
-          d11: 0, d22: 0, d29: 0 };
+        const byDist = {};
+        distLabels.forEach(l => { byDist[l] = 0; });
+        const c = { total: items?.length || 0, finished: 0, active: 0, dnf: 0, not_started: 0, byDist };
         (items || []).forEach(it => {
           if (it.status === 'finished') c.finished++;
           else if (it.status === 'active') c.active++;
           else if (it.status === 'dnf') c.dnf++;
           else if (it.status === 'not_started') c.not_started++;
-          if (it.distance === '11K') c.d11++;
-          else if (it.distance === '22K') c.d22++;
-          else if (it.distance === '29K') c.d29++;
+          if (it.distance in byDist) byDist[it.distance]++;
         });
         return c;
-      }, [items]);
+      }, [items, distLabels.join(',')]);
 
       const ago = lastAt ? Math.floor((Date.now() - lastAt) / 1000) : null;
 
@@ -250,16 +255,11 @@
               </select>
             </div>
           )}
-          {events.length > 1 && (
-            <div style={{ marginTop: 6, fontFamily: MONO, fontSize: 10, color: MUTED, lineHeight: 1.5 }}>
-              ⚠ ผลการวิ่งด้านล่างดึงจาก backend ทดสอบชุดเดียว ยังไม่ได้แยกข้อมูลตามงานที่เลือก — ต้องต่อ backend จริงต่องานก่อนถึงจะกรองตามงานได้จริง
-            </div>
-          )}
 
           {/* KPI strip */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8,
             marginTop: 16 }}>
-            <Kpi label="นักวิ่งทั้งหมด" value={counts.total} sub={`${counts.d29} · ${counts.d22} · ${counts.d11}`}/>
+            <Kpi label="นักวิ่งทั้งหมด" value={counts.total} sub={distLabels.map(l => counts.byDist[l] || 0).join(' · ')}/>
             <Kpi label="เข้าเส้นชัย" value={counts.finished} accent={BRAND}/>
             <Kpi label="ยังวิ่ง" value={counts.active}/>
             <Kpi label="DNF / ถอน" value={counts.dnf} accent="#b91c1c"/>
@@ -282,7 +282,7 @@
           {/* Filters */}
           <div style={{ marginTop: 14, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <FilterGroup value={distFilter} onChange={setDistFilter} options={[
-              ['all','ทั้งหมด'],['29K','29K'],['22K','22K'],['11K','11K'],
+              ['all','ทั้งหมด'], ...distLabels.map(l => [l, l]),
             ]}/>
             <FilterGroup value={statusFilter} onChange={setStatusFilter} options={[
               ['all','ทั้งหมด'],['finished','เข้าเส้น'],['active','ยังวิ่ง'],['not_started','ยังไม่เริ่ม'],['dnf','DNF'],
