@@ -7,7 +7,6 @@
 const { useState: aS, useEffect: aE, useRef: aR } = React;
 
 const A_BRAND = '#2d6a4f', A_MONO = "'JetBrains Mono',ui-monospace,monospace";
-const CP_KMS = { a1_out: 5.6, a2_in: 11.6, a2_out: 19, a1_in: 23.5 };
 
 const THAI_MONTHS = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
 function formatThaiDate(iso) {
@@ -191,32 +190,64 @@ function EventList({ events, onEdit, onDelete, onCreate }) {
 }
 
 // ── Create/edit form ────────────────────────────────────────────────────
-function blankCpTimes(start, finish) {
-  return { start, a1_out: '', a2_in: '', a2_out: '', a1_in: '', finish };
+// Checkpoints used to be a fixed 4-slot shape (a1_out/a2_in/a2_out/a1_in)
+// hardcoded to match one specific course. Now every event carries its own
+// `checkpoints` list ([{id,label,km}]) that RD can add/remove/rename/set-km
+// freely, same pattern as distances — every distance passes through all of
+// them in order, keeping things simple instead of per-distance subsets.
+const DEFAULT_CHECKPOINTS = [
+  { id: 'cp1', label: 'CP1', km: 5.6 },
+  { id: 'cp2', label: 'CP2', km: 11.6 },
+];
+function blankCpTimes(start, finish, checkpoints) {
+  const cpTimes = { start };
+  (checkpoints || DEFAULT_CHECKPOINTS).forEach(cp => { cpTimes[cp.id] = ''; });
+  cpTimes.finish = finish;
+  return cpTimes;
+}
+// Legacy events were saved with the old fixed cpKms shape instead of a
+// checkpoints array — turn that into the new shape so old data still opens
+// and edits cleanly instead of losing its checkpoints.
+function migrateCheckpoints(ev) {
+  if (Array.isArray(ev.checkpoints)) return ev.checkpoints;
+  if (ev.cpKms) {
+    const legacyLabels = { a1_out: 'A1 ↗', a2_in: 'A2 ↑', a2_out: 'A2 ↓', a1_in: 'A1 ↙' };
+    return Object.keys(ev.cpKms).map(key => ({ id: key, label: legacyLabels[key] || key, km: ev.cpKms[key] }));
+  }
+  return DEFAULT_CHECKPOINTS.map(cp => ({ ...cp }));
 }
 function blankEvent() {
+  const checkpoints = DEFAULT_CHECKPOINTS.map(cp => ({ ...cp }));
   return {
     id: window.eventStore.newEventId(),
     name: '', date: '', raceDateISO: '', regClose: '', regCloseISO: '', status: 'upcoming', closed: false, hotline: '',
     gpxFiles: {},
-    cpKms: { a1_out: CP_KMS.a1_out, a2_in: CP_KMS.a2_in, a2_out: CP_KMS.a2_out, a1_in: CP_KMS.a1_in },
+    checkpoints,
     distances: [
-      { id: 'd1', label: '11K', cutoff: '150', open: true, color: '#3a86c4', capacity: '', registered: '0', cpTimes: blankCpTimes('06:10', '08:40') },
-      { id: 'd2', label: '22K', cutoff: '270', open: true, color: '#e07a3e', capacity: '', registered: '0', cpTimes: blankCpTimes('06:05', '10:35') },
-      { id: 'd3', label: '29K', cutoff: '360', open: true, color: '#1f4d39', capacity: '', registered: '0', cpTimes: blankCpTimes('06:00', '12:00') },
+      { id: 'd1', label: '11K', cutoff: '150', open: true, color: '#3a86c4', capacity: '', registered: '0', cpTimes: blankCpTimes('06:10', '08:40', checkpoints) },
+      { id: 'd2', label: '22K', cutoff: '270', open: true, color: '#e07a3e', capacity: '', registered: '0', cpTimes: blankCpTimes('06:05', '10:35', checkpoints) },
+      { id: 'd3', label: '29K', cutoff: '360', open: true, color: '#1f4d39', capacity: '', registered: '0', cpTimes: blankCpTimes('06:00', '12:00', checkpoints) },
     ],
   };
 }
 
 function EventForm({ initial, onCancel, onSave, onSaveInPlace, onDelete }) {
   const isNew = !initial;
-  const [ev, setEv] = aS(() => initial ? { ...blankEvent(), ...initial, distances: (initial.distances || blankEvent().distances).map((d, i) => {
-    const cpTimes = d.cpTimes || blankCpTimes('', '');
-    // Self-heal any distance whose stored finish cutoff disagrees with
-    // start + cut-off minutes (e.g. legacy data entered before the two
-    // were linked, or edited independently).
-    return { capacity: '', registered: '0', ...d, id: d.id || `d${i}-${d.label}`, cpTimes: { ...cpTimes, finish: addMinutesToTime(cpTimes.start, d.cutoff) || cpTimes.finish } };
-  }) } : blankEvent());
+  const [ev, setEv] = aS(() => {
+    if (!initial) return blankEvent();
+    const checkpoints = migrateCheckpoints(initial);
+    const distances = (initial.distances || blankEvent().distances).map((d, i) => {
+      const cpTimes = d.cpTimes || blankCpTimes('', '', checkpoints);
+      // Fill in any checkpoint added after this distance was last saved so
+      // every distance's cpTimes always has a key for every checkpoint.
+      checkpoints.forEach(cp => { if (!(cp.id in cpTimes)) cpTimes[cp.id] = ''; });
+      // Self-heal any distance whose stored finish cutoff disagrees with
+      // start + cut-off minutes (e.g. legacy data entered before the two
+      // were linked, or edited independently).
+      return { capacity: '', registered: '0', ...d, id: d.id || `d${i}-${d.label}`, cpTimes: { ...cpTimes, finish: addMinutesToTime(cpTimes.start, d.cutoff) || cpTimes.finish } };
+    });
+    return { ...blankEvent(), ...initial, checkpoints, distances };
+  });
   const [toast, setToast] = aS(null);
 
   function set(patch) { setEv(e => ({ ...e, ...patch })); }
@@ -238,7 +269,7 @@ function EventForm({ initial, onCancel, onSave, onSaveInPlace, onDelete }) {
   function removeDist(id) { setEv(e => ({ ...e, distances: e.distances.filter(d => d.id !== id) })); }
   function addDist() {
     const colors = ['#3a86c4', '#e07a3e', '#1f4d39', '#7c4a03', '#9b1c10'];
-    setEv(e => ({ ...e, distances: [...e.distances, { id: 'd' + Date.now(), label: 'ใหม่', cutoff: '180', open: true, color: colors[e.distances.length % colors.length], capacity: '', registered: '0', cpTimes: blankCpTimes('', '') }] }));
+    setEv(e => ({ ...e, distances: [...e.distances, { id: 'd' + Date.now(), label: 'ใหม่', cutoff: '180', open: true, color: colors[e.distances.length % colors.length], capacity: '', registered: '0', cpTimes: blankCpTimes('', '', e.checkpoints) }] }));
   }
   // Registration auto-closes the moment the quota fills, but only as a
   // one-time nudge — it never fights back against a manual reopen, so RD can
@@ -256,14 +287,26 @@ function EventForm({ initial, onCancel, onSave, onSaveInPlace, onDelete }) {
     }));
   }
 
-  const cpKms = ev.cpKms || CP_KMS;
-  function updateCpKm(key, val) { setEv(e => ({ ...e, cpKms: { ...(e.cpKms || CP_KMS), [key]: val } })); }
-  const cpEditor = [
-    { key: 'a1_out', label: 'A1 ↗', desc: 'เขามะเข้ม · ขาไป' },
-    { key: 'a2_in', label: 'A2 ↑', desc: 'Green Mountain · ขึ้นเขา' },
-    { key: 'a2_out', label: 'A2 ↓', desc: 'Green Mountain · ลงเขา (29K เท่านั้น)' },
-    { key: 'a1_in', label: 'A1 ↙', desc: 'เขามะเข้ม · ขากลับ' },
-  ];
+  const checkpoints = ev.checkpoints || DEFAULT_CHECKPOINTS;
+  function updateCheckpoint(id, patch) { setEv(e => ({ ...e, checkpoints: (e.checkpoints || DEFAULT_CHECKPOINTS).map(cp => cp.id === id ? { ...cp, ...patch } : cp) })); }
+  function addCheckpoint() {
+    const id = 'cp' + Date.now();
+    setEv(e => {
+      const list = e.checkpoints || DEFAULT_CHECKPOINTS;
+      return {
+        ...e,
+        checkpoints: [...list, { id, label: `CP${list.length + 1}`, km: '' }],
+        distances: e.distances.map(d => ({ ...d, cpTimes: { ...d.cpTimes, [id]: '' } })),
+      };
+    });
+  }
+  function removeCheckpoint(id) {
+    setEv(e => ({
+      ...e,
+      checkpoints: (e.checkpoints || DEFAULT_CHECKPOINTS).filter(cp => cp.id !== id),
+      distances: e.distances.map(d => { const cpTimes = { ...d.cpTimes }; delete cpTimes[id]; return { ...d, cpTimes }; }),
+    }));
+  }
 
   function save() {
     if (!ev.name.trim()) { setToast('⚠ กรอกชื่องานแข่งก่อน'); setTimeout(() => setToast(null), 2000); return; }
@@ -353,31 +396,35 @@ function EventForm({ initial, onCancel, onSave, onSaveInPlace, onDelete }) {
           แต่ละระยะมีเส้นทาง GPX แยกกัน (ไม่บังคับให้ใช้เส้นเดียวกัน) · รองรับ Suunto / Garmin / Strava export (.gpx)
         </div>
 
-        <div style={{ fontFamily: A_MONO, fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#5d6b59', marginBottom: 4 }}>จุดพัก / Water station (กม. บนเส้นทางที่อัปโหลด — แก้ไขได้เอง)</div>
+        <div style={{ fontFamily: A_MONO, fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#5d6b59', marginBottom: 4 }}>จุดพัก / Water station (เพิ่ม/ลบ/ตั้งชื่อ/กม. ได้เอง — ทุกระยะผ่านจุดพักตามลำดับนี้เหมือนกัน)</div>
         <div style={{ fontFamily: A_MONO, fontSize: 10, color: '#5d6b59', marginBottom: 8, lineHeight: 1.5 }}>
-          ใส่ กม. ของแต่ละจุดตามเส้นทางจริงที่อัปโหลดไว้ด้านบน (เช็คจากนาฬิกา/แอปบันทึกวิ่งที่ใช้เก็บ GPX) · ค่าเริ่มต้นเป็นตัวอย่างของงาน Rayong Trail
+          ใส่ กม. ของแต่ละจุดตามเส้นทางจริงที่อัปโหลดไว้ด้านบน (เช็คจากนาฬิกา/แอปบันทึกวิ่งที่ใช้เก็บ GPX) · ถ้าระยะไหนไม่ผ่านจุดใด เว้นเวลาช่องนั้นว่างไว้ในตารางด้านล่างได้
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 18 }}>
-          {cpEditor.map((cpe, i) => (
-            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', background: '#fafaf8', border: '1px solid #ece7da', borderRadius: 10 }}>
-              <span style={{ fontFamily: A_MONO, fontSize: 12, fontWeight: 600, width: 70 }}>{cpe.label}</span>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
+          {checkpoints.map(cp => (
+            <div key={cp.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', background: '#fafaf8', border: '1px solid #ece7da', borderRadius: 10 }}>
+              <input value={cp.label} onChange={e => updateCheckpoint(cp.id, { label: e.target.value })}
+                style={{ padding: '6px 8px', background: '#fff', border: '1px solid #e5e0d3', borderRadius: 8, fontFamily: A_MONO, fontSize: 12, fontWeight: 600, width: 90 }}/>
               <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                <input value={cpKms[cpe.key]} onChange={e => updateCpKm(cpe.key, e.target.value)}
+                <input value={cp.km} onChange={e => updateCheckpoint(cp.id, { km: e.target.value })}
                   style={{ padding: '6px 8px', background: '#fff', border: '1px solid #e5e0d3', borderRadius: 8, boxShadow: '0 1px 3px rgba(31,42,28,0.08)', fontFamily: A_MONO, fontSize: 12, width: 56, textAlign: 'center' }}/>
                 <span style={{ fontFamily: A_MONO, fontSize: 10.5, color: '#5d6b59' }}>km</span>
               </div>
-              <span style={{ fontSize: 11.5, color: '#5d6b59' }}>{cpe.desc}</span>
+              <div style={{ flex: 1 }}/>
+              <button onClick={() => removeCheckpoint(cp.id)} style={{ background: 'none', border: 'none', color: '#b91c1c', fontSize: 16, cursor: 'pointer', padding: '2px 4px' }}>×</button>
             </div>
           ))}
+          {checkpoints.length === 0 && <div style={{ fontSize: 12, color: '#5d6b59' }}>ยังไม่มีจุดพัก — งานนี้จะมีแค่ START/FINISH</div>}
         </div>
+        <button onClick={addCheckpoint} style={{ padding: '8px 14px', background: 'transparent', border: '1px dashed #bdb6a4', borderRadius: 10, fontFamily: A_MONO, fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 600, color: '#1f2a1c', cursor: 'pointer', marginBottom: 18 }}>+ เพิ่มจุดพัก</button>
 
         <div style={{ fontFamily: A_MONO, fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#5d6b59', marginBottom: 4 }}>QR code เช็คอินแต่ละจุด (ปริ้นท์ไปติดหน้างาน)</div>
         <div style={{ fontFamily: A_MONO, fontSize: 10, color: '#5d6b59', marginBottom: 10, lineHeight: 1.5 }}>
-          แต่ละใบใช้ได้เฉพาะงานนี้และจุดนั้นเท่านั้น — นักวิ่งสแกนป้ายผิดจุด/ผิดงาน แอปจะไม่ยอมรับ ดาวน์โหลดแล้วปริ้นท์ไปติดที่จุดจริงก่อนวันแข่ง
+          แต่ละใบใช้ได้เฉพาะงานนี้และจุดนั้นเท่านั้น — นักวิ่งสแกนป้ายผิดจุด/ผิดงาน แอปจะไม่ยอมรับ ดาวน์โหลดแล้วปริ้นท์ไปติดที่จุดจริงก่อนวันแข่ง (สร้าง QR ตามจุดพักที่ตั้งไว้ด้านบนอัตโนมัติ)
         </div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, marginBottom: 20 }}>
           <QrCard eventId={ev.id} cpKey="start" label="START"/>
-          {cpEditor.map(cpe => <QrCard key={cpe.key} eventId={ev.id} cpKey={cpe.key} label={cpe.label}/>)}
+          {checkpoints.map(cp => <QrCard key={cp.id} eventId={ev.id} cpKey={cp.id} label={cp.label}/>)}
           <QrCard eventId={ev.id} cpKey="finish" label="FINISH"/>
         </div>
 
@@ -395,10 +442,10 @@ function EventForm({ initial, onCancel, onSave, onSaveInPlace, onDelete }) {
                   <input type="time" value={de.cpTimes.start} onChange={e => updateDistStart(de.id, e.target.value)}
                     style={{ width: '100%', padding: '7px 8px', background: '#fff', border: '1px solid #e5e0d3', borderRadius: 8, fontFamily: A_MONO, fontSize: 12, textAlign: 'center' }}/>
                 </div>
-                {cpEditor.map(cpe => (
-                  <div key={cpe.key} style={{ width: 84 }}>
-                    <div style={{ fontFamily: A_MONO, fontSize: 9, color: '#5d6b59', marginBottom: 3 }}>{cpe.label}</div>
-                    <input type="time" value={de.cpTimes[cpe.key]} onChange={e => updateDistCp(de.id, cpe.key, e.target.value)}
+                {checkpoints.map(cp => (
+                  <div key={cp.id} style={{ width: 84 }}>
+                    <div style={{ fontFamily: A_MONO, fontSize: 9, color: '#5d6b59', marginBottom: 3 }}>{cp.label}</div>
+                    <input type="time" value={de.cpTimes[cp.id] || ''} onChange={e => updateDistCp(de.id, cp.id, e.target.value)}
                       style={{ width: '100%', padding: '7px 8px', background: '#fff', border: '1px solid #e5e0d3', borderRadius: 8, fontFamily: A_MONO, fontSize: 12, textAlign: 'center' }}/>
                   </div>
                 ))}
