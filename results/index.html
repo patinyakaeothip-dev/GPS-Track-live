@@ -77,33 +77,40 @@
       return s.slice(0,3) + '••••' + s.slice(-2);
     }
 
-    function buildResults(state) {
-      if (!state) return null;
-      const byRunner = new Map();
-      (state.checkins || []).forEach(c => {
-        if (!byRunner.has(c.runner_id)) byRunner.set(c.runner_id, []);
-        byRunner.get(c.runner_id).push(c);
-      });
-      const items = (state.runners || []).map(r => {
-        const cks = (byRunner.get(r.id) || [])
-          .slice().sort((a,b)=>Number(a.timestamp) - Number(b.timestamp));
+    // Real per-event roster (src/runner-store.js) instead of a shared demo
+    // dataset — every event used to show the exact same simulated runners
+    // regardless of which one was selected. A runner shows up here the
+    // moment they register, before they have any result yet (status
+    // 'not_started'), which is the whole point: the roster is real even
+    // when there's no finish time to show.
+    function buildResultsFromRoster(ev, runners) {
+      if (!runners) return null;
+      function checkinMs(hhmm) {
+        const d = window.eventStatus && window.eventStatus.combineDateTime(ev && ev.raceDateISO, hhmm);
+        return d ? d.getTime() : null;
+      }
+      const items = runners.map(r => {
+        const cks = (r.checkins || []);
         const start = cks.find(c => c.cp === 'start');
         const finish = cks.find(c => c.cp === 'finish');
         const last = cks[cks.length - 1];
-        const totalMs = start && finish ? Number(finish.timestamp) - Number(start.timestamp) : null;
-        const distKm = parseInt(r.distance_current, 10) || 0;
+        const startMs = start ? checkinMs(start.t) : null;
+        const finishMs = finish ? checkinMs(finish.t) : null;
+        const totalMs = (startMs != null && finishMs != null) ? finishMs - startMs : null;
+        const distKm = parseInt(r.distance, 10) || 0;
         const paceMinPerKm = (totalMs && distKm) ? (totalMs / 60000) / distKm : null;
+        const status = finish ? 'finished' : cks.length ? 'active' : 'not_started';
         return {
           id: r.id,
-          name: r.name,
+          name: r.nickname,
           phone: maskPhone(r.phone),
-          distance: r.distance_current,
-          distance_original: r.distance_original,
-          status: r.status,
-          start_at: start ? Number(start.timestamp) : null,
-          finish_at: finish ? Number(finish.timestamp) : null,
+          distance: r.distance,
+          distance_original: r.distance,
+          status,
+          start_at: startMs,
+          finish_at: finishMs,
           last_cp: last ? last.cp : null,
-          last_at: last ? Number(last.timestamp) : null,
+          last_at: last ? checkinMs(last.t) : null,
           total_ms: totalMs,
           pace_min_per_km: paceMinPerKm,
           checkin_count: cks.length,
@@ -130,7 +137,7 @@
     }
 
     function ResultsPage() {
-      const [state, setState] = useState(null);
+      const [runners, setRunners] = useState(null);
       const [err, setErr] = useState(null);
       const [lastAt, setLastAt] = useState(null);
       const [distFilter, setDistFilter] = useState('all');
@@ -151,23 +158,21 @@
       }, []);
 
       useEffect(() => {
-        let cancelled = false;
-        const tick = async () => {
+        if (!eventId) { setRunners([]); return; }
+        const refresh = () => {
           try {
-            const live = await window.api('state',
-              window.TRT_DASHBOARD_KEY ? { key: window.TRT_DASHBOARD_KEY } : {});
-            if (cancelled) return;
-            setState(live); setErr(null); setLastAt(Date.now());
+            setRunners(window.runnerStore ? window.runnerStore.listRunners(eventId) : []);
+            setErr(null); setLastAt(Date.now());
           } catch (e) {
-            if (!cancelled) setErr(e.code || e.message || 'fetch_failed');
+            setErr(e.message || 'fetch_failed');
           }
         };
-        tick();
-        const id = setInterval(tick, 30000);
-        return () => { cancelled = true; clearInterval(id); };
-      }, []);
+        refresh();
+        window.addEventListener('trt:runners-updated', refresh);
+        return () => window.removeEventListener('trt:runners-updated', refresh);
+      }, [eventId]);
 
-      const items = useMemo(() => buildResults(state), [state]);
+      const items = useMemo(() => buildResultsFromRoster(selectedEvent, runners), [selectedEvent, runners]);
 
       const filtered = useMemo(() => {
         if (!items) return [];
@@ -180,8 +185,8 @@
             (it.name || '').toLowerCase().indexOf(q) >= 0 ||
             (it.phone || '').indexOf(q.replace(/\D/g,'')) >= 0);
         }
-        // Sort: finished first (by rank), then active (by progress / last_at desc), then dnf
-        const order = { finished: 0, active: 1, dnf: 2 };
+        // Sort: finished first (by rank), then active (by progress / last_at desc), then not-started, then dnf
+        const order = { finished: 0, active: 1, not_started: 2, dnf: 3 };
         out.sort((a,b) => {
           const oa = order[a.status] ?? 9, ob = order[b.status] ?? 9;
           if (oa !== ob) return oa - ob;
@@ -193,12 +198,13 @@
       }, [items, distFilter, statusFilter, query]);
 
       const counts = useMemo(() => {
-        const c = { total: items?.length || 0, finished: 0, active: 0, dnf: 0,
+        const c = { total: items?.length || 0, finished: 0, active: 0, dnf: 0, not_started: 0,
           d11: 0, d22: 0, d29: 0 };
         (items || []).forEach(it => {
           if (it.status === 'finished') c.finished++;
           else if (it.status === 'active') c.active++;
           else if (it.status === 'dnf') c.dnf++;
+          else if (it.status === 'not_started') c.not_started++;
           if (it.distance === '11K') c.d11++;
           else if (it.distance === '22K') c.d22++;
           else if (it.distance === '29K') c.d29++;
@@ -279,7 +285,7 @@
               ['all','ทั้งหมด'],['29K','29K'],['22K','22K'],['11K','11K'],
             ]}/>
             <FilterGroup value={statusFilter} onChange={setStatusFilter} options={[
-              ['all','ทั้งหมด'],['finished','เข้าเส้น'],['active','ยังวิ่ง'],['dnf','DNF'],
+              ['all','ทั้งหมด'],['finished','เข้าเส้น'],['active','ยังวิ่ง'],['not_started','ยังไม่เริ่ม'],['dnf','DNF'],
             ]}/>
             <input value={query} onChange={e => setQuery(e.target.value)}
               placeholder="ค้นหา ชื่อ / เบอร์"
@@ -343,6 +349,7 @@
     function ResultRow({ it, index }) {
       const isFin = it.status === 'finished';
       const isDnf = it.status === 'dnf';
+      const isNotStarted = it.status === 'not_started';
       const adjusted = it.distance_original && it.distance_original !== it.distance;
       const paceStr = (() => {
         if (!it.pace_min_per_km) return null;
@@ -364,7 +371,7 @@
           gap: 10, padding: '12px 14px',
           alignItems: 'center',
           borderTop: index ? `1px solid ${BORDER}` : 'none',
-          background: isFin ? '#fff' : isDnf ? '#fef7f7' : '#fffbf2',
+          background: isFin ? '#fff' : isDnf ? '#fef7f7' : isNotStarted ? '#fafaf8' : '#fffbf2',
         }}>
           {/* Rank or status badge */}
           <div style={{ textAlign: 'center' }}>
@@ -374,6 +381,9 @@
             ) : isDnf ? (
               <div style={{ fontFamily: MONO, fontSize: 10, color: '#b91c1c',
                 fontWeight: 700 }}>DNF</div>
+            ) : isNotStarted ? (
+              <div style={{ fontFamily: MONO, fontSize: 9.5, color: MUTED,
+                fontWeight: 700 }}>REG</div>
             ) : (
               <div style={{ fontFamily: MONO, fontSize: 10, color: '#b45309',
                 fontWeight: 700 }}>RUN</div>
@@ -387,7 +397,7 @@
             </div>
             <div style={{ fontFamily: MONO, fontSize: 10, color: MUTED, marginTop: 2 }}>
               {it.phone}
-              {isFin ? null
+              {isFin || isNotStarted ? null
                 : isDnf
                   ? <> · ที่ {lastLabel} · {fmtClockOfDay(it.last_at)}</>
                   : <> · ล่าสุดที่ {lastLabel} · {fmtClockOfDay(it.last_at)}</>}
@@ -423,7 +433,7 @@
               </>
             ) : (
               <div style={{ fontFamily: MONO, fontSize: 10, color: MUTED }}>
-                {it.start_at ? `ออกตัว ${fmtClockOfDay(it.start_at)}` : '—'}
+                {isNotStarted ? 'ยังไม่เริ่ม' : it.start_at ? `ออกตัว ${fmtClockOfDay(it.start_at)}` : '—'}
               </div>
             )}
           </div>
