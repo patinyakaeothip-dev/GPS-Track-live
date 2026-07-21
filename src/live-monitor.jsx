@@ -252,11 +252,19 @@ function LiveMonitorApp() {
       const status = (baseStatus === 'active' && staleMin != null && staleMin > STALE_MINUTES) ? 'stale' : baseStatus;
       const meta = statusMeta(status);
       const physKm = geo.nearestKmOnTrack(coursePaths[overviewLabel], p.lat, p.lon);
+      // Before the start checkpoint is scanned, position is stuck at km 0 —
+      // the "gradient" there is just the course's starting slope, not
+      // anything about the runner, so show — same as pace instead of a
+      // number that looks like real live data.
+      const started = status !== 'not_started';
       return { bib: r.bib, name: r.nickname, distance: r.distance, gender: r.gender,
         color: colorFor({ status, distance: r.distance }, distColor),
         initial: (r.nickname || '?').slice(0, 1), lat: p.lat, lon: p.lon, km, totalKm,
         pct: Math.min(100, (km / totalKm) * 100),
-        pace: fmtPace(pace), gradStr: `${g >= 0 ? '+' : ''}${g.toFixed(0)}%`, gradColor: gradColor(g), gradArrow: gradArrow(g),
+        pace: fmtPace(pace),
+        gradStr: started ? `${g >= 0 ? '+' : ''}${g.toFixed(0)}%` : '—',
+        gradColor: started ? gradColor(g) : '#5d6b59',
+        gradArrow: started ? gradArrow(g) : '',
         ele: p.ele, ago: lastAtMs != null ? fmtAgo((Date.now() - lastAtMs) / 1000) : '—',
         status, statusLabel: meta.label, statusBg: meta.bg, statusFg: meta.fg, physKm };
     });
