@@ -1,9 +1,11 @@
 // live-monitor.jsx — the "Race Director · Live Map Dashboard" from the
-// current GPS Live Tracking design: a real Leaflet map plotting simulated
-// runner positions along the actual recorded course GPX, a draggable/
-// zoomable elevation-profile strip with one dot per runner, an alerts feed,
-// search, a selected-runner detail card with a focus toggle, and a Ranking
-// tab (grouped by distance, gender filter, medal badges).
+// current GPS Live Tracking design: a real Leaflet map plotting real
+// registered runners' positions along the actual recorded course GPX
+// (positioned by their last QR check-in km — real device GPS is a separate
+// piece of work, not wired up yet), a draggable/zoomable elevation-profile
+// strip with one dot per runner, an alerts feed, search, a selected-runner
+// detail card with a focus toggle, and a Ranking tab (grouped by distance,
+// gender filter, medal badges).
 
 const { useState: mS, useEffect: mE, useMemo: mM, useRef: mR } = React;
 
@@ -11,23 +13,10 @@ const M_BRAND = '#2d6a4f', M_DIST = { '29K': '#1f4d39', '22K': '#e07a3e', '11K':
 const M_DIST_FALLBACK = ['#1f4d39', '#e07a3e', '#3a86c4', '#7c4a03', '#9b1c10'];
 const M_WARN = 'oklch(0.68 0.16 70)', M_ALERT = 'oklch(0.58 0.22 28)', M_REST = '#7c8a78';
 const M_MONO = "'JetBrains Mono',ui-monospace,monospace";
-// Original demo runner km values were hand-placed assuming these course
-// lengths — used to rescale them proportionally onto whatever distance an
-// event's own course actually is.
-const DEMO_MAX_KM = { '29K': 29, '22K': 22, '11K': 11 };
-
-const NAMES = [
-  ['101', 'ก้อง', '29K', 4.0, 'normal', 'M'], ['102', 'เก่ง', '29K', 9.5, 'normal', 'M'],
-  ['103', 'ตูน', '29K', 14.2, 'missing', 'M'], ['104', 'โย', '29K', 19.8, 'normal', 'M'],
-  ['105', 'บอส', '29K', 24.0, 'normal', 'M'],
-  ['201', 'มิ้น', '22K', 6.0, 'normal', 'F'], ['202', 'พีท', '22K', 10.0, 'normal', 'M'],
-  ['203', 'แอน', '22K', 2.5, 'normal', 'F'], ['204', 'ฟ้า', '22K', 14.0, 'normal', 'F'],
-  ['205', 'ปอย', '22K', 8.0, 'slow', 'F'], ['206', 'บีม', '22K', 18.0, 'normal', 'M'],
-  ['301', 'นัท', '11K', 10.3, 'normal', 'M'], ['302', 'เอ้', '11K', 3.0, 'normal', 'F'],
-  ['303', 'โอม', '11K', 6.0, 'normal', 'M'], ['304', 'กัน', '11K', 1.5, 'normal', 'M'],
-  ['305', 'พลอย', '11K', 8.5, 'normal', 'F'], ['306', 'แพร', '11K', 5.0, 'rest', 'F'],
-  ['307', 'ใหม่', '11K', 9.0, 'normal', 'M'],
-];
+// A runner is flagged as an alert once their last QR check-in is older than
+// this — the closest proxy to "ขาดการติดต่อ" we have without live GPS pings
+// (position only updates at each checkpoint scan, not continuously).
+const STALE_MINUTES = 60;
 
 // Same Thailand-time fix as combineDateTime in admin-app.jsx: build the Date
 // with an explicit +07:00 offset instead of relying on the viewer's local
@@ -51,20 +40,27 @@ function fmtPace(p) {
 function gradColor(g) { const a = Math.abs(g); return a < 3 ? M_BRAND : a < 9 ? M_WARN : M_ALERT; }
 function gradArrow(g) { return g > 1 ? '▲' : g < -1 ? '▼' : '→'; }
 function fmtAgo(sec) { return sec < 60 ? `${Math.round(sec)} วิที่แล้ว` : `${Math.floor(sec / 60)} นาทีที่แล้ว`; }
+// A runner's checkin only stores a wall-clock "HH:MM" string (see
+// mobile-app.jsx scanComplete) — reconstruct a real timestamp against the
+// event's race date the same way Results does, so pace/staleness can be
+// computed from it.
+function checkinMs(ev, hhmm) {
+  const d = window.eventStatus && window.eventStatus.combineDateTime(ev && ev.raceDateISO, hhmm);
+  return d ? d.getTime() : null;
+}
 function statusMeta(status) {
   return {
-    normal: { label: 'On course', bg: 'oklch(0.94 0.06 145)', fg: '#1f4d39' },
-    slow: { label: 'ช้ากว่าคาด', bg: '#fdf0d6', fg: '#7c4a03' },
-    rest: { label: 'พักที่จุดพัก', bg: '#ede7d8', fg: '#5d6b59' },
-    missing: { label: 'ขาดการติดต่อ', bg: '#fde9e6', fg: '#9b1c10' },
+    not_started: { label: 'ยังไม่เริ่ม', bg: '#ede7d8', fg: '#5d6b59' },
+    active: { label: 'On course', bg: 'oklch(0.94 0.06 145)', fg: '#1f4d39' },
+    stale: { label: 'ขาดการติดต่อ', bg: '#fde9e6', fg: '#9b1c10' },
+    dnf: { label: 'DNF / ถอน', bg: '#fde9e6', fg: '#9b1c10' },
     finished: { label: 'เข้าเส้นชัย', bg: M_BRAND, fg: '#fff' },
   }[status] || { label: status, bg: '#eee', fg: '#000' };
 }
 function colorFor(r, distColor) {
-  if (r.statusBase === 'missing') return M_ALERT;
-  if (r.statusBase === 'slow') return M_WARN;
-  if (r.statusBase === 'rest') return M_REST;
-  if (r.km >= r.totalKm - 0.02) return M_BRAND;
+  if (r.status === 'stale') return M_ALERT;
+  if (r.status === 'dnf') return M_REST;
+  if (r.status === 'finished') return M_BRAND;
   return (distColor || M_DIST)[r.distance] || '#5d6b59';
 }
 
@@ -90,8 +86,7 @@ function useElevationProfile(geo, coursePaths, distance) {
 
 function LiveMonitorApp() {
   const [ready, setReady] = mS(false);
-  const [tick, setTick] = mS(0);
-  const [selectedBib, setSelectedBib] = mS('103');
+  const [selectedBib, setSelectedBib] = mS(null);
   const [dashView, setDashView] = mS('map'); // 'map' | 'ranking'
   const [distFilter, setDistFilter] = mS(null);
   const [events, setEvents] = mS(() => (window.eventStore ? window.eventStore.loadEvents() : []));
@@ -138,50 +133,43 @@ function LiveMonitorApp() {
   const coursePathsRef = mR(null);
   const overviewLabelRef = mR('29K');
   const checkpointsRef = mR([]);
-  const runnersRef = mR(null);
   const mapHostRef = mR(null);
   const mapRef = mR(null);
   const markersRef = mR(new Map());
+
+  // Real per-event roster (src/runner-store.js) — position is each
+  // runner's last QR check-in km (see mobile-app.jsx scanComplete), not a
+  // live GPS ping, so dots only move when someone actually scans a
+  // checkpoint. Real device GPS is a separate piece of work, not wired up.
+  const [runners, setRunners] = mS([]);
+  mE(() => {
+    if (!eventId) { setRunners([]); return; }
+    const refresh = () => setRunners(window.runnerStore ? window.runnerStore.listRunners(eventId) : []);
+    refresh();
+    window.addEventListener('trt:runners-updated', refresh);
+    return () => window.removeEventListener('trt:runners-updated', refresh);
+  }, [eventId]);
 
   // Loads the *real* course (GPX uploaded per event in Admin, see
   // src/course-geo.js buildEventCoursePaths) for whichever event is
   // selected, instead of always drawing the one bundled demo course —
   // falls back to the demo course automatically for events with no GPX
-  // uploaded yet. Runner *positions* are still simulated (see the banner
-  // below) — that needs real device GPS, a separate piece of work — but the
-  // route line and CP markers now reflect what RD actually configured.
-  useEffect_loadGeo();
-  function useEffect_loadGeo() {
-    mE(() => {
-      let cancelled = false;
-      setReady(false);
-      (async () => {
-        const geo = window.courseGeo;
-        geoRef.current = geo;
-        const { paths: coursePaths, overviewLabel, checkpoints } = await geo.buildEventCoursePaths(selectedEvent);
-        coursePathsRef.current = coursePaths;
-        overviewLabelRef.current = overviewLabel;
-        checkpointsRef.current = checkpoints;
-        // Simulated demo runners are spread across whichever distances this
-        // event actually has (round-robin), with their demo km position
-        // rescaled proportionally onto that distance's real course length —
-        // these dots are still simulated positions (see the banner below),
-        // just no longer stuck on a fixed 29K/22K/11K assumption.
-        runnersRef.current = NAMES.map(([bib, name, origDist, km, statusBase, gender], i) => {
-          const distance = distLabels[i % distLabels.length];
-          const pts = coursePaths[distance];
-          const totalKm = pts[pts.length - 1].km;
-          const frac = Math.min(1, km / (DEMO_MAX_KM[origDist] || totalKm));
-          return { bib, name, distance, km: Math.min(frac * totalKm, totalKm - 0.05), totalKm, statusBase, gender,
-            basePace: 7 + Math.random() * 2.2,
-            lastPingAt: Date.now() - (statusBase === 'missing' ? 26 * 60000 : 0) };
-        });
-        if (cancelled) return;
-        setReady(true);
-      })();
-      return () => { cancelled = true; };
-    }, [eventId, distLabels]);
-  }
+  // uploaded yet.
+  mE(() => {
+    let cancelled = false;
+    setReady(false);
+    (async () => {
+      const geo = window.courseGeo;
+      geoRef.current = geo;
+      const { paths: coursePaths, overviewLabel, checkpoints } = await geo.buildEventCoursePaths(selectedEvent);
+      coursePathsRef.current = coursePaths;
+      overviewLabelRef.current = overviewLabel;
+      checkpointsRef.current = checkpoints;
+      if (cancelled) return;
+      setReady(true);
+    })();
+    return () => { cancelled = true; };
+  }, [eventId, distLabels]);
 
   mE(() => {
     if (!ready || !mapHostRef.current || mapRef.current) return;
@@ -199,19 +187,8 @@ function LiveMonitorApp() {
           `<div style="padding:2px 7px;background:#2d6a4f;color:#fff;border-radius:7px;font:600 10px 'JetBrains Mono',monospace;letter-spacing:0.04em;white-space:nowrap;transform:translate(-50%,-130%)">${label}</div>`,
           iconSize: [0, 0] }) }).addTo(map);
       });
-    runnersRef.current.forEach(r => {
-      const p = geo.pointAtKm(coursePaths[r.distance], r.km);
-      const color = colorFor(r, distColor);
-      const m = L.circleMarker([p.lat, p.lon], { radius: 7, color: '#fff', weight: 2, fillColor: color, fillOpacity: 1 }).addTo(map);
-      m.bindTooltip(`#${r.bib} ${r.name}`, { direction: 'top', offset: [0, -8] });
-      m.on('click', () => { setSelectedBib(r.bib); setFocusBib(null); });
-      markersRef.current.set(r.bib, m);
-      if (r.statusBase === 'missing') {
-        L.circleMarker([p.lat, p.lon], { radius: 14, color, weight: 0, fillOpacity: 0.25 }).addTo(map);
-      }
-    });
     mapRef.current = map;
-    return () => { map.remove(); mapRef.current = null; };
+    return () => { map.remove(); mapRef.current = null; markersRef.current.clear(); };
   // Also re-run when showDashboard flips true: for an "upcoming" event the
   // course/runner data (ready) usually finishes loading *before* the RD
   // clicks "ดูแผนที่ / เส้นทาง" (see #69's preview gate), so the map's host
@@ -248,34 +225,76 @@ function LiveMonitorApp() {
   const overviewLabel = overviewLabelRef.current;
   const overviewProfile = useElevationProfile(geo, coursePaths, overviewLabel);
 
+  // Real roster → map/ranking rows. Position is each runner's last QR
+  // check-in km (progressKm), and pace/staleness are derived from
+  // checkin clock times reconstructed against the event's race date — same
+  // technique Results uses, just adapted for "still running" runners too.
   const displays = mM(() => {
-    if (!ready) return [];
-    return runnersRef.current.map(r => {
-      const pts = coursePaths[r.distance];
-      const p = geo.pointAtKm(pts, r.km);
-      const g = geo.gradientAtKm(pts, r.km);
-      const status = r.km >= r.totalKm - 0.02 ? 'finished' : r.statusBase;
+    if (!ready || !coursePaths) return [];
+    return runners.map(r => {
+      const pts = coursePaths[r.distance] || coursePaths[overviewLabel];
+      const totalKm = pts[pts.length - 1].km;
+      const cks = r.checkins || [];
+      const startCk = cks.find(c => c.cp === 'start');
+      const finishCk = cks.find(c => c.cp === 'finish');
+      const last = cks[cks.length - 1];
+      const baseStatus = r.dnf ? 'dnf' : finishCk ? 'finished' : cks.length ? 'active' : 'not_started';
+      const km = Math.min(r.progressKm || 0, totalKm - (baseStatus === 'finished' ? 0 : 0.02));
+      const p = geo.pointAtKm(pts, Math.max(0, km));
+      const g = geo.gradientAtKm(pts, Math.max(0, km));
+
+      const startMs = startCk ? checkinMs(selectedEvent, startCk.t) : null;
+      const endMs = finishCk ? checkinMs(selectedEvent, finishCk.t) : Date.now();
+      const pace = (startMs != null && km > 0 && endMs > startMs) ? ((endMs - startMs) / 60000) / km : null;
+
+      const lastAtMs = last ? checkinMs(selectedEvent, last.t) : null;
+      const staleMin = lastAtMs != null ? (Date.now() - lastAtMs) / 60000 : null;
+      const status = (baseStatus === 'active' && staleMin != null && staleMin > STALE_MINUTES) ? 'stale' : baseStatus;
       const meta = statusMeta(status);
       const physKm = geo.nearestKmOnTrack(coursePaths[overviewLabel], p.lat, p.lon);
-      return { bib: r.bib, name: r.name, distance: r.distance, gender: r.gender, color: colorFor(r, distColor),
-        initial: r.name.slice(0, 1), km: r.km, totalKm: r.totalKm,
-        pct: Math.min(100, (r.km / r.totalKm) * 100),
-        pace: fmtPace(r.basePace * Math.max(0.55, g > 0 ? 1 + g * 0.035 : 1 + g * 0.012)),
-        gradStr: `${g >= 0 ? '+' : ''}${g.toFixed(0)}%`, gradColor: gradColor(g), gradArrow: gradArrow(g),
-        ele: p.ele, ago: fmtAgo((Date.now() - r.lastPingAt) / 1000),
-        statusLabel: meta.label, statusBg: meta.bg, statusFg: meta.fg, physKm };
+      return { bib: r.bib, name: r.nickname, distance: r.distance, gender: r.gender,
+        color: colorFor({ status, distance: r.distance }, distColor),
+        initial: (r.nickname || '?').slice(0, 1), lat: p.lat, lon: p.lon, km, totalKm,
+        pct: Math.min(100, (km / totalKm) * 100),
+        pace: fmtPace(pace), gradStr: `${g >= 0 ? '+' : ''}${g.toFixed(0)}%`, gradColor: gradColor(g), gradArrow: gradArrow(g),
+        ele: p.ele, ago: lastAtMs != null ? fmtAgo((Date.now() - lastAtMs) / 1000) : '—',
+        status, statusLabel: meta.label, statusBg: meta.bg, statusFg: meta.fg, physKm };
     });
-  }, [ready, tick]);
+  }, [ready, runners, coursePaths, overviewLabel, distColor, selectedEvent]);
+
+  // Keep Leaflet markers in sync with real roster updates (a QR scan moves
+  // someone) instead of only ever creating them once at map init.
+  mE(() => {
+    const map = mapRef.current, L = window.L;
+    if (!map) return;
+    const seen = new Set();
+    displays.forEach(d => {
+      seen.add(d.bib);
+      let m = markersRef.current.get(d.bib);
+      if (!m) {
+        m = L.circleMarker([d.lat, d.lon], { radius: 7, color: '#fff', weight: 2, fillColor: d.color, fillOpacity: 1 }).addTo(map);
+        m.bindTooltip(`#${d.bib} ${d.name}`, { direction: 'top', offset: [0, -8] });
+        m.on('click', () => { setSelectedBib(d.bib); setFocusBib(null); });
+        markersRef.current.set(d.bib, m);
+      } else {
+        m.setLatLng([d.lat, d.lon]);
+        m.setStyle({ fillColor: d.color });
+      }
+    });
+    markersRef.current.forEach((m, bib) => {
+      if (!seen.has(bib)) { map.removeLayer(m); markersRef.current.delete(bib); }
+    });
+  }, [displays]);
 
   const byBib = mM(() => Object.fromEntries(displays.map(d => [d.bib, d])), [displays]);
   const selected = selectedBib ? byBib[selectedBib] : null;
 
-  const alerts = mM(() => displays.filter(d => d.statusLabel === 'ช้ากว่าคาด' || d.statusLabel === 'ขาดการติดต่อ')
-    .map(d => ({ ...d, msg: d.statusLabel === 'ขาดการติดต่อ' ? `ไม่มี GPS ping · จุดล่าสุด ${d.km.toFixed(1)}K` : `ช้ากว่าคาด · ${d.km.toFixed(1)}/${d.totalKm.toFixed(1)}K` })), [displays]);
+  const alerts = mM(() => displays.filter(d => d.status === 'stale' || d.status === 'dnf')
+    .map(d => ({ ...d, msg: d.status === 'stale' ? `ไม่มีความเคลื่อนไหว · จุดล่าสุด ${d.km.toFixed(1)}K` : `ถอนตัว (DNF) · ${d.km.toFixed(1)}/${d.totalKm.toFixed(1)}K` })), [displays]);
 
   const counts = mM(() => {
     const c = { total: displays.length, on: 0, finished: 0, alert: 0 };
-    displays.forEach(d => { if (d.statusLabel === 'On course') c.on++; if (d.statusLabel === 'เข้าเส้นชัย') c.finished++; if (d.statusLabel === 'ขาดการติดต่อ') c.alert++; });
+    displays.forEach(d => { if (d.status === 'active') c.on++; if (d.status === 'finished') c.finished++; if (d.status === 'stale') c.alert++; });
     return c;
   }, [displays]);
 
@@ -324,9 +343,9 @@ function LiveMonitorApp() {
             <span style={{ fontFamily: M_MONO, fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 600 }}>Live · {counts.total} นักวิ่ง</span>
           </div>
         </header>
-        {events.length > 1 && selectedEvent && selectedStatus === 'live' && (
+        {selectedEvent && selectedStatus === 'live' && (
           <div style={{ padding: '8px 22px', borderBottom: '1px solid #d8d2c2', background: '#fdf6e3', fontFamily: M_MONO, fontSize: 10.5, color: '#7c4a03', lineHeight: 1.5 }}>
-            ⚠ เส้นทาง/จุด CP บนแผนที่ตอนนี้เป็นของงานที่เลือกจริงแล้ว (ตาม GPX ที่อัปโหลดใน Admin) แต่ตำแหน่งนักวิ่ง (จุดสี) ยังเป็นข้อมูลจำลองอยู่ — รอต่อ GPS จริงจากมือถือนักวิ่ง
+            ⚠ ข้อมูลนักวิ่งเป็นรายชื่อ/ตำแหน่งจริงจากการลงทะเบียนและสแกน QR แต่ละจุด — ตำแหน่งจะขยับเฉพาะตอนสแกน QR เท่านั้น ยังไม่ใช่พิกัด GPS สดต่อเนื่องจากมือถือนักวิ่ง (รอต่อ GPS จริง เป็นงานแยกต่างหาก)
           </div>
         )}
 
@@ -365,7 +384,7 @@ function LiveMonitorApp() {
         <>
         {selectedEvent && selectedStatus === 'upcoming' && (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 22px', borderBottom: '1px solid #d8d2c2', background: '#fdf6e3', fontFamily: M_MONO, fontSize: 10.5, color: '#7c4a03' }}>
-            <span>🔍 โหมดพรีวิว — งานยังไม่เริ่ม ตำแหน่งนักวิ่งที่เห็นเป็นข้อมูลจำลองสำหรับเช็คระบบเท่านั้น</span>
+            <span>🔍 โหมดพรีวิว — งานยังไม่เริ่ม เอาไว้เช็คเส้นทาง/จุดพัก · รายชื่อนักวิ่งที่เห็นเป็นรายชื่อจริงที่ลงทะเบียนแล้ว แต่ยังไม่มีตำแหน่งจนกว่าจะสแกน QR จุดสตาร์ท</span>
             <button onClick={() => setPreviewOpen(false)} style={{ padding: '5px 10px', background: 'transparent', border: '1px solid #d8ae5c', borderRadius: 6, fontFamily: M_MONO, fontSize: 10, fontWeight: 700, color: '#7c4a03', cursor: 'pointer' }}>ปิดพรีวิว</button>
           </div>
         )}
@@ -502,7 +521,7 @@ function LiveMonitorApp() {
                 <button key={d || 'all'} onClick={() => setDistFilter(d)} style={{ padding: '6px 12px', borderRadius: 999, border: `1px solid ${distFilter === d ? M_BRAND : '#d8d2c2'}`, background: distFilter === d ? M_BRAND : '#fff', color: distFilter === d ? '#fff' : '#1f2a1c', fontFamily: M_MONO, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>{d || 'ทั้งหมด'}</button>
               ))}
               <span style={{ width: 1, height: 18, background: '#d8d2c2' }}/>
-              {[[null, 'ทั้งหมด'], ['M', 'ชาย'], ['F', 'หญิง']].map(([v, label]) => (
+              {[[null, 'ทั้งหมด'], ['m', 'ชาย'], ['f', 'หญิง']].map(([v, label]) => (
                 <button key={label} onClick={() => setRankGender(v)} style={{ padding: '6px 12px', borderRadius: 999, border: `1px solid ${rankGender === v ? M_BRAND : '#d8d2c2'}`, background: rankGender === v ? M_BRAND : '#fff', color: rankGender === v ? '#fff' : '#1f2a1c', fontFamily: M_MONO, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>{label}</button>
               ))}
               <input value={search} onChange={e => setSearch(e.target.value)} placeholder="ค้นหาชื่อหรือเลข BIB" style={{ marginLeft: 'auto', padding: '7px 10px', border: '1px solid #e5e0d3', borderRadius: 10, boxShadow: '0 1px 3px rgba(31,42,28,0.08)', fontFamily: M_MONO, fontSize: 11.5, width: 200 }}/>
@@ -511,15 +530,15 @@ function LiveMonitorApp() {
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                 <thead>
                   <tr style={{ position: 'sticky', top: 0, background: '#fff' }}>
-                    {['อันดับ', 'นักวิ่ง', 'ระยะ', 'ความคืบหน้า', 'เพซ', 'ความชัน', 'สถานะ'].map((h, i) => (
-                      <th key={i} style={{ textAlign: 'left', padding: i === 0 || i === 6 ? '9px 20px' : '9px 14px', fontFamily: M_MONO, fontSize: 10, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#5d6b59', borderBottom: '1px solid #d8d2c2' }}>{h}</th>
+                    {['อันดับ', 'นักวิ่ง', 'ระยะ', 'ความคืบหน้า', 'เพศ', 'เพซ', 'ความชัน', 'สถานะ'].map((h, i) => (
+                      <th key={i} style={{ textAlign: 'left', padding: i === 0 || i === 7 ? '9px 20px' : '9px 14px', fontFamily: M_MONO, fontSize: 10, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#5d6b59', borderBottom: '1px solid #d8d2c2' }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {rankRows.map(rk => (
                     <React.Fragment key={rk.bib}>
-                      {rk.firstInGroup && <tr><td colSpan={7} style={{ padding: '10px 20px 4px', fontFamily: M_MONO, fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#5d6b59', fontWeight: 700, background: '#faf8f2' }}>ระยะ {rk.groupLabel}</td></tr>}
+                      {rk.firstInGroup && <tr><td colSpan={8} style={{ padding: '10px 20px 4px', fontFamily: M_MONO, fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#5d6b59', fontWeight: 700, background: '#faf8f2' }}>ระยะ {rk.groupLabel}</td></tr>}
                       <tr onClick={() => setDetailBib(rk.bib)} style={{ cursor: 'pointer', borderBottom: '1px solid #f4f3ef' }}>
                         <td style={{ padding: '10px 20px', fontFamily: M_MONO, fontWeight: 700, color: rk.rank <= 3 ? M_BRAND : '#5d6b59' }}>#{rk.rank} {rk.medal}</td>
                         <td style={{ padding: '10px 14px' }}>
@@ -530,6 +549,7 @@ function LiveMonitorApp() {
                         </td>
                         <td style={{ padding: '10px 14px', fontFamily: M_MONO, fontSize: 12 }}>{rk.distance}</td>
                         <td style={{ padding: '10px 14px', fontFamily: M_MONO, fontSize: 12 }}>{rk.km.toFixed(1)} / {rk.totalKm.toFixed(1)}K</td>
+                        <td style={{ padding: '10px 14px', fontFamily: M_MONO, fontSize: 11, fontWeight: 700, color: rk.gender === 'f' ? '#b3467c' : rk.gender === 'm' ? '#3a86c4' : '#5d6b59' }}>{rk.gender === 'f' ? 'หญิง' : rk.gender === 'm' ? 'ชาย' : '—'}</td>
                         <td style={{ padding: '10px 14px', fontFamily: M_MONO, fontSize: 12 }}>{rk.pace}/km</td>
                         <td style={{ padding: '10px 14px', fontFamily: M_MONO, fontSize: 12, fontWeight: 600, color: rk.gradColor }}>{rk.gradArrow} {rk.gradStr}</td>
                         <td style={{ padding: '10px 20px' }}><span style={{ padding: '3px 8px', borderRadius: 7, fontSize: 11, fontWeight: 600, background: rk.statusBg, color: rk.statusFg }}>{rk.statusLabel}</span></td>
