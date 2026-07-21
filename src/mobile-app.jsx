@@ -798,10 +798,20 @@ function RouteTab({ course, runner, event }) {
       }
       return best;
     }
+    // On a loop course, START and FINISH (and sometimes a checkpoint too)
+    // can sit at the exact same physical point — anchoring every pill
+    // straight above that point would stack them pixel-for-pixel, hiding
+    // all but whichever was added last. Nudge each one sideways by a
+    // little more than the previous when they share (near enough) the same
+    // spot, so every label stays visible instead of one swallowing another.
+    const placed = [];
     function addCpMarker(km, label, color) {
       const p = nearestPoint(km);
+      const overlapping = placed.filter(q => Math.abs(q.lat - p[0]) < 0.0005 && Math.abs(q.lon - p[1]) < 0.0005).length;
+      placed.push({ lat: p[0], lon: p[1] });
+      const dx = overlapping * 46;
       L.marker([p[0], p[1]], { icon: L.divIcon({ className: '', iconSize: null, html:
-        `<div style="transform:translate(-50%,-100%);background:${color};color:#fff;font:700 10px 'JetBrains Mono',monospace;padding:3px 7px;border-radius:999px;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.35);white-space:nowrap;">${label}</div>` }) }).addTo(map);
+        `<div style="transform:translate(calc(-50% + ${dx}px),-100%);background:${color};color:#fff;font:700 10px 'JetBrains Mono',monospace;padding:3px 7px;border-radius:999px;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.35);white-space:nowrap;">${label}</div>` }) }).addTo(map);
     }
     addCpMarker(0, 'START', C.brand);
     ((event && event.checkpoints) || []).forEach(cp => addCpMarker(parseFloat(cp.km) || 0, cp.label, C.orange));
@@ -913,6 +923,7 @@ function runnerStatusLabel(r) {
 
 function FriendsTab({ eventId, followedBib, favBibs, onAddFavorite, onRemoveFavorite }) {
   const [runners, setRunners] = uS(() => (eventId && window.runnerStore ? window.runnerStore.listRunners(eventId) : []));
+  const [detailBib, setDetailBib] = uS(null);
   uE(() => {
     if (!eventId || !window.runnerStore) return;
     const refresh = () => setRunners(window.runnerStore.listRunners(eventId));
@@ -923,13 +934,14 @@ function FriendsTab({ eventId, followedBib, favBibs, onAddFavorite, onRemoveFavo
 
   const followed = runners.find(r => r.bib === followedBib);
   const favs = uM(() => favBibs.map(bib => runners.find(r => r.bib === bib)).filter(Boolean), [runners, favBibs]);
+  const detail = runners.find(r => r.bib === detailBib);
 
   return (
     <div style={{ flex: 1, overflow: 'auto', padding: '14px 18px 90px', display: 'flex', flexDirection: 'column', gap: 14 }}>
       {followed && (
         <div>
           <div style={{ fontFamily: C.mono, fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted, marginBottom: 6 }}>กำลังติดตามอยู่</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 10, background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, boxShadow: '0 1px 3px rgba(31,42,28,0.08)' }}>
+          <div onClick={() => setDetailBib(followed.bib)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 10, background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, boxShadow: '0 1px 3px rgba(31,42,28,0.08)', cursor: 'pointer' }}>
             <div style={{ width: 36, height: 36, borderRadius: 999, background: C.orange, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 600 }}>{followed.nickname[0]}</div>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 14, fontWeight: 600 }}>{followed.nickname}</div>
@@ -948,20 +960,60 @@ function FriendsTab({ eventId, followedBib, favBibs, onAddFavorite, onRemoveFavo
         {favs.length > 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {favs.map(r => (
-              <div key={r.bib} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 10, background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, boxShadow: '0 1px 3px rgba(31,42,28,0.08)' }}>
+              <div key={r.bib} onClick={() => setDetailBib(r.bib)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 10, background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, boxShadow: '0 1px 3px rgba(31,42,28,0.08)', cursor: 'pointer' }}>
                 <div style={{ width: 36, height: 36, borderRadius: 999, background: C.orange, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 600, flexShrink: 0 }}>{r.nickname[0]}</div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 14, fontWeight: 600 }}>{r.nickname}</div>
                   <div style={{ fontFamily: C.mono, fontSize: 10.5, color: C.muted }}>bib {r.bib} · {r.distance} · {runnerStatusLabel(r)}</div>
                 </div>
-                <span onClick={() => onRemoveFavorite(r.bib)} style={{ fontSize: 18, cursor: 'pointer', color: '#e0453e', lineHeight: 1 }}>♥</span>
+                <span onClick={e => { e.stopPropagation(); onRemoveFavorite(r.bib); }} style={{ fontSize: 18, cursor: 'pointer', color: '#e0453e', lineHeight: 1 }}>♥</span>
               </div>
             ))}
           </div>
         )}
       </div>
+
+      {detail && <FriendDetailSheet runner={detail} onClose={() => setDetailBib(null)}/>}
     </div>
   );
+}
+
+// Tapping a friend card shows their track progress right here instead of
+// trying to switch the whole app into "spectator mode" — a signed-in
+// runner's session can only ever be a runner or a spectator, not both, so
+// following a friend from inside your own Track tab needs its own lighter
+// view rather than reusing the full follow-a-race flow.
+function FriendDetailSheet({ runner: r, onClose }) {
+  const cks = r.checkins || [];
+  const last = cks[cks.length - 1];
+  return (
+    <Overlay>
+      <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)' }}/>
+      <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, background: '#fff', borderRadius: '18px 18px 0 0', padding: '20px 22px 32px', boxShadow: '0 -8px 30px rgba(0,0,0,0.2)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+          <div style={{ width: 44, height: 44, borderRadius: 999, background: C.orange, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, fontWeight: 600, flexShrink: 0 }}>{r.nickname[0]}</div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 17, fontWeight: 700 }}>{r.nickname}</div>
+            <div style={{ fontFamily: C.mono, fontSize: 11, color: C.muted }}>bib {r.bib} · {r.distance}</div>
+          </div>
+          <div onClick={onClose} style={{ width: 30, height: 30, borderRadius: 10, border: `1.6px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 14 }}>✕</div>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
+          <Stat label="ระยะที่วิ่งไปแล้ว" value={`${(r.progressKm || 0).toFixed(1)} กม.`}/>
+          <Stat label="สถานะ" value={runnerStatusLabel(r)}/>
+        </div>
+        <div style={{ fontFamily: C.mono, fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted, marginBottom: 6 }}>เช็คอินล่าสุด</div>
+        {last
+          ? <div style={{ fontSize: 13.5 }}>{cpCheckinLabel(last.cp)} · <span style={{ fontFamily: C.mono, color: C.muted }}>{last.t} น.</span></div>
+          : <div style={{ fontSize: 13, color: C.muted }}>ยังไม่มีการเช็คอิน</div>}
+      </div>
+    </Overlay>
+  );
+}
+function cpCheckinLabel(cp) {
+  if (cp === 'start') return 'จุดสตาร์ท';
+  if (cp === 'finish') return 'เส้นชัย';
+  return cp;
 }
 
 // ── SOS / DNF flows ───────────────────────────────────────────────────────
