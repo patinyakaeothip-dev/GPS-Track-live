@@ -15,20 +15,20 @@
       id: 'rtr2026', name: 'Rayong Trail Running 2026', date: '18 เม.ย. 2026', raceDateISO: '2026-04-18', status: 'live',
       closed: false, hotline: '081-234-5678',
       distances: [
-        { label: '11K', cutoff: '150', open: true, cpTimes: { start: '06:10', a1_out: '', a2_in: '', a2_out: '', a1_in: '', finish: '08:40' } },
-        { label: '22K', cutoff: '270', open: true, cpTimes: { start: '06:05', a1_out: '', a2_in: '', a2_out: '', a1_in: '', finish: '10:35' } },
-        { label: '29K', cutoff: '360', open: true, cpTimes: { start: '06:00', a1_out: '', a2_in: '', a2_out: '', a1_in: '', finish: '12:00' } },
+        { id: 'd0', label: '11K', cutoff: '150', open: true, cpTimes: { start: '06:10', a1_out: '', a2_in: '', a2_out: '', a1_in: '', finish: '08:40' } },
+        { id: 'd1', label: '22K', cutoff: '270', open: true, cpTimes: { start: '06:05', a1_out: '', a2_in: '', a2_out: '', a1_in: '', finish: '10:35' } },
+        { id: 'd2', label: '29K', cutoff: '360', open: true, cpTimes: { start: '06:00', a1_out: '', a2_in: '', a2_out: '', a1_in: '', finish: '12:00' } },
       ],
     },
     {
       id: 'kk2026', name: 'Khao Kho Ultra 2026', date: '3 ส.ค. 2026', raceDateISO: '2026-08-03', status: 'upcoming',
       closed: true, hotline: '',
-      distances: [{ label: '22K', cutoff: '270', open: false, cpTimes: { start: '06:00', a1_out: '', a2_in: '', a2_out: '', a1_in: '', finish: '10:30' } }],
+      distances: [{ id: 'd0', label: '22K', cutoff: '270', open: false, cpTimes: { start: '06:00', a1_out: '', a2_in: '', a2_out: '', a1_in: '', finish: '10:30' } }],
     },
     {
       id: 'ky2025', name: 'Khao Yai Trail 2025', date: '2 พ.ย. 2025', status: 'past',
       closed: true, bib: '114', distance: '29K', hotline: '',
-      distances: [{ label: '29K', cutoff: '360', open: false }],
+      distances: [{ id: 'd0', label: '29K', cutoff: '360', open: false }],
     },
   ];
 
