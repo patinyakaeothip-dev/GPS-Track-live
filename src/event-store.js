@@ -64,12 +64,37 @@
     try { localStorage.setItem(KEY, JSON.stringify(list)); } catch (_) {}
   }
 
+  // Firestore rejects arrays-of-arrays ("Nested arrays are not supported") —
+  // uploaded GPX tracks store their points as [[lat,lon,ele,km], ...], which
+  // trips this the moment a real GPX file is attached to an event. Wrap each
+  // inner array in a plain object on the way out, and unwrap on the way
+  // back in, so the rest of the app can keep using plain point tuples.
+  function toFirestoreSafe(val) {
+    if (Array.isArray(val)) return val.map(v => Array.isArray(v) ? { __arr: toFirestoreSafe(v) } : toFirestoreSafe(v));
+    if (val && typeof val === 'object') {
+      const out = {};
+      for (const k in val) out[k] = toFirestoreSafe(val[k]);
+      return out;
+    }
+    return val;
+  }
+  function fromFirestoreSafe(val) {
+    if (Array.isArray(val)) return val.map(fromFirestoreSafe);
+    if (val && typeof val === 'object') {
+      if (Array.isArray(val.__arr) && Object.keys(val).length === 1) return fromFirestoreSafe(val.__arr);
+      const out = {};
+      for (const k in val) out[k] = fromFirestoreSafe(val[k]);
+      return out;
+    }
+    return val;
+  }
+
   function upsertEvent(ev) {
     const list = loadEvents().slice();
     const idx = list.findIndex(e => e.id === ev.id);
     if (idx >= 0) list[idx] = ev; else list.push(ev);
     saveEvents(list);
-    if (window.fb) window.fb.setDocById('events', ev.id, ev).catch(err => console.warn('[event-store] Firestore write failed', err));
+    if (window.fb) window.fb.setDocById('events', ev.id, toFirestoreSafe(ev)).catch(err => console.warn('[event-store] Firestore write failed', err));
     return list;
   }
 
@@ -122,17 +147,17 @@
   function startFirestoreSync() {
     if (!window.fb) return;
     window.fb.listDocs('events').then(remote => {
-      const filtered = remote.filter(e => !pendingDeletes.has(e.id));
+      const filtered = remote.filter(e => !pendingDeletes.has(e.id)).map(fromFirestoreSafe);
       if (filtered.length) { saveEvents(filtered); notifyUpdated(); }
       else if (loadEvents().length) {
         // First run against an empty Firestore collection — seed it from
         // whatever this device already has (e.g. the local SEED_EVENTS).
-        loadEvents().forEach(ev => window.fb.setDocById('events', ev.id, ev).catch(() => {}));
+        loadEvents().forEach(ev => window.fb.setDocById('events', ev.id, toFirestoreSafe(ev)).catch(() => {}));
       }
     }).catch(err => console.warn('[event-store] Firestore initial load failed', err));
 
     window.fb.watchCollection('events', remote => {
-      saveEvents(remote.filter(e => !pendingDeletes.has(e.id)));
+      saveEvents(remote.filter(e => !pendingDeletes.has(e.id)).map(fromFirestoreSafe));
       notifyUpdated();
     });
   }
