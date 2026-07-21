@@ -111,6 +111,11 @@ function RunnerManagerApp({ adminEmail, onLogout }) {
     filtered.forEach(r => rows.push([r.bib, r.nickname, r.phone, r.distance, (r.checkins || []).length, r.dnf ? 'DNF' : '']));
     downloadCsv(`runners-${selectedEvent ? selectedEvent.id : 'export'}.csv`, rows);
   }
+  function renumberAll() {
+    if (!selectedEvent || !window.confirm(`สร้างเลขบิบใหม่ทั้งหมด ${runners.length} คนของงาน "${selectedEvent.name}"? เลขเดิม (รวมที่อาจปริ้นท์/แจกไปแล้ว) จะเปลี่ยนหมด — เรียงลำดับตามวันที่สมัคร`)) return;
+    window.runnerStore.renumberBibs(selectedEvent);
+    flash('✓ สร้างเลขบิบใหม่ทั้งหมดแล้ว');
+  }
 
   const query = q.trim().toLowerCase();
   const filtered = runners
@@ -152,6 +157,7 @@ function RunnerManagerApp({ adminEmail, onLogout }) {
           ))}
         </div>
         <button onClick={exportCsv} disabled={!filtered.length} style={{ padding: '8px 12px', background: 'transparent', border: '1px solid #bdb6a4', borderRadius: 8, fontFamily: R_MONO, fontSize: 11, fontWeight: 700, cursor: filtered.length ? 'pointer' : 'not-allowed', opacity: filtered.length ? 1 : 0.5 }}>⬇ Export CSV</button>
+        <button onClick={renumberAll} disabled={!runners.length} title="สร้างเลขบิบใหม่ทั้งหมดของงานนี้ตามระบบ 4 หลักปัจจุบัน" style={{ padding: '8px 12px', background: 'transparent', border: '1px solid #b45309', color: '#b45309', borderRadius: 8, fontFamily: R_MONO, fontSize: 11, fontWeight: 700, cursor: runners.length ? 'pointer' : 'not-allowed', opacity: runners.length ? 1 : 0.5 }}>🔄 รีเซ็ตเลขบิบทั้งหมด</button>
       </div>
 
       <div style={{ fontFamily: R_MONO, fontSize: 11, color: '#5d6b59', marginBottom: 8 }}>

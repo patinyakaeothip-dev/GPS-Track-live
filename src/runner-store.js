@@ -79,6 +79,30 @@
     notifyUpdated();
   }
 
+  // One-time cleanup: reassigns every runner in this event a fresh
+  // sequential bib under the current scheme (used to backfill the old
+  // 3-digit runners after the bib format changed to 4 digits). Keeps each
+  // runner's document id stable — only the displayed bib field changes —
+  // and preserves registration order (oldest first) within each distance.
+  function renumberBibs(ev) {
+    const all = loadRunners();
+    const mine = all.filter(r => r.eventId === ev.id).slice().sort((a, b) => (a.registeredAt || 0) - (b.registeredAt || 0));
+    const byDist = {};
+    mine.forEach(r => { (byDist[r.distance] = byDist[r.distance] || []).push(r); });
+    const newBibById = {};
+    Object.keys(byDist).forEach(distLabel => {
+      const distIdx = Math.max(0, (ev.distances || []).findIndex(d => d.label === distLabel));
+      const base = (distIdx + 1) * 1000;
+      byDist[distLabel].forEach((r, i) => { newBibById[r.id] = String(base + i + 1); });
+    });
+    const next = all.map(r => (newBibById[r.id] ? { ...r, bib: newBibById[r.id] } : r));
+    saveRunners(next);
+    if (window.fb) {
+      next.filter(r => newBibById[r.id]).forEach(r => window.fb.setDocById('runners', r.id, r).catch(err => console.warn('[runner-store] Firestore write failed', err)));
+    }
+    notifyUpdated();
+  }
+
   function startFirestoreSync() {
     if (!window.fb) return;
     window.fb.listDocs('runners').then(remote => {
@@ -92,5 +116,5 @@
   if (window.fb) startFirestoreSync();
   else window.addEventListener('trt:firebase-ready', startFirestoreSync, { once: true });
 
-  Object.assign(window, { runnerStore: { listRunners, registerRunner, updateRunnerProgress, deleteRunner } });
+  Object.assign(window, { runnerStore: { listRunners, registerRunner, updateRunnerProgress, deleteRunner, renumberBibs } });
 })();
