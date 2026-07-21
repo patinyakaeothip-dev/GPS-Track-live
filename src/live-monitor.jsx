@@ -125,21 +125,30 @@ function LiveMonitorApp() {
 
   const geoRef = mR(null);
   const coursePathsRef = mR(null);
+  const cpKmsRef = mR(CP_KMS);
   const runnersRef = mR(null);
   const mapHostRef = mR(null);
   const mapRef = mR(null);
   const markersRef = mR(new Map());
 
+  // Loads the *real* course (GPX uploaded per event in Admin, see
+  // src/course-geo.js buildEventCoursePaths) for whichever event is
+  // selected, instead of always drawing the one bundled demo course —
+  // falls back to the demo course automatically for events with no GPX
+  // uploaded yet. Runner *positions* are still simulated (see the banner
+  // below) — that needs real device GPS, a separate piece of work — but the
+  // route line and CP markers now reflect what RD actually configured.
   useEffect_loadGeo();
   function useEffect_loadGeo() {
     mE(() => {
       let cancelled = false;
+      setReady(false);
       (async () => {
         const geo = window.courseGeo;
         geoRef.current = geo;
-        const track = await geo.loadTrack();
-        const coursePaths = geo.buildCoursePaths(track, CP_KMS);
+        const { paths: coursePaths, cpKms } = await geo.buildEventCoursePaths(selectedEvent);
         coursePathsRef.current = coursePaths;
+        cpKmsRef.current = cpKms;
         runnersRef.current = NAMES.map(([bib, name, distance, km, statusBase, gender]) => {
           const pts = coursePaths[distance];
           const totalKm = pts[pts.length - 1].km;
@@ -151,23 +160,23 @@ function LiveMonitorApp() {
         setReady(true);
       })();
       return () => { cancelled = true; };
-    }, []);
+    }, [eventId]);
   }
 
   mE(() => {
     if (!ready || !mapHostRef.current || mapRef.current) return;
-    const L = window.L, geo = geoRef.current, coursePaths = coursePathsRef.current;
+    const L = window.L, geo = geoRef.current, coursePaths = coursePathsRef.current, cpKms = cpKmsRef.current;
     const c29 = coursePaths['29K'];
     const latlngs = geo.coursePolylineLatLngs(c29);
-    const loopStart = c29.findIndex(p => p.km >= CP_KMS.a2_in);
-    const loopEnd = c29.findIndex(p => p.km >= CP_KMS.a2_out);
+    const loopStart = c29.findIndex(p => p.km >= cpKms.a2_in);
+    const loopEnd = c29.findIndex(p => p.km >= cpKms.a2_out);
     const loopLatLngs = latlngs.slice(loopStart, loopEnd + 1);
     const bounds = L.latLngBounds(latlngs);
     const map = L.map(mapHostRef.current, { zoomControl: false, attributionControl: false }).fitBounds(bounds, { padding: [24, 24] });
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
     L.polyline(latlngs, { color: '#1f4d39', weight: 4, opacity: 0.8 }).addTo(map);
     L.polyline(loopLatLngs, { color: '#1f4d39', weight: 4, opacity: 1, dashArray: '1 7' }).addTo(map);
-    [[0, 'START', 0], [CP_KMS.a1_out, 'A1 ↗', 0], [CP_KMS.a2_in, 'A2 ↑', -16], [CP_KMS.a2_out, 'A2 ↓', 16], [CP_KMS.a1_in, 'A1 ↙', 0], [c29[c29.length - 1].km, 'FINISH', -18]]
+    [[0, 'START', 0], [cpKms.a1_out, 'A1 ↗', 0], [cpKms.a2_in, 'A2 ↑', -16], [cpKms.a2_out, 'A2 ↓', 16], [cpKms.a1_in, 'A1 ↙', 0], [c29[c29.length - 1].km, 'FINISH', -18]]
       .forEach(([km, label, dx]) => {
         const p = geo.pointAtKm(c29, km);
         L.marker([p.lat, p.lon], { icon: L.divIcon({ className: '', html:
@@ -292,7 +301,7 @@ function LiveMonitorApp() {
         </header>
         {events.length > 1 && selectedEvent && selectedStatus === 'live' && (
           <div style={{ padding: '8px 22px', borderBottom: '1px solid #d8d2c2', background: '#fdf6e3', fontFamily: M_MONO, fontSize: 10.5, color: '#7c4a03', lineHeight: 1.5 }}>
-            ⚠ นักวิ่งที่เห็นเป็นข้อมูลจำลองชุดเดียว ยังไม่ได้แยกตามงานที่เลือก — ต้องต่อ backend จริงต่องานก่อนถึงจะกรองได้จริง
+            ⚠ เส้นทาง/จุด CP บนแผนที่ตอนนี้เป็นของงานที่เลือกจริงแล้ว (ตาม GPX ที่อัปโหลดใน Admin) แต่ตำแหน่งนักวิ่ง (จุดสี) ยังเป็นข้อมูลจำลองอยู่ — รอต่อ GPS จริงจากมือถือนักวิ่ง
           </div>
         )}
 
@@ -451,7 +460,7 @@ function LiveMonitorApp() {
               {overviewProfile && (
                 <svg viewBox={`0 0 ${overviewProfile.w} ${overviewProfile.h}`} style={{ width: '100%', height: 180, display: 'block' }}>
                   <path d={overviewProfile.d} fill="oklch(0.9 0.03 145 / 0.5)" stroke="#1f4d39" strokeWidth="1.4"/>
-                  {[[0, 'START'], [CP_KMS.a1_out, 'A1'], [CP_KMS.a2_in, 'A2↑'], [CP_KMS.a2_out, 'A2↓'], [CP_KMS.a1_in, 'A1'], [overviewProfile.totalKm, 'FINISH']].map(([km, label], i) => (
+                  {[[0, 'START'], [cpKmsRef.current.a1_out, 'A1'], [cpKmsRef.current.a2_in, 'A2↑'], [cpKmsRef.current.a2_out, 'A2↓'], [cpKmsRef.current.a1_in, 'A1'], [overviewProfile.totalKm, 'FINISH']].map(([km, label], i) => (
                     <g key={i}>
                       <line x1={overviewProfile.x(km)} y1={8} x2={overviewProfile.x(km)} y2={overviewProfile.baseY} stroke="#2d6a4f" strokeWidth="1" strokeDasharray="2 3" opacity="0.5"/>
                       <text x={overviewProfile.x(km)} y={overviewProfile.h} textAnchor="middle" fontFamily={M_MONO} fontSize="9" fill="#5d6b59">{label}</text>
