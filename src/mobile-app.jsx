@@ -164,7 +164,12 @@ function LoginScreen({ onLogin }) {
 
 // ── Screen: Event picker ──────────────────────────────────────────────────
 function EventCard({ ev, isRegistered, onRunnerSpace, onFollow, onSeeResult }) {
-  if (ev.status === 'past') {
+  // Computed live from ev's schedule data on every render (see
+  // src/event-status.js) instead of trusting ev.status/ev.closed, which are
+  // just a snapshot from whenever Admin last hit save.
+  const status = window.eventStatus.computeStatus(ev);
+  const closed = window.eventStatus.computeClosed(ev);
+  if (status === 'past') {
     return (
       <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 14, boxShadow: '0 1px 3px rgba(31,42,28,0.08)', overflow: 'hidden' }}>
         <div style={{ display: 'flex', gap: 12, alignItems: 'center', padding: 14 }}>
@@ -179,28 +184,28 @@ function EventCard({ ev, isRegistered, onRunnerSpace, onFollow, onSeeResult }) {
     );
   }
   return (
-    <div style={{ background: '#fff', border: ev.status === 'live' ? `2px solid ${C.brand}` : `1px solid ${C.border}`,
-      borderRadius: 14, boxShadow: ev.status !== 'live' ? '0 1px 3px rgba(31,42,28,0.08)' : 'none', overflow: 'hidden' }}>
+    <div style={{ background: '#fff', border: status === 'live' ? `2px solid ${C.brand}` : `1px solid ${C.border}`,
+      borderRadius: 14, boxShadow: status !== 'live' ? '0 1px 3px rgba(31,42,28,0.08)' : 'none', overflow: 'hidden' }}>
       <div style={{ display: 'flex', gap: 12, alignItems: 'center', padding: 14 }}>
-        {ev.status === 'live'
+        {status === 'live'
           ? <div style={{ width: 46, height: 46, borderRadius: 12, background: '#fff', border: '1px solid #d8d2c2', padding: 4, flexShrink: 0, overflow: 'hidden' }}><img src="assets/rayong-trail-icon.png" alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/></div>
           : <div style={{ width: 46, height: 46, borderRadius: 12, background: '#e5e4df', flexShrink: 0 }}/>}
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 14.5, fontWeight: 600, color: C.text }}>{ev.name}</div>
           <div style={{ fontFamily: C.mono, fontSize: 10.5, color: C.muted, marginTop: 2 }}>
-            {ev.date}{ev.closed ? ' · ปิดรับสมัครแล้ว' : ''}
+            {ev.date}{closed ? ' · ปิดรับสมัครแล้ว' : ''}
           </div>
         </div>
-        {ev.status === 'live' && <span style={{ fontFamily: C.mono, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.06em', color: '#fff', background: `linear-gradient(135deg,${C.brandLt},${C.brandDk})`, padding: '4px 10px', borderRadius: 999 }}>LIVE</span>}
+        {status === 'live' && <span style={{ fontFamily: C.mono, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.06em', color: '#fff', background: `linear-gradient(135deg,${C.brandLt},${C.brandDk})`, padding: '4px 10px', borderRadius: 999 }}>LIVE</span>}
       </div>
       <div style={{ display: 'flex' }}>
-        <button onClick={onRunnerSpace} style={{ flex: 1, padding: 13, background: (ev.closed && !isRegistered) ? '#e5e4df' : C.orange, color: (ev.closed && !isRegistered) ? '#7c7566' : '#fff', border: 'none', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>
+        <button onClick={onRunnerSpace} style={{ flex: 1, padding: 13, background: (closed && !isRegistered) ? '#e5e4df' : C.orange, color: (closed && !isRegistered) ? '#7c7566' : '#fff', border: 'none', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>
           🏃 Runner Space
           <div style={{ fontFamily: C.mono, fontSize: 9, fontWeight: 600, opacity: 0.85, marginTop: 1 }}>
-            {isRegistered ? 'ไปหน้าติดตามของฉัน' : ev.closed ? 'ปิดรับสมัครแล้ว' : (ev.status === 'live' ? 'ไปหน้าติดตามของฉัน' : 'ดูสถานะการลงทะเบียน')}
+            {isRegistered ? 'ไปหน้าติดตามของฉัน' : closed ? 'ปิดรับสมัครแล้ว' : (status === 'live' ? 'ไปหน้าติดตามของฉัน' : 'ดูสถานะการลงทะเบียน')}
           </div>
         </button>
-        {ev.status === 'live' && (
+        {status === 'live' && (
           <button onClick={onFollow} style={{ flex: 1, padding: 13, background: C.brand, color: '#fff', border: 'none', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>
             🔗 Follow the race
             <div style={{ fontFamily: C.mono, fontSize: 9, fontWeight: 600, opacity: 0.85, marginTop: 1 }}>ดูเพื่อนที่ในงานนี้</div>
@@ -222,11 +227,11 @@ function EventPickerScreen({ user, session, onOpenApp, onFollow, onProfile }) {
     window.addEventListener('trt:events-updated', refresh);
     return () => window.removeEventListener('trt:events-updated', refresh);
   }, []);
-  const filtered = events.filter(e => e.status === tab && (!q || e.name.toLowerCase().includes(q.toLowerCase())));
+  const filtered = events.filter(e => window.eventStatus.computeStatus(e) === tab && (!q || e.name.toLowerCase().includes(q.toLowerCase())));
 
   function handleRunnerSpace(ev) {
     const isRegistered = session.runner && session.runner.eventId === ev.id;
-    if (ev.closed && !isRegistered) {
+    if (window.eventStatus.computeClosed(ev) && !isRegistered) {
       setToast('ปิดรับสมัครแล้วสำหรับงานนี้');
       setTimeout(() => setToast(null), 2400);
       return;

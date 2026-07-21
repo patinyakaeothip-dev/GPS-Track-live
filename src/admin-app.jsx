@@ -23,44 +23,13 @@ function formatThaiDateTime(localDT) {
 }
 
 // Status ("upcoming"/"live"/"past") and whether registration is closed are
-// both derived from real dates/times instead of being picked manually — the
-// race date + each distance's start/finish-cutoff clock times decide when
-// the event goes live and ends, and regCloseISO decides when signup closes.
-// Races happen in Thailand, so start/cutoff times must always mean
-// Asia/Bangkok (UTC+7) — regardless of what timezone the admin's or a
-// runner's device happens to be set to. Building the Date from a plain
-// "T06:00:00" local-time string would silently reinterpret 06:00 as
-// whatever timezone the browser/OS is in, which is how this bug showed a
-// same-day 06:00-12:00 event as still "upcoming" well past 12:00.
-function combineDateTime(dateISO, hhmm) {
-  if (!dateISO || !/^\d{2}:\d{2}$/.test(hhmm || '')) return null;
-  const d = new Date(`${dateISO}T${hhmm}:00+07:00`);
-  return Number.isNaN(d.getTime()) ? null : d;
-}
-function eventWindow(ev) {
-  if (!ev.raceDateISO) return { start: null, end: null };
-  const starts = (ev.distances || []).map(d => combineDateTime(ev.raceDateISO, d.cpTimes && d.cpTimes.start)).filter(Boolean);
-  const ends = (ev.distances || []).map(d => combineDateTime(ev.raceDateISO, d.cpTimes && d.cpTimes.finish)).filter(Boolean);
-  return {
-    start: starts.length ? new Date(Math.min(...starts.map(d => d.getTime()))) : null,
-    end: ends.length ? new Date(Math.max(...ends.map(d => d.getTime()))) : null,
-  };
-}
-function computeStatus(ev) {
-  const { start, end } = eventWindow(ev);
-  if (!start) return 'upcoming';
-  const now = Date.now();
-  if (now < start.getTime()) return 'upcoming';
-  if (end && now > end.getTime()) return 'past';
-  return 'live';
-}
-function computeClosed(ev) {
-  // regCloseISO comes from a <input type="datetime-local">, e.g.
-  // "2026-07-20T17:54" — same Thailand-time-fix as combineDateTime above.
-  if (!ev.regCloseISO) return false;
-  const d = new Date(`${ev.regCloseISO}:00+07:00`);
-  return !Number.isNaN(d.getTime()) && Date.now() > d.getTime();
-}
+// both derived from real dates/times instead of being picked manually — see
+// src/event-status.js for the shared computeStatus/computeClosed logic used
+// here AND by the runner app / Live Monitor / Results, so the displayed
+// status is always live-computed at render time instead of a snapshot
+// frozen at whenever RD last hit Save.
+const computeStatus = window.eventStatus.computeStatus;
+const computeClosed = window.eventStatus.computeClosed;
 
 function Field({ label, children }) {
   return <div><div style={{ fontFamily: A_MONO, fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#5d6b59', marginBottom: 6 }}>{label}</div>{children}</div>;
@@ -137,13 +106,14 @@ function EventList({ events, onEdit, onDelete, onCreate }) {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {events.length === 0 && <div style={{ textAlign: 'center', color: '#5d6b59', fontSize: 13, padding: 30 }}>ยังไม่มีงานแข่ง · กด "+ สร้างงานแข่งใหม่"</div>}
         {events.map(ev => {
-          const meta = STATUS_META[ev.status] || STATUS_META.upcoming;
+          const meta = STATUS_META[window.eventStatus.computeStatus(ev)] || STATUS_META.upcoming;
+          const closed = window.eventStatus.computeClosed(ev);
           return (
             <div key={ev.id} style={{ background: '#fff', border: '1px solid #e5e0d3', borderRadius: 14, boxShadow: '0 1px 3px rgba(31,42,28,0.08)', padding: 16, display: 'flex', alignItems: 'center', gap: 14 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 15, fontWeight: 700 }}>{ev.name}</div>
                 <div style={{ fontFamily: A_MONO, fontSize: 10.5, color: '#5d6b59', marginTop: 3 }}>
-                  {ev.date} · {(ev.distances || []).map(d => d.label).join(' / ') || '—'}{ev.closed ? ' · ปิดรับสมัคร' : ''}
+                  {ev.date} · {(ev.distances || []).map(d => d.label).join(' / ') || '—'}{closed ? ' · ปิดรับสมัคร' : ''}
                 </div>
               </div>
               <span style={{ fontFamily: A_MONO, fontSize: 10.5, fontWeight: 700, color: meta.color, whiteSpace: 'nowrap' }}>{meta.label}</span>
