@@ -534,7 +534,7 @@ function GpsPermissionScreen({ onAllow, onBack }) {
 }
 
 // ── Screen: Pre-race waiting + QR scan (simulated) ───────────────────────
-function PreRaceScreen({ event, dist, onScan, onBack }) {
+function PreRaceScreen({ event, dist, onScan, onBack, onPreview }) {
   const de = event && (event.distances || []).find(d => d.label === dist);
   const startClock = de && de.cpTimes && de.cpTimes.start;
   const startAt = uM(() => (event && startClock && window.eventStatus ? window.eventStatus.combineDateTime(event.raceDateISO, startClock) : null), [event, startClock]);
@@ -567,6 +567,11 @@ function PreRaceScreen({ event, dist, onScan, onBack }) {
         GPS จะเริ่มบันทึกตำแหน่งทันทีที่คุณสแกน QR ที่จุดสตาร์ท — ไม่ใช่ตอนนี้ · ประหยัดแบตระหว่างรอ
       </div>
       <Btn variant="white" onClick={onScan}>📷 สแกน QR ที่จุดสตาร์ท · เริ่ม Track</Btn>
+      {onPreview && (
+        <div onClick={onPreview} style={{ textAlign: 'center', fontFamily: C.mono, fontSize: 11, color: 'rgba(255,255,255,0.6)', marginTop: 14, cursor: 'pointer', textDecoration: 'underline' }}>
+          👀 ดูตัวอย่างหน้า Track/Route/Ranking (ยังไม่นับว่าสตาร์ท)
+        </div>
+      )}
     </div>
   );
 }
@@ -1253,7 +1258,7 @@ function MobileApp() {
   else if (screen === 'register') body = <RegisterScreen event={pendingEvent} onDone={afterRegister} onBack={() => setScreen('events')}/>;
   else if (screen === 'register-success') body = <RegisterSuccessScreen dist={session.runner.dist} onContinue={() => setScreen('gps')}/>;
   else if (screen === 'gps') body = <GpsPermissionScreen onAllow={() => setScreen('prerace')} onBack={() => setScreen('register')}/>;
-  else if (screen === 'prerace') body = <PreRaceScreen event={getEvents().find(e => e.id === session.runner.eventId)} dist={session.runner.dist} onBack={() => setScreen('events')} onScan={() => setScreen('qr-start')}/>;
+  else if (screen === 'prerace') body = <PreRaceScreen event={getEvents().find(e => e.id === session.runner.eventId)} dist={session.runner.dist} onBack={() => setScreen('events')} onScan={() => setScreen('qr-start')} onPreview={() => setScreen('app')}/>;
   else if (screen === 'qr-start') body = <QrScanScreen label="จุดสตาร์ท" expectedCode={`TRT:${session.runner.eventId}:start`} onBack={() => setScreen('prerace')} onScanned={() => {
     updateRunner(r => ({ ...r, checkins: [{ cp: 'start', t: new Date().toTimeString().slice(0, 5) }], progressKm: 0 }));
     setScreen('app');
