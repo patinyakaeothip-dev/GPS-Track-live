@@ -105,15 +105,19 @@ function LiveMonitorApp() {
   }, []);
   const [eventId, setEventId] = mS(() => {
     const list = window.eventStore ? window.eventStore.loadEvents() : [];
-    const live = list.find(e => e.status === 'live');
+    const live = list.find(e => window.eventStatus.computeStatus(e) === 'live');
     return (live || list[0] || {}).id || null;
   });
   const selectedEvent = events.find(e => e.id === eventId) || null;
+  // Computed live from the event's schedule (see src/event-status.js) on
+  // every render instead of trusting the stored status field, which is only
+  // a snapshot from whenever Admin last hit save.
+  const selectedStatus = selectedEvent ? window.eventStatus.computeStatus(selectedEvent) : null;
   const [previewOpen, setPreviewOpen] = mS(false);
   const earliestStart = earliestStartDate(selectedEvent);
   const previewFrom = earliestStart ? new Date(earliestStart.getTime() - PREVIEW_WINDOW_MS) : null;
   const previewUnlocked = !!(earliestStart && Date.now() >= previewFrom.getTime() && Date.now() < earliestStart.getTime());
-  const showDashboard = !selectedEvent || selectedEvent.status === 'live' || (selectedEvent.status === 'upcoming' && previewUnlocked && previewOpen);
+  const showDashboard = !selectedEvent || selectedStatus === 'live' || (selectedStatus === 'upcoming' && previewUnlocked && previewOpen);
   const [rankGender, setRankGender] = mS(null);
   const [search, setSearch] = mS('');
   const [focusBib, setFocusBib] = mS(null);
@@ -286,13 +290,13 @@ function LiveMonitorApp() {
             <span style={{ fontFamily: M_MONO, fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 600 }}>Live · {counts.total} นักวิ่ง</span>
           </div>
         </header>
-        {events.length > 1 && selectedEvent && selectedEvent.status === 'live' && (
+        {events.length > 1 && selectedEvent && selectedStatus === 'live' && (
           <div style={{ padding: '8px 22px', borderBottom: '1px solid #d8d2c2', background: '#fdf6e3', fontFamily: M_MONO, fontSize: 10.5, color: '#7c4a03', lineHeight: 1.5 }}>
             ⚠ นักวิ่งที่เห็นเป็นข้อมูลจำลองชุดเดียว ยังไม่ได้แยกตามงานที่เลือก — ต้องต่อ backend จริงต่องานก่อนถึงจะกรองได้จริง
           </div>
         )}
 
-        {selectedEvent && selectedEvent.status === 'upcoming' && !showDashboard && (
+        {selectedEvent && selectedStatus === 'upcoming' && !showDashboard && (
           <div style={{ padding: '60px 24px', textAlign: 'center' }}>
             <div style={{ fontSize: 34, marginBottom: 10 }}>🕓</div>
             <div style={{ fontSize: 17, fontWeight: 700, color: '#1f2a1c' }}>ยังไม่เริ่มงาน</div>
@@ -319,7 +323,7 @@ function LiveMonitorApp() {
           </div>
         )}
 
-        {selectedEvent && selectedEvent.status === 'past' && (
+        {selectedEvent && selectedStatus === 'past' && (
           <div style={{ padding: '60px 24px', textAlign: 'center' }}>
             <div style={{ fontSize: 34, marginBottom: 10 }}>🏁</div>
             <div style={{ fontSize: 17, fontWeight: 700, color: '#1f2a1c' }}>งานนี้จบไปแล้ว</div>
@@ -333,7 +337,7 @@ function LiveMonitorApp() {
 
         {showDashboard && (
         <>
-        {selectedEvent && selectedEvent.status === 'upcoming' && (
+        {selectedEvent && selectedStatus === 'upcoming' && (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 22px', borderBottom: '1px solid #d8d2c2', background: '#fdf6e3', fontFamily: M_MONO, fontSize: 10.5, color: '#7c4a03' }}>
             <span>🔍 โหมดพรีวิว — งานยังไม่เริ่ม ตำแหน่งนักวิ่งที่เห็นเป็นข้อมูลจำลองสำหรับเช็คระบบเท่านั้น</span>
             <button onClick={() => setPreviewOpen(false)} style={{ padding: '5px 10px', background: 'transparent', border: '1px solid #d8ae5c', borderRadius: 6, fontFamily: M_MONO, fontSize: 10, fontWeight: 700, color: '#7c4a03', cursor: 'pointer' }}>ปิดพรีวิว</button>
