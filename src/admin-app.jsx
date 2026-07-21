@@ -161,7 +161,9 @@ function EventList({ events, onEdit, onDelete, onCreate }) {
         <button onClick={onCreate} style={{ padding: '10px 16px', background: `linear-gradient(135deg,#357a5c 0%,#1a4a37 100%)`, color: '#fff', border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>+ สร้างงานแข่งใหม่</button>
       </div>
       <div style={{ fontSize: 12, color: '#5d6b59', marginBottom: 16, lineHeight: 1.6 }}>
-        ข้อมูลชุดนี้เก็บไว้ในเบราว์เซอร์นี้เท่านั้น (ยังไม่มี backend จริง) — เปิดแอพนักวิ่งบนเบราว์เซอร์เดียวกันจะเห็นรายการเดียวกันนี้
+        {window.fb
+          ? 'ข้อมูลชุดนี้ sync ผ่าน Firebase จริง — แก้ที่นี่แล้วเห็นตรงกันทุกเครื่อง/เบราว์เซอร์ที่เปิดแอพ'
+          : 'ข้อมูลชุดนี้เก็บไว้ในเบราว์เซอร์นี้เท่านั้น (ยังไม่ได้ตั้งค่า Firebase — ดู src/firebase-config.js) — เปิดแอพนักวิ่งบนเบราว์เซอร์เดียวกันจะเห็นรายการเดียวกันนี้'}
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {events.length === 0 && <div style={{ textAlign: 'center', color: '#5d6b59', fontSize: 13, padding: 30 }}>ยังไม่มีงานแข่ง · กด "+ สร้างงานแข่งใหม่"</div>}
