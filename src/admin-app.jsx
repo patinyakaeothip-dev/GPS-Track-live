@@ -4,7 +4,7 @@
 // header comment on why this only syncs within one browser until a real
 // backend exists).
 
-const { useState: aS, useEffect: aE } = React;
+const { useState: aS, useEffect: aE, useRef: aR } = React;
 
 const A_BRAND = '#2d6a4f', A_MONO = "'JetBrains Mono',ui-monospace,monospace";
 const CP_KMS = { a1_out: 5.6, a2_in: 11.6, a2_out: 19, a1_in: 23.5 };
@@ -47,26 +47,52 @@ function inputStyle(extra) {
     boxShadow: '0 1px 3px rgba(31,42,28,0.08)', fontSize: 13.5, width: '100%', boxSizing: 'border-box', fontFamily: 'inherit', ...extra };
 }
 
-function GpxCard({ label, filename, stats, filled, onChoose }) {
+// Actually reads and parses the uploaded .gpx (via src/gpx-parse.js) instead
+// of just showing a static "✓ suunto-29k-2026.gpx" placeholder — the parsed
+// track (points/ascent/descent/totalKm) is handed back to the event via
+// onParsed so it's this event's real course, not shared demo data.
+function GpxCard({ label, filename, stats, filled, onParsed }) {
+  const inputRef = aR(null);
+  const [error, setError] = aS(null);
+
+  async function handleFile(e) {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    setError(null);
+    try {
+      const track = await window.gpxParse.parseGpxFile(file);
+      onParsed(file.name, track);
+    } catch (err) {
+      setError(err.message || 'อ่านไฟล์ GPX ไม่สำเร็จ');
+    }
+  }
+
+  const picker = <input ref={inputRef} type="file" accept=".gpx" onChange={handleFile} style={{ display: 'none' }}/>;
+
   if (filled) {
     return (
       <div>
+        {picker}
         <div style={{ fontFamily: A_MONO, fontSize: 10, fontWeight: 700, color: '#1f4d39', marginBottom: 6 }}>GPX · {label}</div>
         <div style={{ background: 'oklch(0.96 0.03 145)', border: '1px solid #bcd9c9', borderRadius: 10, padding: '10px 12px' }}>
           <div style={{ fontSize: 11.5, fontWeight: 600, color: '#1f4d39' }}>✓ {filename}</div>
           <div style={{ fontFamily: A_MONO, fontSize: 9.5, color: '#5d6b59', marginTop: 3 }}>{stats}</div>
-          <button onClick={onChoose} style={{ marginTop: 6, padding: '5px 9px', background: 'transparent', border: '1px solid #bdb6a4', borderRadius: 8, fontFamily: A_MONO, fontSize: 9.5, fontWeight: 600, color: '#1f2a1c', cursor: 'pointer' }}>เปลี่ยนไฟล์</button>
+          <button onClick={() => inputRef.current.click()} style={{ marginTop: 6, padding: '5px 9px', background: 'transparent', border: '1px solid #bdb6a4', borderRadius: 8, fontFamily: A_MONO, fontSize: 9.5, fontWeight: 600, color: '#1f2a1c', cursor: 'pointer' }}>เปลี่ยนไฟล์</button>
         </div>
+        {error && <div style={{ marginTop: 6, fontSize: 10, color: '#b91c1c' }}>{error}</div>}
       </div>
     );
   }
   return (
     <div>
+      {picker}
       <div style={{ fontFamily: A_MONO, fontSize: 10, fontWeight: 700, color: '#5d6b59', marginBottom: 6 }}>GPX · {label}</div>
-      <div onClick={onChoose} style={{ border: '2px dashed #bdb6a4', borderRadius: 10, padding: '14px 10px', textAlign: 'center', cursor: 'pointer' }}>
+      <div onClick={() => inputRef.current.click()} style={{ border: '2px dashed #bdb6a4', borderRadius: 10, padding: '14px 10px', textAlign: 'center', cursor: 'pointer' }}>
         <div style={{ fontSize: 16 }}>📍</div>
         <div style={{ fontSize: 10.5, color: '#1f2a1c', marginTop: 4 }}>ลากไฟล์ .gpx หรือ <span style={{ color: A_BRAND, textDecoration: 'underline' }}>เลือกไฟล์</span></div>
       </div>
+      {error && <div style={{ marginTop: 6, fontSize: 10, color: '#b91c1c' }}>{error}</div>}
     </div>
   );
 }
@@ -143,6 +169,8 @@ function blankEvent() {
   return {
     id: window.eventStore.newEventId(),
     name: '', date: '', raceDateISO: '', regClose: '', regCloseISO: '', status: 'upcoming', closed: false, hotline: '',
+    gpxFiles: {},
+    cpKms: { a1_out: CP_KMS.a1_out, a2_in: CP_KMS.a2_in, a2_out: CP_KMS.a2_out, a1_in: CP_KMS.a1_in },
     distances: [
       { id: 'd1', label: '11K', cutoff: '150', open: true, color: '#3a86c4', capacity: '', registered: '0', cpTimes: blankCpTimes('06:10', '08:40') },
       { id: 'd2', label: '22K', cutoff: '270', open: true, color: '#e07a3e', capacity: '', registered: '0', cpTimes: blankCpTimes('06:05', '10:35') },
@@ -160,7 +188,6 @@ function EventForm({ initial, onCancel, onSave, onSaveInPlace, onDelete }) {
     // were linked, or edited independently).
     return { capacity: '', registered: '0', ...d, id: d.id || `d${i}-${d.label}`, cpTimes: { ...cpTimes, finish: addMinutesToTime(cpTimes.start, d.cutoff) || cpTimes.finish } };
   }) } : blankEvent());
-  const [gpx11k, setGpx11k] = aS(null);
   const [toast, setToast] = aS(null);
 
   function set(patch) { setEv(e => ({ ...e, ...patch })); }
@@ -200,11 +227,13 @@ function EventForm({ initial, onCancel, onSave, onSaveInPlace, onDelete }) {
     }));
   }
 
+  const cpKms = ev.cpKms || CP_KMS;
+  function updateCpKm(key, val) { setEv(e => ({ ...e, cpKms: { ...(e.cpKms || CP_KMS), [key]: val } })); }
   const cpEditor = [
-    { key: 'a1_out', label: 'A1 ↗', km: CP_KMS.a1_out, desc: 'เขามะเข้ม · ขาไป' },
-    { key: 'a2_in', label: 'A2 ↑', km: CP_KMS.a2_in, desc: 'Green Mountain · ขึ้นเขา' },
-    { key: 'a2_out', label: 'A2 ↓', km: CP_KMS.a2_out, desc: 'Green Mountain · ลงเขา (29K เท่านั้น)' },
-    { key: 'a1_in', label: 'A1 ↙', km: CP_KMS.a1_in, desc: 'เขามะเข้ม · ขากลับ' },
+    { key: 'a1_out', label: 'A1 ↗', desc: 'เขามะเข้ม · ขาไป' },
+    { key: 'a2_in', label: 'A2 ↑', desc: 'Green Mountain · ขึ้นเขา' },
+    { key: 'a2_out', label: 'A2 ↓', desc: 'Green Mountain · ลงเขา (29K เท่านั้น)' },
+    { key: 'a1_in', label: 'A1 ↙', desc: 'เขามะเข้ม · ขากลับ' },
   ];
 
   function save() {
@@ -279,20 +308,32 @@ function EventForm({ initial, onCancel, onSave, onSaveInPlace, onDelete }) {
 
         <div style={{ fontFamily: A_MONO, fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#5d6b59', marginBottom: 6 }}>ไฟล์เส้นทาง (GPX) · เฉพาะงานนี้</div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 18 }}>
-          <GpxCard label="29K" filled filename="suunto-29k-2026.gpx" stats="28.6 km · +1,763 m" onChoose={() => {}}/>
-          <GpxCard label="22K" filled filename="suunto-22k-2026.gpx" stats="22.1 km · +1,180 m" onChoose={() => {}}/>
-          <GpxCard label="11K" filled={!!gpx11k} filename={gpx11k} stats="—" onChoose={() => setGpx11k('11k-course.gpx')}/>
+          {['29K', '22K', '11K'].map(label => {
+            const g = ev.gpxFiles && ev.gpxFiles[label];
+            return (
+              <GpxCard key={label} label={label} filled={!!g} filename={g && g.filename}
+                stats={g ? `${g.track.totalKm.toFixed(1)} km · +${g.track.ascent} m` : ''}
+                onParsed={(filename, track) => set({ gpxFiles: { ...(ev.gpxFiles || {}), [label]: { filename, track } } })}/>
+            );
+          })}
         </div>
         <div style={{ fontFamily: A_MONO, fontSize: 10, color: '#5d6b59', margin: '-10px 0 18px', lineHeight: 1.5 }}>
           แต่ละระยะมีเส้นทาง GPX แยกกัน (ไม่บังคับให้ใช้เส้นเดียวกัน) · รองรับ Suunto / Garmin / Strava export (.gpx)
         </div>
 
-        <div style={{ fontFamily: A_MONO, fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#5d6b59', marginBottom: 4 }}>จุดพัก / Water station (กม. บนเส้นทางที่อัปโหลด)</div>
+        <div style={{ fontFamily: A_MONO, fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#5d6b59', marginBottom: 4 }}>จุดพัก / Water station (กม. บนเส้นทางที่อัปโหลด — แก้ไขได้เอง)</div>
+        <div style={{ fontFamily: A_MONO, fontSize: 10, color: '#5d6b59', marginBottom: 8, lineHeight: 1.5 }}>
+          ใส่ กม. ของแต่ละจุดตามเส้นทางจริงที่อัปโหลดไว้ด้านบน (เช็คจากนาฬิกา/แอปบันทึกวิ่งที่ใช้เก็บ GPX) · ค่าเริ่มต้นเป็นตัวอย่างของงาน Rayong Trail
+        </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 18 }}>
           {cpEditor.map((cpe, i) => (
             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', background: '#fafaf8', border: '1px solid #ece7da', borderRadius: 10 }}>
               <span style={{ fontFamily: A_MONO, fontSize: 12, fontWeight: 600, width: 70 }}>{cpe.label}</span>
-              <div style={{ padding: '6px 10px', background: '#fff', border: '1px solid #e5e0d3', borderRadius: 8, boxShadow: '0 1px 3px rgba(31,42,28,0.08)', fontFamily: A_MONO, fontSize: 12, width: 70 }}>{cpe.km} km</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <input value={cpKms[cpe.key]} onChange={e => updateCpKm(cpe.key, e.target.value)}
+                  style={{ padding: '6px 8px', background: '#fff', border: '1px solid #e5e0d3', borderRadius: 8, boxShadow: '0 1px 3px rgba(31,42,28,0.08)', fontFamily: A_MONO, fontSize: 12, width: 56, textAlign: 'center' }}/>
+                <span style={{ fontFamily: A_MONO, fontSize: 10.5, color: '#5d6b59' }}>km</span>
+              </div>
               <span style={{ fontSize: 11.5, color: '#5d6b59' }}>{cpe.desc}</span>
             </div>
           ))}
