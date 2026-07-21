@@ -534,23 +534,33 @@ function GpsPermissionScreen({ onAllow, onBack }) {
 }
 
 // ── Screen: Pre-race waiting + QR scan (simulated) ───────────────────────
-function PreRaceScreen({ dist, onScan, onBack }) {
-  const [secs, setSecs] = uS(2538);
-  uE(() => { const id = setInterval(() => setSecs(s => Math.max(0, s - 1)), 1000); return () => clearInterval(id); }, []);
-  const h = String(Math.floor(secs / 3600)).padStart(2, '0');
-  const m = String(Math.floor((secs % 3600) / 60)).padStart(2, '0');
-  const s = String(secs % 60).padStart(2, '0');
+function PreRaceScreen({ event, dist, onScan, onBack }) {
+  const de = event && (event.distances || []).find(d => d.label === dist);
+  const startClock = de && de.cpTimes && de.cpTimes.start;
+  const startAt = uM(() => (event && startClock && window.eventStatus ? window.eventStatus.combineDateTime(event.raceDateISO, startClock) : null), [event, startClock]);
+  const [secs, setSecs] = uS(() => (startAt ? Math.round((startAt.getTime() - Date.now()) / 1000) : null));
+  uE(() => {
+    if (!startAt) return;
+    const id = setInterval(() => setSecs(Math.round((startAt.getTime() - Date.now()) / 1000)), 1000);
+    return () => clearInterval(id);
+  }, [startAt]);
+  const remaining = Math.max(0, secs || 0);
+  const h = String(Math.floor(remaining / 3600)).padStart(2, '0');
+  const m = String(Math.floor((remaining % 3600) / 60)).padStart(2, '0');
+  const s = String(remaining % 60).padStart(2, '0');
   return (
     <div style={{ height: '100%', background: `linear-gradient(180deg,${C.brandDk} 0%,#152f24 100%)`, color: '#fff', fontFamily: C.font, display: 'flex', flexDirection: 'column', padding: '40px 24px 30px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
         <BackBtn onClick={onBack} dark inline/>
-        <Logo/><span style={{ fontSize: 11.5, fontWeight: 700 }}>Rayong Trail Running</span>
+        <Logo/><span style={{ fontSize: 11.5, fontWeight: 700 }}>{(event && event.name) || 'Rayong Trail Running'}</span>
       </div>
-      <Kicker><span style={{ color: 'rgba(255,255,255,0.65)' }}>RAYONG TRAIL · WAVE {dist}</span></Kicker>
+      <Kicker><span style={{ color: 'rgba(255,255,255,0.65)' }}>WAVE {dist}</span></Kicker>
       <div style={{ fontSize: 20, fontWeight: 600, marginTop: 8 }}>รอเวลาปล่อยตัว</div>
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-        <div style={{ fontFamily: C.mono, fontSize: 44, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{h}:{m}:{s}</div>
-        <div style={{ fontFamily: C.mono, fontSize: 11, color: 'rgba(255,255,255,0.6)' }}>ปล่อยตัวเวลา 06:05 น.</div>
+        {secs === null
+          ? <div style={{ fontFamily: C.mono, fontSize: 15, color: 'rgba(255,255,255,0.7)' }}>ยังไม่มีเวลาปล่อยตัวของระยะนี้ — สแกน QR ได้เลยเมื่อกรรมการปล่อยตัว</div>
+          : <div style={{ fontFamily: C.mono, fontSize: 44, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{h}:{m}:{s}</div>}
+        {startClock && <div style={{ fontFamily: C.mono, fontSize: 11, color: 'rgba(255,255,255,0.6)' }}>ปล่อยตัวเวลา {startClock} น.</div>}
       </div>
       <div style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 12, padding: '12px 14px', marginBottom: 16, fontSize: 12, lineHeight: 1.6, color: 'rgba(255,255,255,0.85)' }}>
         GPS จะเริ่มบันทึกตำแหน่งทันทีที่คุณสแกน QR ที่จุดสตาร์ท — ไม่ใช่ตอนนี้ · ประหยัดแบตระหว่างรอ
@@ -1233,7 +1243,7 @@ function MobileApp() {
   else if (screen === 'register') body = <RegisterScreen event={pendingEvent} onDone={afterRegister} onBack={() => setScreen('events')}/>;
   else if (screen === 'register-success') body = <RegisterSuccessScreen dist={session.runner.dist} onContinue={() => setScreen('gps')}/>;
   else if (screen === 'gps') body = <GpsPermissionScreen onAllow={() => setScreen('prerace')} onBack={() => setScreen('register')}/>;
-  else if (screen === 'prerace') body = <PreRaceScreen dist={session.runner.dist} onBack={() => setScreen('events')} onScan={() => setScreen('qr-start')}/>;
+  else if (screen === 'prerace') body = <PreRaceScreen event={getEvents().find(e => e.id === session.runner.eventId)} dist={session.runner.dist} onBack={() => setScreen('events')} onScan={() => setScreen('qr-start')}/>;
   else if (screen === 'qr-start') body = <QrScanScreen label="จุดสตาร์ท" expectedCode={`TRT:${session.runner.eventId}:start`} onBack={() => setScreen('prerace')} onScanned={() => {
     updateRunner(r => ({ ...r, checkins: [{ cp: 'start', t: new Date().toTimeString().slice(0, 5) }], progressKm: 0 }));
     setScreen('app');
