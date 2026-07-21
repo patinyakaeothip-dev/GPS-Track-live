@@ -568,9 +568,9 @@ function PreRaceScreen({ event, dist, onScan, onBack, onPreview }) {
       </div>
       <Btn variant="white" onClick={onScan}>📷 สแกน QR ที่จุดสตาร์ท · เริ่ม Track</Btn>
       {onPreview && (
-        <div onClick={onPreview} style={{ textAlign: 'center', fontFamily: C.mono, fontSize: 11, color: 'rgba(255,255,255,0.6)', marginTop: 14, cursor: 'pointer', textDecoration: 'underline' }}>
-          👀 ดูตัวอย่างหน้า Track/Route/Ranking (ยังไม่นับว่าสตาร์ท)
-        </div>
+        <Btn variant="ghost" onClick={onPreview} style={{ marginTop: 10, borderColor: 'rgba(255,255,255,0.35)', color: 'rgba(255,255,255,0.85)' }}>
+          🗺 เปิด Track / Route / Ranking
+        </Btn>
       )}
     </div>
   );
