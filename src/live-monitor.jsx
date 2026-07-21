@@ -25,9 +25,6 @@ const NAMES = [
   ['307', 'ใหม่', '11K', 9.0, 'normal', 'M'],
 ];
 
-// RD can open the map early to check GPS/course setup before an upcoming
-// event actually starts, within this window before the earliest wave time.
-const PREVIEW_WINDOW_MS = 3 * 60 * 60 * 1000;
 // Same Thailand-time fix as combineDateTime in admin-app.jsx: build the Date
 // with an explicit +07:00 offset instead of relying on the viewer's local
 // timezone, so "06:00" always means Bangkok 06:00 no matter whose device
@@ -41,10 +38,6 @@ function earliestStartDate(ev) {
   const d = new Date(`${ev.raceDateISO}T${earliest}:00+07:00`);
   return Number.isNaN(d.getTime()) ? null : d;
 }
-function fmtClock(d) {
-  return d.toLocaleString('th-TH', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-}
-
 function fmtPace(p) {
   if (!isFinite(p) || p <= 0) return '—';
   let mm = Math.floor(p), ss = Math.round((p - mm) * 60);
@@ -113,11 +106,14 @@ function LiveMonitorApp() {
   // every render instead of trusting the stored status field, which is only
   // a snapshot from whenever Admin last hit save.
   const selectedStatus = selectedEvent ? window.eventStatus.computeStatus(selectedEvent) : null;
+  // RD can open the map/course preview for an upcoming event at any time —
+  // useful for checking the uploaded GPX/checkpoints look right well before
+  // race day, not just in a fixed window right before the start. Only the
+  // *live runner dots* are meaningfully time-gated (they need the race to
+  // have actually started), not the map itself.
   const [previewOpen, setPreviewOpen] = mS(false);
   const earliestStart = earliestStartDate(selectedEvent);
-  const previewFrom = earliestStart ? new Date(earliestStart.getTime() - PREVIEW_WINDOW_MS) : null;
-  const previewUnlocked = !!(earliestStart && Date.now() >= previewFrom.getTime() && Date.now() < earliestStart.getTime());
-  const showDashboard = !selectedEvent || selectedStatus === 'live' || (selectedStatus === 'upcoming' && previewUnlocked && previewOpen);
+  const showDashboard = !selectedEvent || selectedStatus === 'live' || (selectedStatus === 'upcoming' && previewOpen);
   const [rankGender, setRankGender] = mS(null);
   const [search, setSearch] = mS('');
   const [focusBib, setFocusBib] = mS(null);
@@ -313,20 +309,12 @@ function LiveMonitorApp() {
               "{selectedEvent.name}" มีกำหนดแข่ง {selectedEvent.date}<br/>
               แผนที่ GPS จะเริ่มแสดงตำแหน่งนักวิ่งเมื่องานเริ่มและมีคน scan QR ที่จุดสตาร์ทแล้ว
             </div>
-            {earliestStart && (
-              previewUnlocked ? (
-                <button onClick={() => setPreviewOpen(true)} style={{ marginTop: 16, padding: '10px 18px', background: M_BRAND, color: '#fff', border: 'none', borderRadius: 8, fontFamily: M_MONO, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
-                  🔍 ดูแผนที่ล่วงหน้า (preview)
-                </button>
-              ) : (
-                <div style={{ marginTop: 16, fontFamily: M_MONO, fontSize: 11, color: '#7c4a03', background: '#fdf6e3', display: 'inline-block', padding: '8px 14px', borderRadius: 8 }}>
-                  🔍 ดูแผนที่ล่วงหน้าได้ตั้งแต่ {fmtClock(previewFrom)} (3 ชม.ก่อนสตาร์ท)
-                </div>
-              )
-            )}
+            <button onClick={() => setPreviewOpen(true)} style={{ marginTop: 16, padding: '10px 18px', background: M_BRAND, color: '#fff', border: 'none', borderRadius: 8, fontFamily: M_MONO, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+              🔍 ดูแผนที่ / เส้นทาง
+            </button>
             {!earliestStart && (
-              <div style={{ marginTop: 16, fontFamily: M_MONO, fontSize: 10.5, color: '#5d6b59' }}>
-                (ยังกดดูแผนที่ล่วงหน้าไม่ได้ — ใส่วันที่แข่งและเวลาสตาร์ทของแต่ละระยะในหน้า Admin ก่อน)
+              <div style={{ marginTop: 12, fontFamily: M_MONO, fontSize: 10.5, color: '#5d6b59' }}>
+                (ยังไม่มีเวลาสตาร์ท — ใส่วันที่แข่งและเวลาสตาร์ทของแต่ละระยะในหน้า Admin เพื่อให้แผงนับถอยหลังทำงาน)
               </div>
             )}
           </div>
