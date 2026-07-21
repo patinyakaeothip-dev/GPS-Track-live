@@ -335,16 +335,19 @@ function EventForm({ initial, onCancel, onSave, onSaveInPlace, onDelete }) {
           </Field>
         </div>
 
-        <div style={{ fontFamily: A_MONO, fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#5d6b59', marginBottom: 6 }}>ไฟล์เส้นทาง (GPX) · เฉพาะงานนี้</div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 18 }}>
-          {['29K', '22K', '11K'].map(label => {
-            const g = ev.gpxFiles && ev.gpxFiles[label];
+        <div style={{ fontFamily: A_MONO, fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#5d6b59', marginBottom: 6 }}>ไฟล์เส้นทาง (GPX) · เฉพาะงานนี้ — ตามระยะที่ตั้งไว้ด้านล่าง</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 18 }}>
+          {ev.distances.map(de => {
+            const g = ev.gpxFiles && ev.gpxFiles[de.label];
             return (
-              <GpxCard key={label} label={label} filled={!!g} filename={g && g.filename}
-                stats={g ? `${g.track.totalKm.toFixed(1)} km · +${g.track.ascent} m` : ''}
-                onParsed={(filename, track) => set({ gpxFiles: { ...(ev.gpxFiles || {}), [label]: { filename, track } } })}/>
+              <div key={de.id} style={{ width: 180 }}>
+                <GpxCard label={de.label} filled={!!g} filename={g && g.filename}
+                  stats={g ? `${g.track.totalKm.toFixed(1)} km · +${g.track.ascent} m` : ''}
+                  onParsed={(filename, track) => set({ gpxFiles: { ...(ev.gpxFiles || {}), [de.label]: { filename, track } } })}/>
+              </div>
             );
           })}
+          {ev.distances.length === 0 && <div style={{ fontSize: 12, color: '#5d6b59' }}>ยังไม่มีระยะ — เพิ่มระยะที่ส่วน "ระยะที่เปิดรับสมัคร" ด้านล่างก่อน</div>}
         </div>
         <div style={{ fontFamily: A_MONO, fontSize: 10, color: '#5d6b59', margin: '-10px 0 18px', lineHeight: 1.5 }}>
           แต่ละระยะมีเส้นทาง GPX แยกกัน (ไม่บังคับให้ใช้เส้นเดียวกัน) · รองรับ Suunto / Garmin / Strava export (.gpx)
