@@ -292,19 +292,19 @@ function EventForm({ initial, onCancel, onSave, onSaveInPlace, onDelete }) {
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
                 <div style={{ width: 84 }}>
                   <div style={{ fontFamily: A_MONO, fontSize: 9, color: '#5d6b59', marginBottom: 3 }}>สตาร์ท</div>
-                  <input value={de.cpTimes.start} onChange={e => updateDistCp(de.id, 'start', e.target.value)} placeholder="06:00"
+                  <input type="time" value={de.cpTimes.start} onChange={e => updateDistCp(de.id, 'start', e.target.value)}
                     style={{ width: '100%', padding: '7px 8px', background: '#fff', border: '1px solid #e5e0d3', borderRadius: 8, fontFamily: A_MONO, fontSize: 12, textAlign: 'center' }}/>
                 </div>
                 {cpEditor.map(cpe => (
                   <div key={cpe.key} style={{ width: 84 }}>
                     <div style={{ fontFamily: A_MONO, fontSize: 9, color: '#5d6b59', marginBottom: 3 }}>{cpe.label}</div>
-                    <input value={de.cpTimes[cpe.key]} onChange={e => updateDistCp(de.id, cpe.key, e.target.value)} placeholder="--:--"
+                    <input type="time" value={de.cpTimes[cpe.key]} onChange={e => updateDistCp(de.id, cpe.key, e.target.value)}
                       style={{ width: '100%', padding: '7px 8px', background: '#fff', border: '1px solid #e5e0d3', borderRadius: 8, fontFamily: A_MONO, fontSize: 12, textAlign: 'center' }}/>
                   </div>
                 ))}
                 <div style={{ width: 84 }}>
                   <div style={{ fontFamily: A_MONO, fontSize: 9, color: '#5d6b59', marginBottom: 3 }}>Finish cutoff</div>
-                  <input value={de.cpTimes.finish} onChange={e => updateDistCp(de.id, 'finish', e.target.value)} placeholder="12:00"
+                  <input type="time" value={de.cpTimes.finish} onChange={e => updateDistCp(de.id, 'finish', e.target.value)}
                     style={{ width: '100%', padding: '7px 8px', background: '#fff', border: '1px solid #e5e0d3', borderRadius: 8, fontFamily: A_MONO, fontSize: 12, textAlign: 'center' }}/>
                 </div>
               </div>

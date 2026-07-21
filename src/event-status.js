@@ -17,8 +17,16 @@
 // (UTC+7) explicitly — never the viewer's local device timezone.
 (function () {
   function combineDateTime(dateISO, hhmm) {
-    if (!dateISO || !/^\d{2}:\d{2}$/.test(hhmm || '')) return null;
-    const d = new Date(`${dateISO}T${hhmm}:00+07:00`);
+    if (!dateISO || !hhmm) return null;
+    // The CP-time fields used to be freeform text, so data entered before
+    // they became <input type="time"> may use "." or a space instead of ":"
+    // (e.g. "06.00") — that silently failed to parse and was the actual
+    // root cause of an event showing the wrong status even with times that
+    // "looked" filled in. Normalize before parsing so old data self-heals.
+    const m = /^(\d{1,2})[:.\s](\d{2})$/.exec(String(hhmm).trim());
+    if (!m) return null;
+    const normalized = `${m[1].padStart(2, '0')}:${m[2]}`;
+    const d = new Date(`${dateISO}T${normalized}:00+07:00`);
     return Number.isNaN(d.getTime()) ? null : d;
   }
 
