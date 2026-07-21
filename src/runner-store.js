@@ -19,6 +19,15 @@
   function listRunners(eventId) {
     return loadRunners().filter(r => r.eventId === eventId);
   }
+  // Cross-device lookup: "have I already registered" only worked before if
+  // this exact browser's local session still remembered it. A registration
+  // is really tied to the runner's Google account (uid), which is stored on
+  // the roster record regardless of device — this is what lets the app
+  // recognize "you already registered" after a fresh login anywhere.
+  function listRunnersByUid(uid) {
+    if (!uid) return [];
+    return loadRunners().filter(r => r.uid === uid);
+  }
 
   // Bibs are 4-digit, assigned per distance using that distance's numeric
   // prefix (1000s for the 1st distance in the event, 2000s for the 2nd,
@@ -117,5 +126,5 @@
   if (window.fb) startFirestoreSync();
   else window.addEventListener('trt:firebase-ready', startFirestoreSync, { once: true });
 
-  Object.assign(window, { runnerStore: { listRunners, registerRunner, updateRunnerProgress, deleteRunner, renumberBibs } });
+  Object.assign(window, { runnerStore: { listRunners, listRunnersByUid, registerRunner, updateRunnerProgress, deleteRunner, renumberBibs } });
 })();
