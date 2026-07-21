@@ -1024,17 +1024,34 @@ function MobileApp() {
     setScreen('register');
   }
   function afterRegister(data) {
+    let runner = { dist: data.dist, name: data.nick, checkins: [], progressKm: 0, eventId: pendingEvent && pendingEvent.id };
+    if (pendingEvent) {
+      window.eventStore.incrementRegistration(pendingEvent.id, data.dist);
+      // Writes a real roster entry (name/bib/distance) separate from the
+      // registration *count* above — this is what makes a runner show up
+      // as themselves instead of just a +1 on the quota. See
+      // src/runner-store.js.
+      if (window.runnerStore) {
+        const rosterEntry = window.runnerStore.registerRunner(pendingEvent, {
+          distance: data.dist, nickname: data.nick, phone: data.phone, emgPhone: data.emg, uid: session.user.uid,
+        });
+        runner = { ...runner, bib: rosterEntry.bib, rosterId: rosterEntry.id };
+      }
+    }
     persist({
       ...session,
       user: { ...session.user, nickname: session.user.nickname || data.nick, phone: session.user.phone || data.phone, emgPhone: session.user.emgPhone || data.emg },
-      runner: { dist: data.dist, name: data.nick, checkins: [], progressKm: 0, eventId: pendingEvent && pendingEvent.id },
+      runner,
       spectator: false, followBib: null,
     });
-    if (pendingEvent) window.eventStore.incrementRegistration(pendingEvent.id, data.dist);
     setScreen('register-success');
   }
   function updateRunner(fn) {
-    persist({ ...session, runner: fn(session.runner) });
+    const nextRunner = fn(session.runner);
+    persist({ ...session, runner: nextRunner });
+    if (nextRunner.rosterId && window.runnerStore) {
+      window.runnerStore.updateRunnerProgress(nextRunner.rosterId, { checkins: nextRunner.checkins, progressKm: nextRunner.progressKm });
+    }
   }
   function updateUser(nextUser) {
     const withCompleted = { ...nextUser, profileCompleted: true };

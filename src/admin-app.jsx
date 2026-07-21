@@ -120,6 +120,41 @@ function QrCard({ eventId, cpKey, label }) {
   );
 }
 
+// Real registered runners for this event — separate from the "สมัครแล้ว"
+// quota counter (which just tracks a number) and from the fully-simulated
+// demo names shown on the Live Monitor map. See src/runner-store.js.
+function RunnerRoster({ eventId }) {
+  const [runners, setRunners] = aS(() => (window.runnerStore ? window.runnerStore.listRunners(eventId) : []));
+  aE(() => {
+    const refresh = () => setRunners(window.runnerStore ? window.runnerStore.listRunners(eventId) : []);
+    refresh();
+    window.addEventListener('trt:runners-updated', refresh);
+    return () => window.removeEventListener('trt:runners-updated', refresh);
+  }, [eventId]);
+
+  return (
+    <div style={{ marginBottom: 20 }}>
+      <div style={{ fontFamily: A_MONO, fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#5d6b59', marginBottom: 4 }}>นักวิ่งที่ลงทะเบียนจริง ({runners.length})</div>
+      <div style={{ fontFamily: A_MONO, fontSize: 10, color: '#5d6b59', marginBottom: 8, lineHeight: 1.5 }}>
+        รายชื่อจริงจากนักวิ่งที่กดลงทะเบียนในแอป (คนละส่วนกับตัวเลข "สมัครแล้ว" ด้านล่าง ซึ่งเป็นแค่ตัวนับ) — บิบเลขนี้คือบิบจริงของนักวิ่งคนนั้น
+      </div>
+      {runners.length === 0 && <div style={{ padding: 16, background: '#fafaf8', border: '1px solid #ece7da', borderRadius: 10, textAlign: 'center', fontSize: 12, color: '#5d6b59' }}>ยังไม่มีใครลงทะเบียนงานนี้</div>}
+      {runners.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {runners.sort((a, b) => a.bib.localeCompare(b.bib, undefined, { numeric: true })).map(r => (
+            <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: '#fafaf8', border: '1px solid #ece7da', borderRadius: 10 }}>
+              <span style={{ fontFamily: A_MONO, fontSize: 12, fontWeight: 700, width: 46 }}>#{r.bib}</span>
+              <span style={{ fontSize: 12.5, fontWeight: 600, flex: 1, minWidth: 0 }}>{r.nickname}</span>
+              <span style={{ fontFamily: A_MONO, fontSize: 10.5, color: '#5d6b59' }}>{r.distance}</span>
+              <span style={{ fontFamily: A_MONO, fontSize: 10.5, color: '#5d6b59', width: 90, textAlign: 'right' }}>{(r.checkins || []).length} เช็คอิน</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const STATUS_META = {
   live: { label: '🟢 กำลังแข่ง', color: A_BRAND },
   upcoming: { label: '🕓 กำลังจะมาถึง', color: '#7c4a03' },
@@ -378,6 +413,8 @@ function EventForm({ initial, onCancel, onSave, onSaveInPlace, onDelete }) {
             </div>
           ))}
         </div>
+
+        {!isNew && <RunnerRoster eventId={ev.id}/>}
 
         <div style={{ fontFamily: A_MONO, fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#5d6b59', marginBottom: 4 }}>ระยะที่เปิดรับสมัคร + cut-off + โควตา (แก้ไขระยะได้เอง)</div>
         <div style={{ fontFamily: A_MONO, fontSize: 10, color: '#5d6b59', marginBottom: 8, lineHeight: 1.5 }}>
