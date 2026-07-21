@@ -212,7 +212,15 @@ function LiveMonitorApp() {
     });
     mapRef.current = map;
     return () => { map.remove(); mapRef.current = null; };
-  }, [ready]);
+  // Also re-run when showDashboard flips true: for an "upcoming" event the
+  // course/runner data (ready) usually finishes loading *before* the RD
+  // clicks "ดูแผนที่ / เส้นทาง" (see #69's preview gate), so the map's host
+  // <div> doesn't exist in the DOM yet at the moment `ready` becomes true —
+  // this effect would bail out via the mapHostRef.current guard and never
+  // fire again, leaving the map container permanently empty even after the
+  // preview button mounts it. Re-running once the container actually exists
+  // fixes that without touching the guard itself.
+  }, [ready, showDashboard]);
 
   mE(() => { if (mapRef.current && dashView === 'map') setTimeout(() => mapRef.current.invalidateSize(), 60); }, [dashView]);
 
