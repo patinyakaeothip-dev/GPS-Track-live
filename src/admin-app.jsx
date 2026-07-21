@@ -123,8 +123,10 @@ function QrCard({ eventId, cpKey, label }) {
 // Real registered runners for this event — separate from the "สมัครแล้ว"
 // quota counter (which just tracks a number) and from the fully-simulated
 // demo names shown on the Live Monitor map. See src/runner-store.js.
-function RunnerRoster({ eventId }) {
+function RunnerRoster({ eventId, distances }) {
   const [runners, setRunners] = aS(() => (window.runnerStore ? window.runnerStore.listRunners(eventId) : []));
+  const [q, setQ] = aS('');
+  const [distFilter, setDistFilter] = aS('all');
   aE(() => {
     const refresh = () => setRunners(window.runnerStore ? window.runnerStore.listRunners(eventId) : []);
     refresh();
@@ -132,16 +134,37 @@ function RunnerRoster({ eventId }) {
     return () => window.removeEventListener('trt:runners-updated', refresh);
   }, [eventId]);
 
+  const query = q.trim().toLowerCase();
+  const filtered = runners
+    .filter(r => distFilter === 'all' || r.distance === distFilter)
+    .filter(r => !query || r.nickname.toLowerCase().includes(query) || r.bib.includes(query))
+    .sort((a, b) => a.bib.localeCompare(b.bib, undefined, { numeric: true }));
+
   return (
     <div style={{ marginBottom: 20 }}>
       <div style={{ fontFamily: A_MONO, fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#5d6b59', marginBottom: 4 }}>นักวิ่งที่ลงทะเบียนจริง ({runners.length})</div>
       <div style={{ fontFamily: A_MONO, fontSize: 10, color: '#5d6b59', marginBottom: 8, lineHeight: 1.5 }}>
         รายชื่อจริงจากนักวิ่งที่กดลงทะเบียนในแอป (คนละส่วนกับตัวเลข "สมัครแล้ว" ด้านล่าง ซึ่งเป็นแค่ตัวนับ) — บิบเลขนี้คือบิบจริงของนักวิ่งคนนั้น
       </div>
-      {runners.length === 0 && <div style={{ padding: 16, background: '#fafaf8', border: '1px solid #ece7da', borderRadius: 10, textAlign: 'center', fontSize: 12, color: '#5d6b59' }}>ยังไม่มีใครลงทะเบียนงานนี้</div>}
       {runners.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {runners.sort((a, b) => a.bib.localeCompare(b.bib, undefined, { numeric: true })).map(r => (
+        <div style={{ display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
+          <input value={q} onChange={e => setQ(e.target.value)} placeholder="🔍 ค้นหาชื่อ หรือ บิบ"
+            style={{ flex: 1, minWidth: 160, padding: '7px 10px', background: '#fff', border: '1px solid #e5e0d3', borderRadius: 8, fontSize: 12.5 }}/>
+          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+            {['all', ...(distances || []).map(d => d.label)].map(v => (
+              <button key={v} onClick={() => setDistFilter(v)} style={{ padding: '6px 10px', borderRadius: 999, border: `1px solid ${distFilter === v ? A_BRAND : '#e5e0d3'}`,
+                background: distFilter === v ? A_BRAND : '#fff', color: distFilter === v ? '#fff' : '#5d6b59', fontFamily: A_MONO, fontSize: 10.5, fontWeight: 700, cursor: 'pointer' }}>
+                {v === 'all' ? 'ทั้งหมด' : v}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      {runners.length === 0 && <div style={{ padding: 16, background: '#fafaf8', border: '1px solid #ece7da', borderRadius: 10, textAlign: 'center', fontSize: 12, color: '#5d6b59' }}>ยังไม่มีใครลงทะเบียนงานนี้</div>}
+      {runners.length > 0 && filtered.length === 0 && <div style={{ padding: 16, background: '#fafaf8', border: '1px solid #ece7da', borderRadius: 10, textAlign: 'center', fontSize: 12, color: '#5d6b59' }}>ไม่พบนักวิ่งที่ค้นหา</div>}
+      {filtered.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 320, overflowY: 'auto', paddingRight: 4 }}>
+          {filtered.map(r => (
             <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: '#fafaf8', border: '1px solid #ece7da', borderRadius: 10 }}>
               <span style={{ fontFamily: A_MONO, fontSize: 12, fontWeight: 700, width: 46 }}>#{r.bib}</span>
               <span style={{ fontSize: 12.5, fontWeight: 600, flex: 1, minWidth: 0 }}>{r.nickname}</span>
@@ -414,7 +437,7 @@ function EventForm({ initial, onCancel, onSave, onSaveInPlace, onDelete }) {
           ))}
         </div>
 
-        {!isNew && <RunnerRoster eventId={ev.id}/>}
+        {!isNew && <RunnerRoster eventId={ev.id} distances={ev.distances}/>}
 
         <div style={{ fontFamily: A_MONO, fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#5d6b59', marginBottom: 4 }}>ระยะที่เปิดรับสมัคร + cut-off + โควตา (แก้ไขระยะได้เอง)</div>
         <div style={{ fontFamily: A_MONO, fontSize: 10, color: '#5d6b59', marginBottom: 8, lineHeight: 1.5 }}>
