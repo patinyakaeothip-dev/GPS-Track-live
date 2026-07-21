@@ -9,7 +9,7 @@
 
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
 import {
-  getAuth, GoogleAuthProvider, signInWithRedirect, getRedirectResult, signOut, onAuthStateChanged,
+  getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signOut, onAuthStateChanged,
 } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
 import {
   getFirestore, collection, doc, getDocs, setDoc, deleteDoc, onSnapshot,
@@ -29,17 +29,30 @@ if (!configured) {
 
   window.fb = {
     app, auth, db,
-    // Always redirect, never popup. signInWithPopup opens about:blank in a
-    // separate window context — mobile browsers and in-app webviews (Line,
-    // Facebook, etc.) often block that outright or leave it stuck blank,
-    // and even on plain desktop Chrome it started failing with
-    // "Cross-Origin-Opener-Policy policy would block the window.closed
-    // call" once Chrome tightened its default COOP behavior for popups.
-    // Detecting "is this mobile" via user-agent sniffing to pick between
-    // the two (tried previously) is also unreliable — iPadOS defaults to a
-    // desktop-looking UA, "Request Desktop Site" strips it on phones too —
-    // so redirect unconditionally instead of trying to guess.
-    signInWithGoogle: () => signInWithRedirect(auth, googleProvider),
+    // Try popup first, fall back to redirect. Neither one alone has proven
+    // reliable across every real device tested:
+    //  - popup used to fail everywhere with "Cross-Origin-Opener-Policy
+    //    policy would block the window.closed call" — fixed by serving
+    //    `Cross-Origin-Opener-Policy: same-origin-allow-popups` (see
+    //    _headers) so this page is allowed to poll the popup window.
+    //  - redirect alone (tried previously) still silently failed on real
+    //    mobile phones even once that popup issue was understood — the
+    //    round trip through the authDomain (a different origin than this
+    //    app) and back seems to lose its pending state in some mobile
+    //    browser storage-partitioning scenarios that are hard to reproduce
+    //    outside a real device.
+    // Popup succeeding first avoids that whole round trip; only environments
+    // that outright block/close the popup (in-app webviews like Line/
+    // Facebook, popup blockers) fall through to redirect.
+    async signInWithGoogle() {
+      try {
+        return await signInWithPopup(auth, googleProvider);
+      } catch (err) {
+        const popupFailureCodes = ['auth/popup-blocked', 'auth/popup-closed-by-user', 'auth/cancelled-popup-request', 'auth/operation-not-supported-in-this-environment'];
+        if (popupFailureCodes.includes(err.code)) return signInWithRedirect(auth, googleProvider);
+        throw err;
+      }
+    },
     // Only relevant on the redirect path — call on page load to pick up the
     // result of a Google sign-in that just navigated back. Resolves to null
     // when there's no pending redirect sign-in.
