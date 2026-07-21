@@ -107,8 +107,8 @@ function RunnerManagerApp({ adminEmail, onLogout }) {
     editRunner(r, { dnf: !r.dnf });
   }
   function exportCsv() {
-    const rows = [['bib', 'ชื่อ', 'เบอร์โทร', 'ระยะ', 'เช็คอิน', 'DNF']];
-    filtered.forEach(r => rows.push([r.bib, r.nickname, r.phone, r.distance, (r.checkins || []).length, r.dnf ? 'DNF' : '']));
+    const rows = [['bib', 'ชื่อ', 'เบอร์โทร', 'เพศ', 'ระยะ', 'เช็คอิน', 'DNF']];
+    filtered.forEach(r => rows.push([r.bib, r.nickname, r.phone, r.gender === 'm' ? 'ชาย' : r.gender === 'f' ? 'หญิง' : '', r.distance, (r.checkins || []).length, r.dnf ? 'DNF' : '']));
     downloadCsv(`runners-${selectedEvent ? selectedEvent.id : 'export'}.csv`, rows);
   }
   function renumberAll() {
@@ -171,13 +171,18 @@ function RunnerManagerApp({ adminEmail, onLogout }) {
       {filtered.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {filtered.map(r => (
-            <div key={r.id} style={{ display: 'grid', gridTemplateColumns: '54px 1.4fr 1fr 90px 80px auto auto', gap: 8, alignItems: 'center',
+            <div key={r.id} style={{ display: 'grid', gridTemplateColumns: '54px 1.4fr 1fr 90px 64px 80px auto auto', gap: 8, alignItems: 'center',
               padding: '8px 10px', background: r.dnf ? '#fef7f7' : '#fafaf8', border: `1px solid ${r.dnf ? '#f0c9c4' : '#ece7da'}`, borderRadius: 10 }}>
               <span style={{ fontFamily: R_MONO, fontSize: 12, fontWeight: 700 }}>#{r.bib}</span>
               <input value={r.nickname} onChange={e => editRunner(r, { nickname: e.target.value })} style={inputStyle}/>
               <input value={r.phone} onChange={e => editRunner(r, { phone: e.target.value })} style={{ ...inputStyle, fontFamily: R_MONO }}/>
               <select value={r.distance} onChange={e => editRunner(r, { distance: e.target.value })} style={{ ...inputStyle, fontFamily: R_MONO }}>
                 {(selectedEvent && selectedEvent.distances || []).map(d => <option key={d.id} value={d.label}>{d.label}</option>)}
+              </select>
+              <select value={r.gender || ''} onChange={e => editRunner(r, { gender: e.target.value })} style={{ ...inputStyle, fontFamily: R_MONO }}>
+                <option value="">—</option>
+                <option value="m">ชาย</option>
+                <option value="f">หญิง</option>
               </select>
               <span style={{ fontFamily: R_MONO, fontSize: 10.5, color: '#5d6b59', textAlign: 'center' }}>{(r.checkins || []).length} เช็คอิน</span>
               <button onClick={() => toggleDnf(r)} style={{ padding: '6px 9px', background: r.dnf ? '#b91c1c' : 'transparent', color: r.dnf ? '#fff' : '#b91c1c', border: '1px solid #b91c1c', borderRadius: 8, fontFamily: R_MONO, fontSize: 10, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>{r.dnf ? 'ยกเลิก DNF' : 'Mark DNF'}</button>

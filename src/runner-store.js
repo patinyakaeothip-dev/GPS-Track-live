@@ -40,6 +40,7 @@
       distance: data.distance,
       nickname: data.nickname,
       phone: data.phone || '',
+      gender: data.gender || '',
       emgPhone: data.emgPhone || '',
       uid: data.uid || '',
       checkins: [],
