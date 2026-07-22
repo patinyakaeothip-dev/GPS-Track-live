@@ -125,8 +125,8 @@ function Logo({ size = 18 }) {
 
 function Brand() {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-      <Logo size={28}/><span style={{ fontSize: 13, fontWeight: 700, color: C.brandDk }}>Rayong Trail Running</span>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      <Logo size={44}/><span style={{ fontSize: 17, fontWeight: 800, color: C.brandDk }}>Rayong Trail Running</span>
     </div>
   );
 }
