@@ -236,7 +236,9 @@ function EventCard({ ev, isRegistered, onRunnerSpace, onFollow, onSeeResult }) {
     return (
       <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 14, boxShadow: '0 1px 3px rgba(31,42,28,0.08)', overflow: 'hidden' }}>
         <div style={{ display: 'flex', gap: 12, alignItems: 'center', padding: 14 }}>
-          <div style={{ width: 46, height: 46, borderRadius: 12, background: '#e5e4df', flexShrink: 0 }}/>
+          {ev.logoUrl
+            ? <div style={{ width: 46, height: 46, borderRadius: 12, background: '#fff', border: `1px solid ${C.border}`, padding: 4, flexShrink: 0, overflow: 'hidden' }}><img src={ev.logoUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }}/></div>
+            : <div style={{ width: 46, height: 46, borderRadius: 12, background: '#e5e4df', flexShrink: 0 }}/>}
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 14.5, fontWeight: 600, color: C.text }}>{ev.name}</div>
             <div style={{ fontFamily: C.mono, fontSize: 10.5, color: C.muted, marginTop: 2 }}>{ev.date}{ev.bib ? ` · bib #${ev.bib}` : ''}{ev.distance ? ` · ${ev.distance}` : ''} · จบแล้ว</div>
@@ -250,7 +252,9 @@ function EventCard({ ev, isRegistered, onRunnerSpace, onFollow, onSeeResult }) {
     <div style={{ background: '#fff', border: status === 'live' ? `2px solid ${C.brand}` : `1px solid ${C.border}`,
       borderRadius: 14, boxShadow: status !== 'live' ? '0 1px 3px rgba(31,42,28,0.08)' : 'none', overflow: 'hidden' }}>
       <div style={{ display: 'flex', gap: 12, alignItems: 'center', padding: 14 }}>
-        {status === 'live'
+        {ev.logoUrl
+          ? <div style={{ width: 46, height: 46, borderRadius: 12, background: '#fff', border: '1px solid #d8d2c2', padding: 4, flexShrink: 0, overflow: 'hidden' }}><img src={ev.logoUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }}/></div>
+          : status === 'live'
           ? <div style={{ width: 46, height: 46, borderRadius: 12, background: '#fff', border: '1px solid #d8d2c2', padding: 4, flexShrink: 0, overflow: 'hidden' }}><img src="assets/rayong-trail-icon.png" alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }}/></div>
           : <div style={{ width: 46, height: 46, borderRadius: 12, background: '#e5e4df', flexShrink: 0 }}/>}
         <div style={{ flex: 1, minWidth: 0 }}>
