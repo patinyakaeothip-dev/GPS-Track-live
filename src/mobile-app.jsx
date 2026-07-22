@@ -788,11 +788,53 @@ function cpKmFor(event, cpId, distLabel) {
   return cp ? (parseFloat(cp.km) || 0) : 0;
 }
 
+// Writes the real finish result to the localStorage key certificate.html
+// reads (trt.finish.result), so "บันทึกใบประกาศ" always reflects this
+// runner's actual checkpoint times/rank instead of the old hardcoded demo
+// values the certificate page shipped with.
+function saveCertificateResult(session, event, checkins) {
+  try {
+    const runner = session.runner;
+    const startCk = checkins.find(c => c.cp === 'start');
+    const finishCk = checkins.find(c => c.cp === 'finish');
+    const combine = window.eventStatus && window.eventStatus.combineDateTime;
+    const startMs = startCk && combine ? combine(event && event.raceDateISO, startCk.t) : null;
+    const finishMs = finishCk && combine ? combine(event && event.raceDateISO, finishCk.t) : Date.now();
+    const totalMs = (startMs && finishMs) ? finishMs - startMs : null;
+
+    let rank = null;
+    if (window.runnerStore && event && combine) {
+      const times = window.runnerStore.listRunners(event.id)
+        .filter(r => r.distance === runner.dist && (r.checkins || []).some(c => c.cp === 'finish'))
+        .map(r => {
+          const s = (r.checkins || []).find(c => c.cp === 'start');
+          const f = (r.checkins || []).find(c => c.cp === 'finish');
+          const sm = s ? combine(event.raceDateISO, s.t) : null;
+          const fm = f ? combine(event.raceDateISO, f.t) : null;
+          return { bib: r.bib, ms: (sm != null && fm != null) ? fm - sm : Infinity };
+        })
+        .sort((a, b) => a.ms - b.ms);
+      const idx = times.findIndex(x => x.bib === runner.bib);
+      if (idx >= 0) rank = idx + 1;
+    }
+
+    const data = {
+      runner: { name: runner.name, distance_current: runner.dist, distance_original: runner.dist },
+      total_time_ms: totalMs,
+      rank,
+      finish_at: finishMs,
+      distance_km: parseFloat(runner.dist) || 0,
+    };
+    localStorage.setItem('trt.finish.result', JSON.stringify(data));
+  } catch (err) { console.warn('[trt] certificate save failed', err); }
+}
+
 function TrackTab({ runner, event, onScan, onSos, onDnf }) {
   const seq = cpSeqFor(event);
   const nextIdx = runner.checkins.length;
   const totalKm = parseFloat(runner.dist) || 29;
   const pct = Math.min(100, (runner.progressKm / totalKm) * 100);
+  const finished = runner.checkins.some(c => c.cp === 'finish');
   return (
     <div style={{ flex: 1, overflow: 'auto', padding: '16px 18px 90px', display: 'flex', flexDirection: 'column', gap: 14 }}>
       <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 14, padding: 16, boxShadow: '0 1px 3px rgba(31,42,28,0.08)' }}>
@@ -810,10 +852,14 @@ function TrackTab({ runner, event, onScan, onSos, onDnf }) {
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: 10 }}>
-        <Btn variant="primary" onClick={onScan} style={{ flex: 1 }}>📷 Scan QR</Btn>
-        <Btn variant="danger" onClick={onSos} style={{ flex: 1 }}>🆘 SOS</Btn>
-      </div>
+      {finished ? (
+        <Btn variant="primary" onClick={() => window.open('certificate.html', '_blank')}>🏅 บันทึกใบประกาศ</Btn>
+      ) : (
+        <div style={{ display: 'flex', gap: 10 }}>
+          <Btn variant="primary" onClick={onScan} style={{ flex: 1 }}>📷 Scan QR</Btn>
+          <Btn variant="danger" onClick={onSos} style={{ flex: 1 }}>🆘 SOS</Btn>
+        </div>
+      )}
 
       <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 14, overflow: 'hidden' }}>
         <div style={{ padding: '10px 14px', borderBottom: `1px solid ${C.border}`, fontFamily: C.mono, fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted, fontWeight: 600 }}>Checkpoints</div>
@@ -1323,7 +1369,8 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
     setScanning(false);
     const t = new Date().toTimeString().slice(0, 5);
     const km = cpKmFor(currentEvent, nextCp, session.runner.dist);
-    updateRunner(r => ({ ...r, checkins: [...r.checkins, { cp: nextCp, t }], progressKm: km }));
+    const checkins = [...session.runner.checkins, { cp: nextCp, t }];
+    updateRunner(r => ({ ...r, checkins, progressKm: km }));
     setScanned({ cp: cpLabelFor(currentEvent, nextCp), km });
     // Scanning the start CP is the "gun goes off" moment — that's when GPS
     // should start recording, not the instant the phone got permission.
@@ -1335,6 +1382,7 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
         window.trtGpsTracker.stop();
       }
     }
+    if (nextCp === 'finish') saveCertificateResult(session, currentEvent, checkins);
   }
 
   if (scanning) return <QrScanScreen label={nextCp === 'start' ? 'จุดสตาร์ท' : cpLabelFor(currentEvent, nextCp)}
