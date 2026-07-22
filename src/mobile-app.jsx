@@ -1465,7 +1465,7 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
   }
   function scanComplete() {
     setScanning(false);
-    const t = new Date().toTimeString().slice(0, 5);
+    const t = new Date().toTimeString().slice(0, 8);
     const km = cpKmFor(currentEvent, nextCp, session.runner.dist);
     const checkins = [...session.runner.checkins, { cp: nextCp, t }];
     updateRunner(r => ({ ...r, checkins, progressKm: km }));
@@ -1683,7 +1683,7 @@ function MobileApp() {
   else if (screen === 'gps') body = <GpsPermissionScreen onAllow={() => setScreen('prerace')} onBack={() => setScreen('register')}/>;
   else if (screen === 'prerace') body = <PreRaceScreen event={getEvents().find(e => e.id === session.runner.eventId)} dist={session.runner.dist} onBack={() => setScreen('events')} onScan={() => setScreen('qr-start')} onPreview={() => setScreen('app')}/>;
   else if (screen === 'qr-start') body = <QrScanScreen label="จุดสตาร์ท" expectedCode={`TRT:${session.runner.eventId}:start`} onBack={() => setScreen('prerace')} onScanned={() => {
-    updateRunner(r => ({ ...r, checkins: [{ cp: 'start', t: new Date().toTimeString().slice(0, 5) }], progressKm: 0 }));
+    updateRunner(r => ({ ...r, checkins: [{ cp: 'start', t: new Date().toTimeString().slice(0, 8) }], progressKm: 0 }));
     setScreen('app');
   }}/>;
   else if (screen === 'app') body = <AppShell user={session.user} session={session} updateRunner={updateRunner}
