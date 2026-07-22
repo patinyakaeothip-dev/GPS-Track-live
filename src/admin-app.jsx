@@ -8,6 +8,32 @@ const { useState: aS, useEffect: aE, useRef: aR } = React;
 
 const A_BRAND = '#2d6a4f', A_MONO = "'JetBrains Mono',ui-monospace,monospace";
 
+// Downscales an uploaded image to at most maxSize on its longest side and
+// re-encodes it as a compressed JPEG data URL — used for the event logo
+// upload so a full-resolution phone photo doesn't blow past Firestore's
+// 1MiB per-document limit when stored inline on the event doc.
+function resizeImageToDataUrl(file, maxSize) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > height) { if (width > maxSize) { height = Math.round(height * maxSize / width); width = maxSize; } }
+        else if (height > maxSize) { width = Math.round(width * maxSize / height); height = maxSize; }
+        const canvas = document.createElement('canvas');
+        canvas.width = width; canvas.height = height;
+        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', 0.85));
+      };
+      img.onerror = reject;
+      img.src = reader.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
 const THAI_MONTHS = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
 function formatThaiDate(iso) {
   const [y, m, d] = iso.split('-').map(Number);
@@ -370,9 +396,13 @@ function EventForm({ initial, onCancel, onSave, onSaveInPlace, onDelete }) {
                 <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => {
                   const file = e.target.files && e.target.files[0];
                   if (!file) return;
-                  const reader = new FileReader();
-                  reader.onload = () => set({ logoUrl: reader.result });
-                  reader.readAsDataURL(file);
+                  // Resize/compress before storing — a raw photo straight off a
+                  // phone camera can be several MB, and base64-encoding it
+                  // inline on the event doc risks tripping Firestore's 1MiB
+                  // per-document limit, which fails the whole save silently
+                  // (same class of bug as the earlier GPX/Firestore issue).
+                  // 400px is plenty for an icon-sized logo.
+                  resizeImageToDataUrl(file, 400).then(dataUrl => set({ logoUrl: dataUrl })).catch(() => {});
                   e.target.value = '';
                 }}/>
               </label>
