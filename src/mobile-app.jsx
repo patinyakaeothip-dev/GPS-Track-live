@@ -852,7 +852,7 @@ function RouteTab({ course, runner, event }) {
 // visible km window is than the full course; `panKm` is that window's left
 // edge, always clamped so it can't scroll past either end.
 function ElevationSvg({ course, progressKm, checkpoints }) {
-  const w = 340, h = 104, pad = 6, padBottom = 20;
+  const w = 340, h = 112, pad = 6, padBottom = 28;
   const pts = course.points;
   const minE = course.minEle, maxE = course.maxEle;
   const totalKm = course.totalKm;
@@ -921,14 +921,15 @@ function ElevationSvg({ course, progressKm, checkpoints }) {
   const marks = [[0, 'START'], ...(checkpoints || []).map(cp => [parseFloat(cp.km) || 0, cp.label]), [course.totalKm, 'FINISH']];
   return (
     <div style={{ position: 'relative' }}>
-      <svg viewBox={`0 0 ${w} ${h}`} style={{ width: '100%', height: 104, marginTop: 6, touchAction: 'none', cursor: zoom > 1 ? 'grab' : 'default' }}
+      <svg viewBox={`0 0 ${w} ${h}`} style={{ width: '100%', height: h, marginTop: 6, touchAction: 'none', cursor: zoom > 1 ? 'grab' : 'default' }}
         onWheel={onWheel} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}>
         <path d={path} fill="none" stroke={C.brand} strokeWidth="2"/>
         <line x1={markX} y1="0" x2={markX} y2={h - padBottom} stroke={C.orange} strokeWidth="1.5" strokeDasharray="3 3"/>
         {marks.map(([km, label], i) => (
           <g key={i}>
             <line x1={x(km)} y1="0" x2={x(km)} y2={h - padBottom} stroke={C.brand} strokeWidth="1" strokeDasharray="2 3" opacity="0.35"/>
-            <text x={x(km)} y={h - 6} textAnchor="middle" fontFamily={C.mono} fontSize="8" fill={C.muted}>{label}</text>
+            <text x={x(km)} y={h - 16} textAnchor="middle" fontFamily={C.mono} fontSize="8" fill={C.muted}>{label}</text>
+            <text x={x(km)} y={h - 6} textAnchor="middle" fontFamily={C.mono} fontSize="7.5" fill={C.muted} opacity="0.8">{km.toFixed(1)}K</text>
           </g>
         ))}
       </svg>
