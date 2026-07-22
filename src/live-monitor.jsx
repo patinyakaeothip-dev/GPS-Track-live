@@ -74,7 +74,7 @@ function useElevationProfile(geo, coursePaths, distance) {
     const totalKm = pts[pts.length - 1].km;
     const sample = [];
     for (let i = 0; i <= N; i++) sample.push(geo.pointAtKm(pts, totalKm * i / N));
-    const w = 1100, h = 170, padL = 6, padR = 6, padT = 14, padB = 22;
+    const w = 1100, h = 170, padL = 6, padR = 6, padT = 14, padB = 34;
     const eles = sample.map(p => p.ele);
     const minE = Math.min(...eles) - 15, maxE = Math.max(...eles) + 15;
     const x = km => padL + (w - padL - padR) * (km / totalKm);
@@ -537,7 +537,8 @@ function LiveMonitorApp() {
                   {[[0, 'START'], ...checkpointsRef.current.map(cp => [parseFloat(cp.km) || 0, cp.label]), [overviewProfile.totalKm, 'FINISH']].map(([km, label], i) => (
                     <g key={i}>
                       <line x1={overviewProfile.x(km)} y1={8} x2={overviewProfile.x(km)} y2={overviewProfile.baseY} stroke="#2d6a4f" strokeWidth="1" strokeDasharray="2 3" opacity="0.5"/>
-                      <text x={overviewProfile.x(km)} y={overviewProfile.h} textAnchor="middle" fontFamily={M_MONO} fontSize="9" fill="#5d6b59">{label}</text>
+                      <text x={overviewProfile.x(km)} y={overviewProfile.h - 20} textAnchor="middle" fontFamily={M_MONO} fontSize="9" fill="#5d6b59">{label}</text>
+                      <text x={overviewProfile.x(km)} y={overviewProfile.h - 6} textAnchor="middle" fontFamily={M_MONO} fontSize="8.5" fill="#5d6b59" opacity="0.75">{km.toFixed(1)}K</text>
                     </g>
                   ))}
                   {displays.map(d => (
