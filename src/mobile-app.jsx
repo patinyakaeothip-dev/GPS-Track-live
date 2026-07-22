@@ -1436,7 +1436,8 @@ function MobileApp() {
         const rosterEntry = window.runnerStore.registerRunner(pendingEvent, {
           distance: data.dist, nickname: data.nick, phone: data.phone, gender: data.gender,
           emgName: session.user.emgName || '', emgPhone: data.emg || session.user.emgPhone || '',
-          bloodType: session.user.bloodType || '', medical: session.user.medical || '', uid: session.user.uid,
+          bloodType: session.user.bloodType || '', medical: session.user.medical || '',
+          email: session.user.email || '', uid: session.user.uid,
         });
         runner = { ...runner, bib: rosterEntry.bib, rosterId: rosterEntry.id };
       }
