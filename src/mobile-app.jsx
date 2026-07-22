@@ -118,7 +118,7 @@ function Logo({ size = 18 }) {
   return (
     <div style={{ width: size, height: size, borderRadius: size >= 30 ? 8 : 4, background: '#fff', flexShrink: 0,
       display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-      <img src="assets/rayong-trail-icon.png" alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/>
+      <img src="assets/rayong-trail-icon.png" alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }}/>
     </div>
   );
 }
@@ -140,7 +140,7 @@ function SplashScreen({ onDone }) {
       fontFamily: C.font, padding: '0 24px 40px' }}>
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 14 }}>
         <div style={{ width: 76, height: 76, borderRadius: 20, background: '#fff', padding: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-          <img src="assets/rayong-trail-icon.png" alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 8 }}/>
+          <img src="assets/rayong-trail-icon.png" alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: 8 }}/>
         </div>
         <div style={{ fontFamily: 'Georgia,serif', fontStyle: 'italic', fontSize: 24, fontWeight: 700 }}>Rayong Trail Running</div>
         <Kicker>2026 · GPS TRACKER</Kicker>
@@ -251,7 +251,7 @@ function EventCard({ ev, isRegistered, onRunnerSpace, onFollow, onSeeResult }) {
       borderRadius: 14, boxShadow: status !== 'live' ? '0 1px 3px rgba(31,42,28,0.08)' : 'none', overflow: 'hidden' }}>
       <div style={{ display: 'flex', gap: 12, alignItems: 'center', padding: 14 }}>
         {status === 'live'
-          ? <div style={{ width: 46, height: 46, borderRadius: 12, background: '#fff', border: '1px solid #d8d2c2', padding: 4, flexShrink: 0, overflow: 'hidden' }}><img src="assets/rayong-trail-icon.png" alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }}/></div>
+          ? <div style={{ width: 46, height: 46, borderRadius: 12, background: '#fff', border: '1px solid #d8d2c2', padding: 4, flexShrink: 0, overflow: 'hidden' }}><img src="assets/rayong-trail-icon.png" alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }}/></div>
           : <div style={{ width: 46, height: 46, borderRadius: 12, background: '#e5e4df', flexShrink: 0 }}/>}
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 14.5, fontWeight: 600, color: C.text }}>{ev.name}</div>
