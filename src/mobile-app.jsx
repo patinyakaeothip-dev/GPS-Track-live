@@ -169,6 +169,22 @@ function detectInAppBrowser() {
   if (/\bTwitter\b/i.test(ua)) return 'Twitter/X';
   return null;
 }
+// Best-effort "escape" to a real browser — there's no JS API any in-app
+// webview exposes for this, so both of these are unreliable heuristics
+// rather than guarantees (Android's intent:// scheme usually launches
+// Chrome directly; iOS has no real equivalent since Apple doesn't let a
+// webpage force-launch Safari, so x-safari-https:// only works some of the
+// time depending on the host app). The manual "..." menu + copy-link
+// fallback in the banner is what actually always works.
+function tryOpenExternalBrowser() {
+  const url = window.location.href;
+  const isAndroid = /Android/i.test(navigator.userAgent);
+  if (isAndroid) {
+    window.location.href = `intent://${url.replace(/^https?:\/\//, '')}#Intent;scheme=https;package=com.android.chrome;end`;
+  } else {
+    window.location.href = 'x-safari-' + url;
+  }
+}
 
 function LoginScreen({ onLogin }) {
   const [busy, setBusy] = uS(false);
@@ -233,14 +249,19 @@ function LoginScreen({ onLogin }) {
       {error && <div style={{ marginTop: 12, padding: 10, background: '#fde9e6', color: '#9b1c10', borderRadius: 10, fontSize: 12 }}>{error}</div>}
       {inAppBrowser && (
         <div style={{ marginTop: 16, padding: 14, background: '#fdf0d6', border: '1px solid #f0d9a0', borderRadius: 12, fontSize: 12.5, color: '#7c4a03', lineHeight: 1.7 }}>
-          ⚠ กำลังเปิดผ่านหน้าต่างในแอป {inAppBrowser} — Google ไม่อนุญาตให้เข้าสู่ระบบจากตรงนี้<br/>
-          รบกวนเปิดผ่าน <b>Safari</b> หรือ <b>Chrome</b> แทน: กดไอคอน <b>⋯</b> หรือ <b>แชร์ (⬆️)</b> ที่แถบด้านล่าง/บนของหน้าจอ แล้วเลือก "เปิดใน Safari"
-          <div style={{ marginTop: 8 }}>
+          ⚠ กำลังเปิดผ่านหน้าต่างในแอป {inAppBrowser} — Google ไม่อนุญาตให้เข้าสู่ระบบจากตรงนี้
+          <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-start' }}>
+            <button onClick={tryOpenExternalBrowser} style={{ padding: '9px 14px', background: '#7c4a03', border: 'none', borderRadius: 8, fontFamily: C.mono, fontSize: 11.5, fontWeight: 700, color: '#fff', cursor: 'pointer' }}>
+              🌐 ลองเปิดใน Safari / Chrome อัตโนมัติ
+            </button>
             <button onClick={() => {
               navigator.clipboard && navigator.clipboard.writeText(window.location.href).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); });
             }} style={{ padding: '7px 12px', background: '#fff', border: '1px solid #d8ae5c', borderRadius: 8, fontFamily: C.mono, fontSize: 11, fontWeight: 700, color: '#7c4a03', cursor: 'pointer' }}>
-              {copied ? '✓ คัดลอกลิงก์แล้ว — ไปวางใน Safari/Chrome' : '📋 คัดลอกลิงก์นี้'}
+              {copied ? '✓ คัดลอกลิงก์แล้ว — ไปวางใน Safari/Chrome' : '📋 หรือคัดลอกลิงก์นี้ไปวางเอง'}
             </button>
+          </div>
+          <div style={{ marginTop: 8, fontSize: 11, opacity: 0.85 }}>
+            ถ้ากดแล้วไม่เด้งออกไป: กดไอคอน <b>⋯</b> หรือ <b>แชร์ (⬆️)</b> ที่แถบด้านล่าง/บนของหน้าจอ แล้วเลือก "เปิดใน Safari"
           </div>
         </div>
       )}
