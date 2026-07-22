@@ -125,8 +125,8 @@ function Logo({ size = 18 }) {
 
 function Brand() {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-      <Logo/><span style={{ fontSize: 11, fontWeight: 700, color: C.brandDk }}>Rayong Trail Running</span>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <Logo size={28}/><span style={{ fontSize: 13, fontWeight: 700, color: C.brandDk }}>Rayong Trail Running</span>
     </div>
   );
 }
@@ -463,7 +463,7 @@ function RegisterScreen({ event, onDone, onBack }) {
       <div style={{ padding: '40px 24px 18px', background: C.brand, color: '#fff' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
           <BackBtn onClick={onBack} dark inline/>
-          <Logo/><span style={{ fontSize: 11.5, fontWeight: 700 }}>{(event && event.name) || 'Rayong Trail Running'}</span>
+          <Logo size={24}/><span style={{ fontSize: 12.5, fontWeight: 700 }}>{(event && event.name) || 'Rayong Trail Running'}</span>
         </div>
         <Kicker><span style={{ color: 'rgba(255,255,255,0.65)' }}>ลงทะเบียน</span></Kicker>
         <div style={{ fontSize: 22, fontWeight: 800, marginTop: 8 }}>สวัสดี! กรอกข้อมูลก่อนเริ่มวิ่ง</div>
@@ -594,7 +594,7 @@ function PreRaceScreen({ event, dist, onScan, onBack, onPreview }) {
     <div style={{ height: '100%', background: `linear-gradient(180deg,${C.brandDk} 0%,#152f24 100%)`, color: '#fff', fontFamily: C.font, display: 'flex', flexDirection: 'column', padding: '40px 24px 30px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
         <BackBtn onClick={onBack} dark inline/>
-        <Logo/><span style={{ fontSize: 11.5, fontWeight: 700 }}>{(event && event.name) || 'Rayong Trail Running'}</span>
+        <Logo size={24}/><span style={{ fontSize: 12.5, fontWeight: 700 }}>{(event && event.name) || 'Rayong Trail Running'}</span>
       </div>
       <Kicker><span style={{ color: 'rgba(255,255,255,0.65)' }}>WAVE {dist}</span></Kicker>
       <div style={{ fontSize: 20, fontWeight: 600, marginTop: 8 }}>รอเวลาปล่อยตัว</div>
