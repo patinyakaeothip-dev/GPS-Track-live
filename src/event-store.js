@@ -89,12 +89,28 @@
     return val;
   }
 
+  // Same problem as deletes below, but for regular edits: the Firestore
+  // write kicked off here is async, and if a realtime snapshot from
+  // *before* it lands arrives in the meantime, watchCollection's "trust
+  // whatever remote says" would silently revert this edit back to the old
+  // version — most noticeable with a large field like an event logo, where
+  // the write takes long enough for that race to actually happen ("I
+  // uploaded a logo, saved, but it disappeared after refresh/switching
+  // pages"). Remember the exact version being written per id and prefer it
+  // over anything a snapshot reports until our own write has landed.
+  const pendingWrites = new Map();
+
   function upsertEvent(ev) {
     const list = loadEvents().slice();
     const idx = list.findIndex(e => e.id === ev.id);
     if (idx >= 0) list[idx] = ev; else list.push(ev);
     saveEvents(list);
-    if (window.fb) window.fb.setDocById('events', ev.id, toFirestoreSafe(ev)).catch(err => console.warn('[event-store] Firestore write failed', err));
+    if (window.fb) {
+      pendingWrites.set(ev.id, ev);
+      window.fb.setDocById('events', ev.id, toFirestoreSafe(ev))
+        .catch(err => console.warn('[event-store] Firestore write failed', err))
+        .then(() => pendingWrites.delete(ev.id));
+    }
     return list;
   }
 
@@ -144,10 +160,16 @@
   // load and keep listening for changes made from other devices, so every
   // open tab/phone converges on the same data instead of each device's own
   // localStorage copy.
+  // Substitutes in whatever we're still mid-write on, instead of a remote
+  // snapshot that may predate that write landing.
+  function applyPendingWrites(list) {
+    return list.map(e => pendingWrites.has(e.id) ? pendingWrites.get(e.id) : e);
+  }
+
   function startFirestoreSync() {
     if (!window.fb) return;
     window.fb.listDocs('events').then(remote => {
-      const filtered = remote.filter(e => !pendingDeletes.has(e.id)).map(fromFirestoreSafe);
+      const filtered = applyPendingWrites(remote.filter(e => !pendingDeletes.has(e.id)).map(fromFirestoreSafe));
       if (filtered.length) { saveEvents(filtered); notifyUpdated(); }
       else if (loadEvents().length) {
         // First run against an empty Firestore collection — seed it from
@@ -157,7 +179,7 @@
     }).catch(err => console.warn('[event-store] Firestore initial load failed', err));
 
     window.fb.watchCollection('events', remote => {
-      saveEvents(remote.filter(e => !pendingDeletes.has(e.id)).map(fromFirestoreSafe));
+      saveEvents(applyPendingWrites(remote.filter(e => !pendingDeletes.has(e.id)).map(fromFirestoreSafe)));
       notifyUpdated();
     });
   }
