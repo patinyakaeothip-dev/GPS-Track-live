@@ -1,7 +1,7 @@
 {
   "appId": "com.rayongtrail.live",
   "appName": "Rayong Trail Running",
-  "webDir": ".",
+  "webDir": "www",
   "server": {
     "androidScheme": "https"
   },
