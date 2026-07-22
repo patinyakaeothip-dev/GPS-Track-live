@@ -61,6 +61,7 @@
       emgName: data.emgName || '',
       emgPhone: data.emgPhone || '',
       bloodType: data.bloodType || '',
+      email: data.email || '',
       medical: data.medical || '',
       uid: data.uid || '',
       checkins: [],
