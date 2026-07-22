@@ -55,9 +55,11 @@ function statusMeta(status) {
     stale: { label: 'ขาดการติดต่อ', bg: '#fde9e6', fg: '#9b1c10' },
     dnf: { label: 'DNF / ถอน', bg: '#fde9e6', fg: '#9b1c10' },
     finished: { label: 'เข้าเส้นชัย', bg: M_BRAND, fg: '#fff' },
+    sos: { label: '🆘 SOS', bg: '#dc2626', fg: '#fff' },
   }[status] || { label: status, bg: '#eee', fg: '#000' };
 }
 function colorFor(r, distColor) {
+  if (r.status === 'sos') return '#dc2626';
   if (r.status === 'stale') return M_ALERT;
   if (r.status === 'dnf') return M_REST;
   if (r.status === 'finished') return M_BRAND;
@@ -249,7 +251,9 @@ function LiveMonitorApp() {
 
       const lastAtMs = last ? checkinMs(selectedEvent, last.t) : null;
       const staleMin = lastAtMs != null ? (Date.now() - lastAtMs) / 60000 : null;
-      const status = (baseStatus === 'active' && staleMin != null && staleMin > STALE_MINUTES) ? 'stale' : baseStatus;
+      // An active SOS always wins, no matter what else is going on — RD
+      // needs to see it immediately, not have it buried under "on course".
+      const status = r.sos ? 'sos' : (baseStatus === 'active' && staleMin != null && staleMin > STALE_MINUTES) ? 'stale' : baseStatus;
       const meta = statusMeta(status);
       const physKm = geo.nearestKmOnTrack(coursePaths[overviewLabel], p.lat, p.lon);
       // Before the start checkpoint is scanned, position is stuck at km 0 —
@@ -257,7 +261,7 @@ function LiveMonitorApp() {
       // anything about the runner, so show — same as pace instead of a
       // number that looks like real live data.
       const started = status !== 'not_started';
-      return { bib: r.bib, name: r.nickname, distance: r.distance, gender: r.gender,
+      return { bib: r.bib, id: r.id, name: r.nickname, distance: r.distance, gender: r.gender,
         color: colorFor({ status, distance: r.distance }, distColor),
         initial: (r.nickname || '?').slice(0, 1), lat: p.lat, lon: p.lon, km, totalKm,
         pct: Math.min(100, (km / totalKm) * 100),
@@ -266,6 +270,7 @@ function LiveMonitorApp() {
         gradColor: started ? gradColor(g) : '#5d6b59',
         gradArrow: started ? gradArrow(g) : '',
         ele: p.ele, ago: lastAtMs != null ? fmtAgo((Date.now() - lastAtMs) / 1000) : '—',
+        sos: !!r.sos, sosReason: r.sosReason || '',
         status, statusLabel: meta.label, statusBg: meta.bg, statusFg: meta.fg, physKm };
     });
   }, [ready, runners, coursePaths, overviewLabel, distColor, selectedEvent]);
@@ -297,14 +302,22 @@ function LiveMonitorApp() {
   const byBib = mM(() => Object.fromEntries(displays.map(d => [d.bib, d])), [displays]);
   const selected = selectedBib ? byBib[selectedBib] : null;
 
-  const alerts = mM(() => displays.filter(d => d.status === 'stale' || d.status === 'dnf')
-    .map(d => ({ ...d, msg: d.status === 'stale' ? `ไม่มีความเคลื่อนไหว · จุดล่าสุด ${d.km.toFixed(1)}K` : `ถอนตัว (DNF) · ${d.km.toFixed(1)}/${d.totalKm.toFixed(1)}K` })), [displays]);
+  // SOS always sorts first regardless of how long ago it came in — it's
+  // the one alert that needs eyes on it immediately.
+  const alerts = mM(() => displays.filter(d => d.status === 'sos' || d.status === 'stale' || d.status === 'dnf')
+    .map(d => ({ ...d, msg: d.status === 'sos' ? `🆘 ${d.sosReason || 'ขอความช่วยเหลือ'} · ${d.km.toFixed(1)}/${d.totalKm.toFixed(1)}K`
+      : d.status === 'stale' ? `ไม่มีความเคลื่อนไหว · จุดล่าสุด ${d.km.toFixed(1)}K` : `ถอนตัว (DNF) · ${d.km.toFixed(1)}/${d.totalKm.toFixed(1)}K` }))
+    .sort((a, b) => (a.status === 'sos' ? 0 : 1) - (b.status === 'sos' ? 0 : 1)), [displays]);
 
   const counts = mM(() => {
-    const c = { total: displays.length, on: 0, finished: 0, alert: 0 };
-    displays.forEach(d => { if (d.status === 'active') c.on++; if (d.status === 'finished') c.finished++; if (d.status === 'stale') c.alert++; });
+    const c = { total: displays.length, on: 0, finished: 0, alert: 0, sos: 0 };
+    displays.forEach(d => { if (d.status === 'active') c.on++; if (d.status === 'finished') c.finished++; if (d.status === 'stale') c.alert++; if (d.status === 'sos') { c.alert++; c.sos++; } });
     return c;
   }, [displays]);
+
+  function clearSos(id) {
+    if (window.runnerStore && id) window.runnerStore.updateRunnerProgress(id, { sos: false });
+  }
 
   const searchResults = mM(() => {
     const q = search.trim().toLowerCase();
@@ -462,12 +475,14 @@ function LiveMonitorApp() {
                 <div style={{ maxHeight: 190, overflowY: 'auto', borderBottom: '1px solid #d8d2c2' }}>
                   {alerts.length === 0 && <div style={{ padding: 20, textAlign: 'center', color: '#5d6b59', fontSize: 12 }}>ไม่มี alert</div>}
                   {alerts.map(al => (
-                    <div key={al.bib} onClick={() => setSelectedBib(al.bib)} style={{ padding: '10px 16px', borderBottom: '1px solid #f4f3ef', cursor: 'pointer', background: al.statusLabel === 'ขาดการติดต่อ' ? 'rgba(220,38,38,0.05)' : 'transparent' }}>
+                    <div key={al.bib} onClick={() => setSelectedBib(al.bib)} style={{ padding: '10px 16px', borderBottom: '1px solid #f4f3ef', cursor: 'pointer',
+                      background: al.status === 'sos' ? 'rgba(220,38,38,0.12)' : al.status === 'stale' ? 'rgba(220,38,38,0.05)' : 'transparent',
+                      borderLeft: al.status === 'sos' ? '3px solid #dc2626' : 'none' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span style={{ fontFamily: M_MONO, fontSize: 12, fontWeight: 600 }}>#{al.bib} {al.name}</span>
+                        <span style={{ fontFamily: M_MONO, fontSize: 12, fontWeight: 700 }}>{al.status === 'sos' && '🆘 '}#{al.bib} {al.name}</span>
                         <span style={{ fontFamily: M_MONO, fontSize: 9.5, color: '#5d6b59' }}>{al.ago}</span>
                       </div>
-                      <div style={{ fontSize: 11.5, color: al.statusLabel === 'ขาดการติดต่อ' ? M_ALERT : '#7c4a03', marginTop: 2, fontWeight: 500 }}>{al.msg}</div>
+                      <div style={{ fontSize: 11.5, color: al.status === 'sos' || al.status === 'stale' ? M_ALERT : '#7c4a03', marginTop: 2, fontWeight: 500 }}>{al.msg}</div>
                     </div>
                   ))}
                 </div>
@@ -493,6 +508,16 @@ function LiveMonitorApp() {
                         <span style={{ fontSize: 12, fontWeight: 600, color: selected.statusFg }}>{selected.statusLabel}</span>
                         <span style={{ fontFamily: M_MONO, fontSize: 10, color: selected.statusFg }}>ping {selected.ago}</span>
                       </div>
+                      {selected.sos && (
+                        <div style={{ padding: '9px 12px', borderRadius: 10, background: '#fef2f2', border: '1px solid #fecaca', marginBottom: 10, fontSize: 12, color: '#9b1c10' }}>
+                          เหตุ: {selected.sosReason || 'ไม่ระบุ'}
+                        </div>
+                      )}
+                      {selected.sos && (
+                        <button onClick={() => clearSos(selected.id)} style={{ width: '100%', padding: 10, marginBottom: 8, background: '#dc2626', color: '#fff', border: 'none', borderRadius: 10, fontFamily: M_MONO, fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', cursor: 'pointer' }}>
+                          ✓ รับทราบ · ปิดสัญญาณ SOS
+                        </button>
+                      )}
                       <button onClick={toggleFocus} style={{ width: '100%', padding: 10, background: focusBib ? M_BRAND : '#fff', color: focusBib ? '#fff' : M_BRAND, border: '1px solid #2d6a4f', borderRadius: 10, fontFamily: M_MONO, fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', cursor: 'pointer' }}>
                         {focusBib ? '✕ เลิกโฟกัส · ดูทุกคน' : '🔍 โฟกัสเฉพาะคนนี้บนแผนที่'}
                       </button>

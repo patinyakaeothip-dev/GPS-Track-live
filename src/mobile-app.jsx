@@ -1102,16 +1102,19 @@ function cpCheckinLabel(cp) {
 }
 
 // ── SOS / DNF flows ───────────────────────────────────────────────────────
-function SosScreen({ onCancel, onSent }) {
+function SosScreen({ hotline, onCancel, onSent, onSend }) {
   const [reason, setReason] = uS(null);
   const [sent, setSent] = uS(false);
+  const tel = (hotline || '').replace(/[^\d+]/g, '');
   if (sent) {
     return (
       <div style={{ height: '100%', background: '#fde9e6', fontFamily: C.font, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 32, textAlign: 'center', gap: 14 }}>
         <div style={{ fontSize: 40 }}>🆘</div>
         <div style={{ fontSize: 19, fontWeight: 800, color: '#9b1c10' }}>ส่งสัญญาณขอความช่วยเหลือแล้ว</div>
-        <div style={{ fontSize: 13, color: C.text }}>ทีมงานได้รับตำแหน่งล่าสุดของคุณแล้ว</div>
-        <Btn variant="danger" onClick={() => window.location.href = 'tel:1669'} style={{ marginTop: 10 }}>📞 โทรสายด่วน 1669</Btn>
+        <div style={{ fontSize: 13, color: C.text }}>ทีมงานเห็นตำแหน่งล่าสุดของคุณใน Live Monitor แล้ว</div>
+        {tel
+          ? <Btn variant="danger" onClick={() => window.location.href = `tel:${tel}`} style={{ marginTop: 10 }}>📞 โทรสายด่วนทีมกู้ภัย {hotline}</Btn>
+          : <div style={{ fontFamily: C.mono, fontSize: 11, color: C.muted, marginTop: 10 }}>งานนี้ยังไม่ได้ตั้งเบอร์สายด่วนไว้ในระบบ</div>}
         <Btn variant="ghost" onClick={onSent}>กลับสู่หน้าติดตาม</Btn>
       </div>
     );
@@ -1127,7 +1130,7 @@ function SosScreen({ onCancel, onSent }) {
         ))}
       </div>
       <div style={{ flex: 1 }}/>
-      <Btn variant="danger" disabled={!reason} onClick={() => setSent(true)}>ส่งสัญญาณ SOS</Btn>
+      <Btn variant="danger" disabled={!reason} onClick={() => { onSend(reason); setSent(true); }}>ส่งสัญญาณ SOS</Btn>
       <Btn variant="ghost" onClick={onCancel} style={{ marginTop: 8 }}>ยกเลิก</Btn>
     </div>
   );
@@ -1473,7 +1476,14 @@ function MobileApp() {
       {modal === 'profile' && <Overlay><ProfileScreen user={session.user} onClose={() => setModal(null)}
         onSave={updateUser}
         onLogout={() => { if (window.fb) window.fb.signOutUser().catch(() => {}); clearSession(); setSession(null); setModal(null); setScreen('login'); }}/></Overlay>}
-      {modal === 'sos' && <Overlay><SosScreen onCancel={() => setModal(null)} onSent={() => setModal(null)}/></Overlay>}
+      {modal === 'sos' && <Overlay><SosScreen
+        hotline={session.runner && (getEvents().find(e => e.id === session.runner.eventId) || {}).hotline}
+        onCancel={() => setModal(null)} onSent={() => setModal(null)}
+        onSend={(reason) => {
+          if (session.runner && session.runner.rosterId && window.runnerStore) {
+            window.runnerStore.updateRunnerProgress(session.runner.rosterId, { sos: true, sosReason: reason, sosAt: Date.now() });
+          }
+        }}/></Overlay>}
       {modal === 'dnf' && <Overlay><DnfScreen onCancel={() => setModal(null)} onConfirm={() => {
         if (window.trtGpsTracker) window.trtGpsTracker.stop();
         if (session.runner && session.runner.rosterId && window.runnerStore) window.runnerStore.updateRunnerProgress(session.runner.rosterId, { dnf: true });
