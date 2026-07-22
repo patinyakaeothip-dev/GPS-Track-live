@@ -60,6 +60,7 @@
       gender: data.gender || '',
       emgName: data.emgName || '',
       emgPhone: data.emgPhone || '',
+      bloodType: data.bloodType || '',
       medical: data.medical || '',
       uid: data.uid || '',
       checkins: [],
