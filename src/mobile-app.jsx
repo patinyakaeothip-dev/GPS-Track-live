@@ -1178,12 +1178,13 @@ function ProfileScreen({ user, onLogout, onClose, onSave, onboard }) {
   const [email, setEmail] = uS(user.email || '');
   const [emgName, setEmgName] = uS(user.emgName || '');
   const [emgPhone, setEmgPhone] = uS(user.emgPhone || '');
+  const [bloodType, setBloodType] = uS(user.bloodType || '');
   const [medical, setMedical] = uS(user.medical || '');
   const [saved, setSaved] = uS(false);
   const canSubmit = !onboard || (nickname.trim() && phone.trim() && emgName.trim() && emgPhone.trim());
 
   function save() {
-    onSave({ ...user, nickname, gender, phone, email, emgName, emgPhone, medical });
+    onSave({ ...user, nickname, gender, phone, email, emgName, emgPhone, bloodType, medical });
     if (onboard) return;
     setSaved(true);
     setTimeout(() => setSaved(false), 1800);
@@ -1220,7 +1221,13 @@ function ProfileScreen({ user, onLogout, onClose, onSave, onboard }) {
         <Field label="อีเมล"><input value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" style={{ ...fieldStyle(), fontFamily: C.mono }}/></Field>
         <Field label="ผู้ติดต่อฉุกเฉิน · ชื่อ" required={onboard}><input value={emgName} onChange={e => setEmgName(e.target.value)} placeholder="ชื่อคนใกล้ตัว" style={fieldStyle()}/></Field>
         <Field label="ผู้ติดต่อฉุกเฉิน · เบอร์" required={onboard}><input value={emgPhone} onChange={e => setEmgPhone(e.target.value)} placeholder="08X-XXX-XXXX" style={{ ...fieldStyle(), fontFamily: C.mono }}/></Field>
-        <Field label="กรุ๊ปเลือด / โรคประจำตัว"><input value={medical} onChange={e => setMedical(e.target.value)} placeholder="เช่น O+ · หอบหืด" style={fieldStyle()}/></Field>
+        <Field label="กรุ๊ปเลือด">
+          <select value={bloodType} onChange={e => setBloodType(e.target.value)} style={fieldStyle()}>
+            <option value="">— ไม่ระบุ —</option>
+            {['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map(bt => <option key={bt} value={bt}>{bt}</option>)}
+          </select>
+        </Field>
+        <Field label="โรคประจำตัว / ข้อมูลสำคัญทางการแพทย์"><input value={medical} onChange={e => setMedical(e.target.value)} placeholder="เช่น หอบหืด, แพ้ยา" style={fieldStyle()}/></Field>
       </div>
 
       <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
@@ -1429,7 +1436,7 @@ function MobileApp() {
         const rosterEntry = window.runnerStore.registerRunner(pendingEvent, {
           distance: data.dist, nickname: data.nick, phone: data.phone, gender: data.gender,
           emgName: session.user.emgName || '', emgPhone: data.emg || session.user.emgPhone || '',
-          medical: session.user.medical || '', uid: session.user.uid,
+          bloodType: session.user.bloodType || '', medical: session.user.medical || '', uid: session.user.uid,
         });
         runner = { ...runner, bib: rosterEntry.bib, rosterId: rosterEntry.id };
       }

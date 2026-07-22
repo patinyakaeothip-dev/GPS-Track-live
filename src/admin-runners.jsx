@@ -108,8 +108,8 @@ function RunnerManagerApp({ adminEmail, onLogout }) {
     editRunner(r, { dnf: !r.dnf });
   }
   function exportCsv() {
-    const rows = [['bib', 'ชื่อ', 'เบอร์โทร', 'เพศ', 'ระยะ', 'เช็คอิน', 'DNF', 'ผู้ติดต่อฉุกเฉิน', 'เบอร์ฉุกเฉิน', 'กรุ๊ปเลือด/โรคประจำตัว']];
-    filtered.forEach(r => rows.push([r.bib, r.nickname, r.phone, r.gender === 'm' ? 'ชาย' : r.gender === 'f' ? 'หญิง' : '', r.distance, (r.checkins || []).length, r.dnf ? 'DNF' : '', r.emgName || '', r.emgPhone || '', r.medical || '']));
+    const rows = [['bib', 'ชื่อ', 'เบอร์โทร', 'เพศ', 'ระยะ', 'เช็คอิน', 'DNF', 'ผู้ติดต่อฉุกเฉิน', 'เบอร์ฉุกเฉิน', 'กรุ๊ปเลือด', 'โรคประจำตัว']];
+    filtered.forEach(r => rows.push([r.bib, r.nickname, r.phone, r.gender === 'm' ? 'ชาย' : r.gender === 'f' ? 'หญิง' : '', r.distance, (r.checkins || []).length, r.dnf ? 'DNF' : '', r.emgName || '', r.emgPhone || '', r.bloodType || '', r.medical || '']));
     downloadCsv(`runners-${selectedEvent ? selectedEvent.id : 'export'}.csv`, rows);
   }
   function renumberAll() {
@@ -213,7 +213,11 @@ function RunnerManagerApp({ adminEmail, onLogout }) {
                   </div>
                 </div>
                 <div>
-                  <div style={{ fontFamily: R_MONO, fontSize: 9.5, color: '#9b1c10', textTransform: 'uppercase', letterSpacing: '0.06em' }}>กรุ๊ปเลือด / โรคประจำตัว</div>
+                  <div style={{ fontFamily: R_MONO, fontSize: 9.5, color: '#9b1c10', textTransform: 'uppercase', letterSpacing: '0.06em' }}>กรุ๊ปเลือด</div>
+                  <div style={{ marginTop: 2, fontFamily: R_MONO, fontWeight: 700 }}>{r.bloodType || 'ไม่ได้ระบุไว้'}</div>
+                </div>
+                <div>
+                  <div style={{ fontFamily: R_MONO, fontSize: 9.5, color: '#9b1c10', textTransform: 'uppercase', letterSpacing: '0.06em' }}>โรคประจำตัว</div>
                   <div style={{ marginTop: 2 }}>{r.medical || 'ไม่ได้ระบุไว้'}</div>
                 </div>
               </div>

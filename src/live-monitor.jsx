@@ -271,7 +271,7 @@ function LiveMonitorApp() {
         gradArrow: started ? gradArrow(g) : '',
         ele: p.ele, ago: lastAtMs != null ? fmtAgo((Date.now() - lastAtMs) / 1000) : '—',
         sos: !!r.sos, sosReason: r.sosReason || '',
-        emgName: r.emgName || '', emgPhone: r.emgPhone || '', medical: r.medical || '',
+        emgName: r.emgName || '', emgPhone: r.emgPhone || '', bloodType: r.bloodType || '', medical: r.medical || '',
         status, statusLabel: meta.label, statusBg: meta.bg, statusFg: meta.fg, physKm };
     });
   }, [ready, runners, coursePaths, overviewLabel, distColor, selectedEvent]);
@@ -517,7 +517,8 @@ function LiveMonitorApp() {
                       <div style={{ padding: '9px 12px', borderRadius: 10, background: '#fafaf8', border: '1px solid #ece7da', marginBottom: 10, fontSize: 12 }}>
                         <div style={{ fontFamily: M_MONO, fontSize: 9.5, color: '#5d6b59', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>ข้อมูลฉุกเฉิน</div>
                         <div>ผู้ติดต่อ: {selected.emgName || '—'}{selected.emgPhone && <> · <a href={`tel:${selected.emgPhone.replace(/[^\d+]/g, '')}`} style={{ color: M_BRAND, fontFamily: M_MONO, fontWeight: 700 }}>📞 {selected.emgPhone}</a></>}</div>
-                        <div style={{ marginTop: 2 }}>กรุ๊ปเลือด/โรคประจำตัว: {selected.medical || 'ไม่ได้ระบุไว้'}</div>
+                        <div style={{ marginTop: 2 }}>กรุ๊ปเลือด: <span style={{ fontFamily: M_MONO, fontWeight: 700 }}>{selected.bloodType || 'ไม่ได้ระบุไว้'}</span></div>
+                        <div style={{ marginTop: 2 }}>โรคประจำตัว: {selected.medical || 'ไม่ได้ระบุไว้'}</div>
                       </div>
                       {selected.sos && (
                         <button onClick={() => clearSos(selected.id)} style={{ width: '100%', padding: 10, marginBottom: 8, background: '#dc2626', color: '#fff', border: 'none', borderRadius: 10, fontFamily: M_MONO, fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', cursor: 'pointer' }}>
