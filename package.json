@@ -5,7 +5,8 @@
   "private": true,
   "scripts": {
     "build:native": "esbuild src/native/gps-tracker.js --bundle --format=iife --global-name=trtGpsTracker --outfile=src/native/gps-tracker.bundle.js",
-    "cap:sync": "npm run build:native && cap sync",
+    "prepare:www": "node scripts/prepare-www.js",
+    "cap:sync": "npm run build:native && npm run prepare:www && cap sync",
     "cap:android": "cap open android",
     "cap:ios": "cap open ios"
   },
