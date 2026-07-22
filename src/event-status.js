@@ -23,10 +23,13 @@
     // (e.g. "06.00") — that silently failed to parse and was the actual
     // root cause of an event showing the wrong status even with times that
     // "looked" filled in. Normalize before parsing so old data self-heals.
-    const m = /^(\d{1,2})[:.\s](\d{2})$/.exec(String(hhmm).trim());
+    // Seconds are optional — Admin's cpTimes inputs only ever collect
+    // HH:MM, while a runner's actual QR check-in time (checkins[].t) now
+    // carries HH:MM:SS for real ranking precision.
+    const m = /^(\d{1,2})[:.\s](\d{2})(?:[:.\s](\d{2}))?$/.exec(String(hhmm).trim());
     if (!m) return null;
-    const normalized = `${m[1].padStart(2, '0')}:${m[2]}`;
-    const d = new Date(`${dateISO}T${normalized}:00+07:00`);
+    const normalized = `${m[1].padStart(2, '0')}:${m[2]}:${m[3] || '00'}`;
+    const d = new Date(`${dateISO}T${normalized}+07:00`);
     return Number.isNaN(d.getTime()) ? null : d;
   }
 
