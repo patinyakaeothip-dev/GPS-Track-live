@@ -204,25 +204,35 @@ function RunnerManagerApp({ adminEmail, onLogout }) {
               <button onClick={() => cancelRunner(r)} style={{ padding: '6px 9px', background: 'transparent', color: '#5d6b59', border: '1px solid #d8d2c2', borderRadius: 8, fontFamily: R_MONO, fontSize: 10, fontWeight: 700, cursor: 'pointer' }}>ยกเลิก</button>
             </div>
             {expandedId === r.id && (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, padding: '10px 14px', background: '#fef2f2', border: '1px solid #fecaca', borderTop: 'none', borderRadius: '0 0 10px 10px', fontSize: 12 }}>
-                <div>
-                  <div style={{ fontFamily: R_MONO, fontSize: 9.5, color: '#9b1c10', textTransform: 'uppercase', letterSpacing: '0.06em' }}>ผู้ติดต่อฉุกเฉิน</div>
-                  <div style={{ marginTop: 2 }}>
-                    {r.emgName || '—'}
-                    {r.emgPhone && <> · <a href={`tel:${r.emgPhone.replace(/[^\d+]/g, '')}`} style={{ color: '#9b1c10', fontFamily: R_MONO, fontWeight: 700 }}>📞 {r.emgPhone}</a></>}
-                  </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, padding: '12px 14px', background: '#fef2f2', border: '1px solid #fecaca', borderTop: 'none', borderRadius: '0 0 10px 10px', fontSize: 12 }}>
+                {/* Editable — a runner who registered before this info was
+                    collected (or who just never filled it in) has nothing
+                    here otherwise, and it never backfills on its own since
+                    registration doesn't re-run. RD can fill it in by hand
+                    instead of being stuck with permanently blank fields. */}
+                <div style={{ width: 160 }}>
+                  <div style={{ fontFamily: R_MONO, fontSize: 9.5, color: '#9b1c10', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 }}>ผู้ติดต่อฉุกเฉิน · ชื่อ</div>
+                  <input value={r.emgName || ''} onChange={e => editRunner(r, { emgName: e.target.value })} placeholder="ชื่อ" style={inputStyle}/>
                 </div>
-                <div>
-                  <div style={{ fontFamily: R_MONO, fontSize: 9.5, color: '#9b1c10', textTransform: 'uppercase', letterSpacing: '0.06em' }}>กรุ๊ปเลือด</div>
-                  <div style={{ marginTop: 2, fontFamily: R_MONO, fontWeight: 700 }}>{r.bloodType || 'ไม่ได้ระบุไว้'}</div>
+                <div style={{ width: 140 }}>
+                  <div style={{ fontFamily: R_MONO, fontSize: 9.5, color: '#9b1c10', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 }}>ผู้ติดต่อฉุกเฉิน · เบอร์</div>
+                  <input value={r.emgPhone || ''} onChange={e => editRunner(r, { emgPhone: e.target.value })} placeholder="08X-XXX-XXXX" style={{ ...inputStyle, fontFamily: R_MONO }}/>
+                  {r.emgPhone && <a href={`tel:${r.emgPhone.replace(/[^\d+]/g, '')}`} style={{ display: 'block', marginTop: 3, color: '#9b1c10', fontFamily: R_MONO, fontSize: 10.5, fontWeight: 700 }}>📞 โทรออก</a>}
                 </div>
-                <div>
-                  <div style={{ fontFamily: R_MONO, fontSize: 9.5, color: '#9b1c10', textTransform: 'uppercase', letterSpacing: '0.06em' }}>โรคประจำตัว</div>
-                  <div style={{ marginTop: 2 }}>{r.medical || 'ไม่ได้ระบุไว้'}</div>
+                <div style={{ width: 90 }}>
+                  <div style={{ fontFamily: R_MONO, fontSize: 9.5, color: '#9b1c10', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 }}>กรุ๊ปเลือด</div>
+                  <select value={r.bloodType || ''} onChange={e => editRunner(r, { bloodType: e.target.value })} style={{ ...inputStyle, fontFamily: R_MONO }}>
+                    <option value="">—</option>
+                    {['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map(bt => <option key={bt} value={bt}>{bt}</option>)}
+                  </select>
                 </div>
-                <div>
-                  <div style={{ fontFamily: R_MONO, fontSize: 9.5, color: '#9b1c10', textTransform: 'uppercase', letterSpacing: '0.06em' }}>อีเมล</div>
-                  <div style={{ marginTop: 2 }}>{r.email ? <a href={`mailto:${r.email}`} style={{ color: '#9b1c10', fontFamily: R_MONO }}>{r.email}</a> : 'ไม่ได้ระบุไว้'}</div>
+                <div style={{ width: 180 }}>
+                  <div style={{ fontFamily: R_MONO, fontSize: 9.5, color: '#9b1c10', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 }}>โรคประจำตัว</div>
+                  <input value={r.medical || ''} onChange={e => editRunner(r, { medical: e.target.value })} placeholder="เช่น หอบหืด, แพ้ยา" style={inputStyle}/>
+                </div>
+                <div style={{ width: 200 }}>
+                  <div style={{ fontFamily: R_MONO, fontSize: 9.5, color: '#9b1c10', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 }}>อีเมล</div>
+                  <input value={r.email || ''} onChange={e => editRunner(r, { email: e.target.value })} placeholder="you@example.com" style={{ ...inputStyle, fontFamily: R_MONO }}/>
                 </div>
               </div>
             )}
