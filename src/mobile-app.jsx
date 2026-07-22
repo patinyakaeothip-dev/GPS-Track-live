@@ -155,9 +155,26 @@ function SplashScreen({ onDone }) {
 }
 
 // ── Screen: Login ─────────────────────────────────────────────────────────
+// Google refuses to complete OAuth sign-in at all inside these embedded
+// in-app browsers (Line, Facebook, Instagram, ...) — not something fixable
+// from our side (popup and redirect both hit the same wall, it's Google's
+// own policy against these webviews) — the page just hangs blank after the
+// user picks an account. Detect it up front and tell people to open in
+// Safari/Chrome instead of letting them hit that dead end.
+function detectInAppBrowser() {
+  const ua = navigator.userAgent || '';
+  if (/\bLine\//i.test(ua)) return 'Line';
+  if (/FBAN|FBAV/i.test(ua)) return 'Facebook';
+  if (/Instagram/i.test(ua)) return 'Instagram';
+  if (/\bTwitter\b/i.test(ua)) return 'Twitter/X';
+  return null;
+}
+
 function LoginScreen({ onLogin }) {
   const [busy, setBusy] = uS(false);
   const [error, setError] = uS(null);
+  const [copied, setCopied] = uS(false);
+  const inAppBrowser = uM(() => detectInAppBrowser(), []);
 
   // On mobile, signInWithGoogle() navigates away (signInWithRedirect) and
   // back instead of resolving a popup promise — pick up that result here
@@ -214,8 +231,21 @@ function LoginScreen({ onLogin }) {
       <div style={{ fontSize: 21, fontWeight: 800, marginTop: 18, color: C.text }}>เข้าสู่ระบบ</div>
       <div style={{ fontSize: 12.5, color: C.muted, marginTop: 6, lineHeight: 1.5 }}>ไม่ต้องตั้งรหัสผ่าน · เลือกบัญชีที่ใช้อยู่แล้ว</div>
       {error && <div style={{ marginTop: 12, padding: 10, background: '#fde9e6', color: '#9b1c10', borderRadius: 10, fontSize: 12 }}>{error}</div>}
+      {inAppBrowser && (
+        <div style={{ marginTop: 16, padding: 14, background: '#fdf0d6', border: '1px solid #f0d9a0', borderRadius: 12, fontSize: 12.5, color: '#7c4a03', lineHeight: 1.7 }}>
+          ⚠ กำลังเปิดผ่านหน้าต่างในแอป {inAppBrowser} — Google ไม่อนุญาตให้เข้าสู่ระบบจากตรงนี้<br/>
+          รบกวนเปิดผ่าน <b>Safari</b> หรือ <b>Chrome</b> แทน: กดไอคอน <b>⋯</b> หรือ <b>แชร์ (⬆️)</b> ที่แถบด้านล่าง/บนของหน้าจอ แล้วเลือก "เปิดใน Safari"
+          <div style={{ marginTop: 8 }}>
+            <button onClick={() => {
+              navigator.clipboard && navigator.clipboard.writeText(window.location.href).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); });
+            }} style={{ padding: '7px 12px', background: '#fff', border: '1px solid #d8ae5c', borderRadius: 8, fontFamily: C.mono, fontSize: 11, fontWeight: 700, color: '#7c4a03', cursor: 'pointer' }}>
+              {copied ? '✓ คัดลอกลิงก์แล้ว — ไปวางใน Safari/Chrome' : '📋 คัดลอกลิงก์นี้'}
+            </button>
+          </div>
+        </div>
+      )}
       <div style={{ marginTop: 26, display: 'flex', flexDirection: 'column', gap: 10 }}>
-        <Btn variant="white" onClick={googleLogin} disabled={busy}>G {busy ? 'กำลังเข้าสู่ระบบ…' : 'เข้าสู่ระบบด้วย Google'}</Btn>
+        <Btn variant="white" onClick={googleLogin} disabled={busy || !!inAppBrowser}>G {busy ? 'กำลังเข้าสู่ระบบ…' : 'เข้าสู่ระบบด้วย Google'}</Btn>
       </div>
       <div style={{ flex: 1 }}/>
       <div style={{ textAlign: 'center', fontFamily: C.mono, fontSize: 10.5, color: C.muted, lineHeight: 1.6 }}>
