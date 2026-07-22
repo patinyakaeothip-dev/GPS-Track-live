@@ -171,6 +171,9 @@ function EventList({ events, onEdit, onDelete, onCreate }) {
           const closed = window.eventStatus.computeClosed(ev);
           return (
             <div key={ev.id} style={{ background: '#fff', border: '1px solid #e5e0d3', borderRadius: 14, boxShadow: '0 1px 3px rgba(31,42,28,0.08)', padding: 16, display: 'flex', alignItems: 'center', gap: 14 }}>
+              <div style={{ width: 40, height: 40, borderRadius: 10, background: ev.logoUrl ? '#fff' : '#f0ede3', border: '1px solid #e5e0d3', flexShrink: 0, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {ev.logoUrl ? <img src={ev.logoUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }}/> : <span style={{ fontSize: 15, opacity: 0.4 }}>🏔️</span>}
+              </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 15, fontWeight: 700 }}>{ev.name}</div>
                 <div style={{ fontFamily: A_MONO, fontSize: 10.5, color: '#5d6b59', marginTop: 3 }}>
@@ -271,21 +274,38 @@ function EventForm({ initial, onCancel, onSave, onSaveInPlace, onDelete }) {
     const colors = ['#3a86c4', '#e07a3e', '#1f4d39', '#7c4a03', '#9b1c10'];
     setEv(e => ({ ...e, distances: [...e.distances, { id: 'd' + Date.now(), label: 'ใหม่', cutoff: '180', open: true, color: colors[e.distances.length % colors.length], capacity: '', registered: '0', cpTimes: blankCpTimes('', '', e.checkpoints) }] }));
   }
+  // "สมัครแล้ว" used to be a manually-tracked counter (bumped by
+  // incrementRegistration/decrementRegistration) — it could silently drift
+  // from the real roster (e.g. a registration that landed before a bib-
+  // collision fix, or an edit made directly on the runner-management page)
+  // and there was no way to notice short of comparing two different pages.
+  // Now read live from the real roster instead, same source runners.html
+  // and RunnerRosterLink already use, so it can't disagree with itself.
+  const [rosterByDist, setRosterByDist] = aS({});
+  aE(() => {
+    if (isNew) return;
+    function refresh() {
+      const counts = {};
+      (window.runnerStore ? window.runnerStore.listRunners(ev.id) : []).forEach(r => { counts[r.distance] = (counts[r.distance] || 0) + 1; });
+      setRosterByDist(counts);
+    }
+    refresh();
+    window.addEventListener('trt:runners-updated', refresh);
+    return () => window.removeEventListener('trt:runners-updated', refresh);
+  }, [ev.id, isNew]);
   // Registration auto-closes the moment the quota fills, but only as a
   // one-time nudge — it never fights back against a manual reopen, so RD can
   // still add late runners on race day by flipping the toggle back on.
-  function updateDistRegistered(id, val) {
+  aE(() => {
     setEv(e => ({
       ...e,
       distances: e.distances.map(d => {
-        if (d.id !== id) return d;
         const cap = parseInt(d.capacity, 10);
-        const reg = parseInt(val, 10);
-        const justFilled = cap > 0 && !Number.isNaN(reg) && reg >= cap && d.open;
-        return { ...d, registered: val, open: justFilled ? false : d.open };
+        const reg = rosterByDist[d.label] || 0;
+        return (cap > 0 && reg >= cap && d.open) ? { ...d, open: false } : d;
       }),
     }));
-  }
+  }, [rosterByDist]);
 
   const checkpoints = ev.checkpoints || DEFAULT_CHECKPOINTS;
   function updateCheckpoint(id, patch) { setEv(e => ({ ...e, checkpoints: (e.checkpoints || DEFAULT_CHECKPOINTS).map(cp => cp.id === id ? { ...cp, ...patch } : cp) })); }
@@ -339,6 +359,27 @@ function EventForm({ initial, onCancel, onSave, onSaveInPlace, onDelete }) {
       </div>
 
       <div style={{ background: '#fff', border: '1px solid #e5e0d3', borderRadius: 14, boxShadow: '0 1px 3px rgba(31,42,28,0.08)', padding: 24 }}>
+        <div style={{ marginBottom: 14 }}>
+          <Field label="โลโก้งาน (ไม่บังคับ — แสดงในแอพนักวิ่งแทนไอคอนเริ่มต้น)">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ width: 56, height: 56, borderRadius: 12, background: ev.logoUrl ? '#fff' : '#f0ede3', border: '1px solid #e5e0d3', flexShrink: 0, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {ev.logoUrl ? <img src={ev.logoUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }}/> : <span style={{ fontSize: 20, opacity: 0.4 }}>🏔️</span>}
+              </div>
+              <label style={{ padding: '9px 14px', background: '#fff', border: '1px solid #bdb6a4', borderRadius: 8, fontFamily: A_MONO, fontSize: 11, fontWeight: 700, color: '#1f2a1c', cursor: 'pointer' }}>
+                📤 {ev.logoUrl ? 'เปลี่ยนโลโก้' : 'อัปโหลดโลโก้'}
+                <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => {
+                  const file = e.target.files && e.target.files[0];
+                  if (!file) return;
+                  const reader = new FileReader();
+                  reader.onload = () => set({ logoUrl: reader.result });
+                  reader.readAsDataURL(file);
+                  e.target.value = '';
+                }}/>
+              </label>
+              {ev.logoUrl && <button onClick={() => set({ logoUrl: '' })} style={{ padding: '9px 12px', background: 'transparent', border: '1px solid #f0c9c4', color: '#b91c1c', borderRadius: 8, fontFamily: A_MONO, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>ลบโลโก้</button>}
+            </div>
+          </Field>
+        </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14, marginBottom: 14 }}>
           <Field label="ชื่องานแข่ง"><input value={ev.name} onChange={e => set({ name: e.target.value })} style={inputStyle()}/></Field>
           <Field label="วันที่แข่ง (ปฏิทิน — ใช้คำนวณเวลา)">
@@ -467,7 +508,7 @@ function EventForm({ initial, onCancel, onSave, onSaveInPlace, onDelete }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
           {ev.distances.map(de => {
             const cap = parseInt(de.capacity, 10);
-            const reg = parseInt(de.registered, 10) || 0;
+            const reg = rosterByDist[de.label] || 0;
             const isFull = cap > 0 && reg >= cap;
             return (
             <div key={de.id} style={{ padding: '10px 12px', background: '#fafaf8', border: '1px solid #ece7da', borderRadius: 10 }}>
@@ -489,8 +530,7 @@ function EventForm({ initial, onCancel, onSave, onSaveInPlace, onDelete }) {
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, paddingLeft: 2 }}>
                 <span style={{ fontFamily: A_MONO, fontSize: 10, color: '#5d6b59' }}>สมัครแล้ว</span>
-                <input value={de.registered} onChange={e => updateDistRegistered(de.id, e.target.value)}
-                  style={{ width: 56, padding: '7px 7px', background: '#fff', border: '1px solid #e5e0d3', borderRadius: 8, fontFamily: A_MONO, fontSize: 12, textAlign: 'center' }}/>
+                <div title="นับจากนักวิ่งที่ลงทะเบียนจริง — แก้ไขนักวิ่งได้ที่หน้าจัดการนักวิ่ง" style={{ width: 56, padding: '7px 7px', background: '#f0ede3', border: '1px solid #e5e0d3', borderRadius: 8, fontFamily: A_MONO, fontSize: 12, textAlign: 'center' }}>{reg}</div>
                 <span style={{ fontFamily: A_MONO, fontSize: 10, color: '#5d6b59' }}>/ โควตา</span>
                 <input value={de.capacity} onChange={e => updateDist(de.id, { capacity: e.target.value })} placeholder="ไม่จำกัด"
                   style={{ width: 70, padding: '7px 7px', background: '#fff', border: '1px solid #e5e0d3', borderRadius: 8, fontFamily: A_MONO, fontSize: 12, textAlign: 'center' }}/>
