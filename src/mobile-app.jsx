@@ -89,6 +89,20 @@ function useCourse(ev, distLabel) {
   return course;
 }
 
+// Live GPS position for one runner (src/native/gps-tracker.js writes a
+// single doc per runner, id `${eventId}_${bib}`, overwritten on every
+// fix) — used by the "follow the race" map to show a real-time dot instead
+// of the checkpoint-interpolated one, when the runner's phone is tracking.
+function useLivePos(eventId, bib) {
+  const [pos, setPos] = uS(null);
+  uE(() => {
+    setPos(null);
+    if (!eventId || !bib || !window.fb) return;
+    return window.fb.watchDocById('livePos', `${eventId}_${bib}`, setPos);
+  }, [eventId, bib]);
+  return pos;
+}
+
 // ── Simple button/UI primitives ──────────────────────────────────────────
 function Btn({ children, onClick, variant = 'primary', style = {}, disabled }) {
   const base = {
@@ -886,9 +900,10 @@ function Stat({ label, value, accent }) {
   return <div style={{ flex: 1 }}><Kicker>{label}</Kicker><div style={{ fontSize: 15, fontWeight: 700, color: accent || C.text, marginTop: 2 }}>{value}</div></div>;
 }
 
-function RouteTab({ course, runner, event }) {
+function RouteTab({ course, runner, event, spectatorRunner, livePos }) {
   const mapRef = uR(null);
   const mapObj = uR(null);
+  const runnerMarkerRef = uR(null);
   uE(() => {
     if (!course || !window.L || !mapRef.current || mapObj.current) return;
     const L = window.L;
@@ -930,15 +945,88 @@ function RouteTab({ course, runner, event }) {
 
     const idx = Math.min(course.points.length - 1, Math.round((runner.progressKm / course.totalKm) * course.points.length));
     const pos = course.points[idx];
-    L.circleMarker([pos[0], pos[1]], { radius: 8, color: '#fff', weight: 2, fillColor: C.orange, fillOpacity: 1 }).addTo(map);
+    runnerMarkerRef.current = L.circleMarker([pos[0], pos[1]], { radius: 8, color: '#fff', weight: 2, fillColor: C.orange, fillOpacity: 1 }).addTo(map);
     mapObj.current = map;
   }, [course, event]);
+  // Moves the runner dot on its own, separate from the (expensive, one-time)
+  // map/route setup above — either to a real GPS fix when one's available,
+  // or back to the checkpoint-interpolated point along the route otherwise.
+  uE(() => {
+    if (!mapObj.current || !runnerMarkerRef.current || !course) return;
+    if (livePos && livePos.lat != null && livePos.lon != null) {
+      runnerMarkerRef.current.setLatLng([livePos.lat, livePos.lon]);
+    } else {
+      const idx = Math.min(course.points.length - 1, Math.round((runner.progressKm / course.totalKm) * course.points.length));
+      const pos = course.points[idx];
+      runnerMarkerRef.current.setLatLng([pos[0], pos[1]]);
+    }
+  }, [course, runner.progressKm, livePos && livePos.lat, livePos && livePos.lon]);
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+    <div style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
       <div ref={mapRef} style={{ flex: 1, minHeight: 260, background: '#eee' }}/>
+      {spectatorRunner && <FollowedRunnerPanel runner={spectatorRunner} event={event} livePos={livePos}/>}
       <div style={{ padding: '14px 18px 90px', background: '#fff' }}>
         <Kicker>Elevation</Kicker>
         {course && <ElevationSvg course={course} progressKm={runner.progressKm} checkpoints={(event && event.checkpoints) || []}/>}
+      </div>
+    </div>
+  );
+}
+
+// Shown under the map when following a runner ("follow the race" /
+// Friends → detail) — a GPS dot alone doesn't say *how* someone's doing
+// (on pace, stuck, close to cutoff), only *where*. This pairs it with the
+// same checkpoint-time data the runner sees in their own Track tab, plus a
+// live speed reading when their phone has an active GPS fix.
+function FollowedRunnerPanel({ runner, event, livePos }) {
+  const [, setTick] = uS(0);
+  uE(() => { const id = setInterval(() => setTick(t => t + 1), 1000); return () => clearInterval(id); }, []);
+
+  const seq = cpSeqFor(event);
+  const checkins = runner.checkins || [];
+  const combine = window.eventStatus && window.eventStatus.combineDateTime;
+  const startCk = checkins.find(c => c.cp === 'start');
+  const startMs = startCk && combine ? combine(event && event.raceDateISO, startCk.t) : null;
+  const finishCk = checkins.find(c => c.cp === 'finish');
+  const finished = !!finishCk;
+  const finishMs = finishCk && combine ? combine(event && event.raceDateISO, finishCk.t) : null;
+  const totalMs = (startMs != null && finishMs != null) ? finishMs - startMs : null;
+  const elapsedMs = startMs && !finished ? Date.now() - startMs : null;
+
+  const liveAgeMs = livePos && livePos.at ? Date.now() - livePos.at : null;
+  const gpsLive = liveAgeMs != null && liveAgeMs < 2 * 60 * 1000;
+  const speedMps = gpsLive ? livePos.speed : null;
+  const paceLabel = (speedMps != null && speedMps > 0.3)
+    ? (() => { const min = 1000 / speedMps / 60; const mm = Math.floor(min); const ss = Math.round((min - mm) * 60); return `${mm}'${String(ss).padStart(2, '0')}"/กม.`; })()
+    : (speedMps != null ? 'หยุดอยู่' : '—');
+
+  function fmtElapsed(ms) {
+    if (ms == null) return '—';
+    const s = Math.floor(ms / 1000);
+    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), r = s % 60;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}`;
+  }
+
+  return (
+    <div style={{ background: '#fff', borderTop: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}` }}>
+      <div style={{ display: 'flex', gap: 14, padding: '14px 18px', borderBottom: `1px solid ${C.border}` }}>
+        <Stat label={finished ? 'เวลารวม' : 'เวลาที่วิ่งมาแล้ว'} value={fmtElapsed(finished ? totalMs : elapsedMs)}/>
+        <Stat label="ความเร็วปัจจุบัน" value={paceLabel} accent={gpsLive ? C.brand : C.mute2}/>
+        <Stat label="GPS" value={gpsLive ? '🟢 สด' : (livePos ? '⚪ หลุดสัญญาณ' : '⚪ ยังไม่เริ่ม')}/>
+      </div>
+      <div>
+        <div style={{ padding: '10px 14px', borderBottom: `1px solid ${C.border}`, fontFamily: C.mono, fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted, fontWeight: 600 }}>Checkpoints</div>
+        {seq.map((cp, i) => {
+          const done = i < checkins.length;
+          return (
+            <div key={cp} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px', borderTop: i ? `1px solid ${C.border}` : 'none' }}>
+              <span style={{ width: 20, height: 20, borderRadius: 999, background: done ? C.brand : C.bg, color: done ? '#fff' : C.mute2,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, flexShrink: 0 }}>{done ? '✓' : i + 1}</span>
+              <span style={{ flex: 1, fontSize: 13, color: done ? C.text : C.mute2 }}>{cpLabelFor(event, cp)}</span>
+              {done && <span style={{ fontFamily: C.mono, fontSize: 10, color: C.muted }}>{checkins[i].t}</span>}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -1350,6 +1438,16 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
     ? (currentEventId && window.runnerStore ? (window.runnerStore.listRunners(currentEventId).find(r => r.bib === session.followBib) || {}).distance : null)
     : (session.runner && session.runner.dist);
   const course = useCourse(currentEvent, currentDist);
+  const [followedRunner, setFollowedRunner] = uS(() =>
+    (isSpectator && currentEventId && window.runnerStore) ? window.runnerStore.listRunners(currentEventId).find(r => r.bib === session.followBib) : null);
+  uE(() => {
+    if (!isSpectator || !currentEventId || !window.runnerStore) return;
+    const refresh = () => setFollowedRunner(window.runnerStore.listRunners(currentEventId).find(r => r.bib === session.followBib));
+    refresh();
+    window.addEventListener('trt:runners-updated', refresh);
+    return () => window.removeEventListener('trt:runners-updated', refresh);
+  }, [isSpectator, currentEventId, session.followBib]);
+  const livePos = useLivePos(isSpectator ? currentEventId : null, isSpectator ? session.followBib : null);
 
   function toggleFavorite(bib) {
     setFavBibs(list => {
@@ -1390,8 +1488,6 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
   if (scanned) return <ScanSuccessScreen cp={scanned.cp} km={scanned.km} onDone={() => setScanned(null)}/>;
   if (pickingFav) return <FavoritePickerScreen eventId={currentEventId} onBack={() => setPickingFav(false)} favBibs={favBibs} onToggle={toggleFavorite}/>;
 
-  const followedRunner = isSpectator && snap && snap.runners.find(r => r.bib === session.followBib);
-
   const TABS = [
     !isSpectator && ['track', '🏃', 'Track'],
     ['route', '🗺', 'Route'], ['ranking', '🏆', 'Ranking'], ['friends', '👥', 'Friends'],
@@ -1407,7 +1503,9 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
       {!isSpectator && tab === 'track' && <TrackTab runner={{ ...session.runner,
         pace: session.runner.checkins.length ? "6'42\"/กม." : '—',
         gradient: session.runner.checkins.length ? '+4.2%' : '—' }} event={currentEvent} onScan={doScan} onSos={onSos} onDnf={onDnf}/>}
-      {tab === 'route' && <RouteTab course={course} event={currentEvent} runner={isSpectator ? (followedRunner ? { dist: followedRunner.distance, progressKm: followedRunner.progressKm } : { dist: '22K', progressKm: 0 }) : session.runner}/>}
+      {tab === 'route' && <RouteTab course={course} event={currentEvent}
+        runner={isSpectator ? (followedRunner ? { dist: followedRunner.distance, progressKm: followedRunner.progressKm } : { dist: '22K', progressKm: 0 }) : session.runner}
+        spectatorRunner={isSpectator ? followedRunner : null} livePos={isSpectator ? livePos : null}/>}
       {tab === 'ranking' && <RankingTab snap={snap} eventId={!isSpectator ? session.runner.eventId : null} event={currentEvent}/>}
       {tab === 'friends' && <FriendsTab eventId={currentEventId} followedBib={isSpectator ? session.followBib : (session.runner && session.runner.bib)} favBibs={favBibs} onAddFavorite={() => setPickingFav(true)} onRemoveFavorite={toggleFavorite}/>}
       <div style={{ flexShrink: 0, display: 'flex', borderTop: `1px solid #d8d2c2`, background: '#fff', padding: '6px 4px 20px' }}>

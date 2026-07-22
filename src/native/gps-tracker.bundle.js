@@ -532,9 +532,9 @@ var trtGpsTracker = (() => {
     const ping = { eventId, bib, lat, lon, at: Date.now(), ...extra };
     if (onPing) onPing(ping);
     if (window.fb) {
-      const id = `${eventId}_${bib}_${ping.at}`;
+      const id = `${eventId}_${bib}`;
       try {
-        await window.fb.setDocById("pings", id, ping);
+        await window.fb.setDocById("livePos", id, ping);
       } catch (err) {
         console.warn("[gps-tracker] Firestore ping write failed", err);
       }
@@ -557,14 +557,14 @@ var trtGpsTracker = (() => {
             console.warn("[gps-tracker] native watcher error", error);
             return;
           }
-          if (location) pushPing(eventId, bib, location.latitude, location.longitude, { accuracy: location.accuracy });
+          if (location) pushPing(eventId, bib, location.latitude, location.longitude, { accuracy: location.accuracy, speed: location.speed ?? null });
         }
       );
       return;
     }
     if (navigator.geolocation) {
       watcherId = navigator.geolocation.watchPosition(
-        (pos) => pushPing(eventId, bib, pos.coords.latitude, pos.coords.longitude, { accuracy: pos.coords.accuracy }),
+        (pos) => pushPing(eventId, bib, pos.coords.latitude, pos.coords.longitude, { accuracy: pos.coords.accuracy, speed: pos.coords.speed ?? null }),
         (err) => console.warn("[gps-tracker] browser watcher error", err),
         { enableHighAccuracy: true, maximumAge: 5e3 }
       );

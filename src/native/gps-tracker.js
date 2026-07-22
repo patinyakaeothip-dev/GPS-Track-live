@@ -26,12 +26,18 @@ function isNative() {
   return Capacitor.isNativePlatform();
 }
 
+// One doc per runner, overwritten on every ping — NOT one doc per ping.
+// A trail race can run for many hours with pings every ~10m of movement;
+// keeping history per-point would mean thousands of Firestore docs per
+// runner per race (and everyone spectating pays to read that history back).
+// Spectators only ever need the *latest* position, so this stays a single
+// cheap doc per runner regardless of race duration.
 async function pushPing(eventId, bib, lat, lon, extra) {
   const ping = { eventId, bib, lat, lon, at: Date.now(), ...extra };
   if (onPing) onPing(ping);
   if (window.fb) {
-    const id = `${eventId}_${bib}_${ping.at}`;
-    try { await window.fb.setDocById('pings', id, ping); }
+    const id = `${eventId}_${bib}`;
+    try { await window.fb.setDocById('livePos', id, ping); }
     catch (err) { console.warn('[gps-tracker] Firestore ping write failed', err); }
   }
 }
@@ -53,7 +59,7 @@ async function start(eventId, bib, onPingCb) {
       },
       (location, error) => {
         if (error) { console.warn('[gps-tracker] native watcher error', error); return; }
-        if (location) pushPing(eventId, bib, location.latitude, location.longitude, { accuracy: location.accuracy });
+        if (location) pushPing(eventId, bib, location.latitude, location.longitude, { accuracy: location.accuracy, speed: location.speed ?? null });
       },
     );
     return;
@@ -62,7 +68,7 @@ async function start(eventId, bib, onPingCb) {
   // Web fallback: foreground-only.
   if (navigator.geolocation) {
     watcherId = navigator.geolocation.watchPosition(
-      pos => pushPing(eventId, bib, pos.coords.latitude, pos.coords.longitude, { accuracy: pos.coords.accuracy }),
+      pos => pushPing(eventId, bib, pos.coords.latitude, pos.coords.longitude, { accuracy: pos.coords.accuracy, speed: pos.coords.speed ?? null }),
       err => console.warn('[gps-tracker] browser watcher error', err),
       { enableHighAccuracy: true, maximumAge: 5000 },
     );

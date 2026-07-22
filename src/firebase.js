@@ -75,6 +75,14 @@ if (!configured) {
         cb(snap.docs.map(d => ({ id: d.id, ...d.data() })));
       });
     },
+    // Watches a single doc instead of a whole collection — used for live GPS
+    // position (src/native/gps-tracker.js writes one doc per runner, and a
+    // spectator only ever needs that one runner's latest fix, not everyone's).
+    watchDocById(colName, id, cb) {
+      return onSnapshot(doc(db, colName, id), snap => {
+        cb(snap.exists() ? { id: snap.id, ...snap.data() } : null);
+      });
+    },
   };
   window.dispatchEvent(new CustomEvent('trt:firebase-ready'));
 }
