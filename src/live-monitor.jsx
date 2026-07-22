@@ -342,7 +342,7 @@ function LiveMonitorApp() {
 
       <div style={{ background: '#fff', border: '1px solid #e5e0d3', borderRadius: 14, boxShadow: '0 2px 16px rgba(0,0,0,0.05)', overflow: 'hidden' }}>
         <header style={{ display: 'flex', alignItems: 'center', padding: '14px 22px', borderBottom: '1px solid #d8d2c2', gap: 16 }}>
-          <div style={{ width: 54, height: 54, borderRadius: 10, background: '#fff', padding: 4, border: '1px solid #d8d2c2', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden' }}>
+          <div style={{ width: 54, height: 54, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
             <img src="assets/rayong-trail-icon.png" alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }}/>
           </div>
           <div>
