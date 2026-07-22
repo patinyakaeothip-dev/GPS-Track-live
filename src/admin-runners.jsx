@@ -92,6 +92,7 @@ function RunnerManagerApp({ adminEmail, onLogout }) {
   const [q, setQ] = rS('');
   const [distFilter, setDistFilter] = rS('all');
   const [toast, setToast] = rS(null);
+  const [expandedId, setExpandedId] = rS(null);
   function flash(msg) { setToast(msg); setTimeout(() => setToast(null), 1600); }
 
   function editRunner(r, patch) {
@@ -107,8 +108,8 @@ function RunnerManagerApp({ adminEmail, onLogout }) {
     editRunner(r, { dnf: !r.dnf });
   }
   function exportCsv() {
-    const rows = [['bib', 'ชื่อ', 'เบอร์โทร', 'เพศ', 'ระยะ', 'เช็คอิน', 'DNF']];
-    filtered.forEach(r => rows.push([r.bib, r.nickname, r.phone, r.gender === 'm' ? 'ชาย' : r.gender === 'f' ? 'หญิง' : '', r.distance, (r.checkins || []).length, r.dnf ? 'DNF' : '']));
+    const rows = [['bib', 'ชื่อ', 'เบอร์โทร', 'เพศ', 'ระยะ', 'เช็คอิน', 'DNF', 'ผู้ติดต่อฉุกเฉิน', 'เบอร์ฉุกเฉิน', 'กรุ๊ปเลือด/โรคประจำตัว']];
+    filtered.forEach(r => rows.push([r.bib, r.nickname, r.phone, r.gender === 'm' ? 'ชาย' : r.gender === 'f' ? 'หญิง' : '', r.distance, (r.checkins || []).length, r.dnf ? 'DNF' : '', r.emgName || '', r.emgPhone || '', r.medical || '']));
     downloadCsv(`runners-${selectedEvent ? selectedEvent.id : 'export'}.csv`, rows);
   }
   function renumberAll() {
@@ -171,8 +172,10 @@ function RunnerManagerApp({ adminEmail, onLogout }) {
       {filtered.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {filtered.map(r => (
-            <div key={r.id} style={{ display: 'grid', gridTemplateColumns: '54px 1.4fr 1fr 90px 64px 80px auto auto', gap: 8, alignItems: 'center',
-              padding: '8px 10px', background: r.dnf ? '#fef7f7' : '#fafaf8', border: `1px solid ${r.dnf ? '#f0c9c4' : '#ece7da'}`, borderRadius: 10 }}>
+            <div key={r.id}>
+            <div style={{ display: 'grid', gridTemplateColumns: '54px 1.4fr 1fr 90px 64px 80px auto auto auto', gap: 8, alignItems: 'center',
+              padding: '8px 10px', background: r.dnf ? '#fef7f7' : '#fafaf8', border: `1px solid ${r.dnf ? '#f0c9c4' : '#ece7da'}`,
+              borderRadius: expandedId === r.id ? '10px 10px 0 0' : 10 }}>
               <span style={{ fontFamily: R_MONO, fontSize: 12, fontWeight: 700 }}>#{r.bib}</span>
               <input value={r.nickname} onChange={e => editRunner(r, { nickname: e.target.value })} style={inputStyle}/>
               <input value={r.phone} onChange={e => editRunner(r, { phone: e.target.value })} style={{ ...inputStyle, fontFamily: R_MONO }}/>
@@ -196,8 +199,25 @@ function RunnerManagerApp({ adminEmail, onLogout }) {
                 <option value="f">หญิง</option>
               </select>
               <span style={{ fontFamily: R_MONO, fontSize: 10.5, color: '#5d6b59', textAlign: 'center' }}>{(r.checkins || []).length} เช็คอิน</span>
+              <button onClick={() => setExpandedId(expandedId === r.id ? null : r.id)} title="ข้อมูลฉุกเฉิน / กรุ๊ปเลือด" style={{ padding: '6px 9px', background: expandedId === r.id ? '#dc2626' : 'transparent', color: expandedId === r.id ? '#fff' : '#dc2626', border: '1px solid #dc2626', borderRadius: 8, fontFamily: R_MONO, fontSize: 10, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>🆘 ฉุกเฉิน</button>
               <button onClick={() => toggleDnf(r)} style={{ padding: '6px 9px', background: r.dnf ? '#b91c1c' : 'transparent', color: r.dnf ? '#fff' : '#b91c1c', border: '1px solid #b91c1c', borderRadius: 8, fontFamily: R_MONO, fontSize: 10, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>{r.dnf ? 'ยกเลิก DNF' : 'Mark DNF'}</button>
               <button onClick={() => cancelRunner(r)} style={{ padding: '6px 9px', background: 'transparent', color: '#5d6b59', border: '1px solid #d8d2c2', borderRadius: 8, fontFamily: R_MONO, fontSize: 10, fontWeight: 700, cursor: 'pointer' }}>ยกเลิก</button>
+            </div>
+            {expandedId === r.id && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, padding: '10px 14px', background: '#fef2f2', border: '1px solid #fecaca', borderTop: 'none', borderRadius: '0 0 10px 10px', fontSize: 12 }}>
+                <div>
+                  <div style={{ fontFamily: R_MONO, fontSize: 9.5, color: '#9b1c10', textTransform: 'uppercase', letterSpacing: '0.06em' }}>ผู้ติดต่อฉุกเฉิน</div>
+                  <div style={{ marginTop: 2 }}>
+                    {r.emgName || '—'}
+                    {r.emgPhone && <> · <a href={`tel:${r.emgPhone.replace(/[^\d+]/g, '')}`} style={{ color: '#9b1c10', fontFamily: R_MONO, fontWeight: 700 }}>📞 {r.emgPhone}</a></>}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontFamily: R_MONO, fontSize: 9.5, color: '#9b1c10', textTransform: 'uppercase', letterSpacing: '0.06em' }}>กรุ๊ปเลือด / โรคประจำตัว</div>
+                  <div style={{ marginTop: 2 }}>{r.medical || 'ไม่ได้ระบุไว้'}</div>
+                </div>
+              </div>
+            )}
             </div>
           ))}
         </div>

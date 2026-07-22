@@ -1419,8 +1419,17 @@ function MobileApp() {
       // as themselves instead of just a +1 on the quota. See
       // src/runner-store.js.
       if (window.runnerStore) {
+        // Emergency contact name and blood type/medical notes only ever get
+        // asked once, in the full Profile screen (see ProfileScreen) — the
+        // quick registration form only has a single emergency phone field.
+        // Pull the richer profile fields in here too so RD actually has
+        // something to act on if this runner ever needs real help, instead
+        // of that data sitting only in this device's local profile where
+        // nobody else can ever see it.
         const rosterEntry = window.runnerStore.registerRunner(pendingEvent, {
-          distance: data.dist, nickname: data.nick, phone: data.phone, gender: data.gender, emgPhone: data.emg, uid: session.user.uid,
+          distance: data.dist, nickname: data.nick, phone: data.phone, gender: data.gender,
+          emgName: session.user.emgName || '', emgPhone: data.emg || session.user.emgPhone || '',
+          medical: session.user.medical || '', uid: session.user.uid,
         });
         runner = { ...runner, bib: rosterEntry.bib, rosterId: rosterEntry.id };
       }
