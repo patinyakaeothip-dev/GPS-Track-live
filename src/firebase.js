@@ -9,7 +9,7 @@
 
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
 import {
-  getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, signInWithCredential, getRedirectResult, signOut, onAuthStateChanged,
+  getAuth, initializeAuth, indexedDBLocalPersistence, GoogleAuthProvider, signInWithPopup, signInWithRedirect, signInWithCredential, getRedirectResult, signOut, onAuthStateChanged,
 } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
 import {
   getFirestore, collection, doc, getDocs, setDoc, deleteDoc, onSnapshot,
@@ -23,7 +23,14 @@ if (!configured) {
   window.fb = null;
 } else {
   const app = initializeApp(cfg);
-  const auth = getAuth(app);
+  // getAuth()'s automatic persistence detection hangs indefinitely inside a
+  // Capacitor WKWebView (capacitor://localhost origin) — signInWithCredential
+  // never resolves or rejects, it just sits there. Forcing indexedDB
+  // persistence explicitly skips whatever's going wrong in that
+  // auto-detection. window.Capacitor is injected by the native runtime
+  // before any page script runs, so it's safe to read directly here.
+  const isNativeShell = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+  const auth = isNativeShell ? initializeAuth(app, { persistence: indexedDBLocalPersistence }) : getAuth(app);
   const db = getFirestore(app);
   const googleProvider = new GoogleAuthProvider();
 
