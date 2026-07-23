@@ -1455,7 +1455,13 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
     window.addEventListener('trt:runners-updated', refresh);
     return () => window.removeEventListener('trt:runners-updated', refresh);
   }, [isSpectator, currentEventId, session.followBib]);
-  const livePos = useLivePos(isSpectator ? currentEventId : null, isSpectator ? session.followBib : null);
+  // GPS is the source of truth for *where* everyone is on the map — a
+  // runner should see their own dot move the same way a spectator or RD
+  // does, not stay pinned to their last QR scan. Checkpoint check-ins stay
+  // the source of truth for *progress* (pace, distance completed, cutoff
+  // tracking) since GPS alone can't tell "did they finish this loop yet."
+  const ownBib = !isSpectator && session.runner && session.runner.bib;
+  const livePos = useLivePos(currentEventId, isSpectator ? session.followBib : ownBib);
 
   function toggleFavorite(bib) {
     setFavBibs(list => {
@@ -1513,7 +1519,7 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
         gradient: session.runner.checkins.length ? '+4.2%' : '—' }} event={currentEvent} onScan={doScan} onSos={onSos} onDnf={onDnf}/>}
       {tab === 'route' && <RouteTab course={course} event={currentEvent}
         runner={isSpectator ? (followedRunner ? { dist: followedRunner.distance, progressKm: followedRunner.progressKm } : { dist: '22K', progressKm: 0 }) : session.runner}
-        spectatorRunner={isSpectator ? followedRunner : null} livePos={isSpectator ? livePos : null}/>}
+        spectatorRunner={isSpectator ? followedRunner : null} livePos={livePos}/>}
       {tab === 'ranking' && <RankingTab snap={snap} eventId={!isSpectator ? session.runner.eventId : null} event={currentEvent}/>}
       {tab === 'friends' && <FriendsTab eventId={currentEventId} followedBib={isSpectator ? session.followBib : (session.runner && session.runner.bib)} favBibs={favBibs} onAddFavorite={() => setPickingFav(true)} onRemoveFavorite={toggleFavorite}/>}
       <div style={{ flexShrink: 0, display: 'flex', borderTop: `1px solid #d8d2c2`, background: '#fff', padding: '6px 4px 20px' }}>
