@@ -815,14 +815,24 @@ function cpKmFor(event, cpId, distLabel) {
 // function's {lat, lon, km} object shape — the two course-loading paths
 // (useCourse here vs buildEventCoursePaths for Live Monitor) never got
 // unified onto one point format.
+// A GPS fix always has *some* nearest point on the course, no matter how
+// far away it actually is — projecting it onto the elevation/gradient axis
+// unconditionally made both look like the runner was on-course even while
+// testing from an office kilometers away. distKm (rough — 1° latitude is
+// ~111km, plenty precise for a same-ballpark "are they even near the
+// course" check) lets callers ignore the projection past a threshold.
 function nearestKmForPoint(points, lat, lon) {
   let best = points[0], bestD = Infinity;
   for (const p of points) {
     const d = (p[0] - lat) ** 2 + (p[1] - lon) ** 2;
     if (d < bestD) { bestD = d; best = p; }
   }
-  return best[3];
+  return { km: best[3], distKm: Math.sqrt(bestD) * 111 };
 }
+// How far off the recorded course a GPS fix can be before it's treated as
+// "not actually near this course" for elevation/gradient purposes, rather
+// than snapped to the nearest point regardless of distance.
+const ON_COURSE_KM = 0.5;
 // window.courseGeo.gradientAtKm expects {lat,lon,ele,km} object points —
 // this app's course.points are [lat,lon,ele,km] tuples, so that function
 // can't be reused directly here without converting the whole array first.
@@ -1013,9 +1023,8 @@ function RouteTab({ course, runner, event, spectatorRunner, livePos }) {
   // live GPS — same GPS-preferred/checkpoint-fallback rule, just projected
   // onto the 1-D km axis instead of plotted as raw lat/lon.
   const gpsLiveForElevation = livePos && livePos.at && (Date.now() - livePos.at) < 2 * 60 * 1000 && livePos.lat != null;
-  const elevationKm = (gpsLiveForElevation && course)
-    ? nearestKmForPoint(course.points, livePos.lat, livePos.lon)
-    : runner.progressKm;
+  const gpsProjection = (gpsLiveForElevation && course) ? nearestKmForPoint(course.points, livePos.lat, livePos.lon) : null;
+  const elevationKm = (gpsProjection && gpsProjection.distKm < ON_COURSE_KM) ? gpsProjection.km : runner.progressKm;
   return (
     <div style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
       <div ref={mapRef} style={{ flex: 1, minHeight: 260, background: '#eee' }}/>
@@ -1537,7 +1546,8 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
   const trackGradient = uM(() => {
     if (isSpectator || !session.runner || !session.runner.checkins.length || !course || !course.points) return '—';
     const gpsLive = livePos && livePos.at && (Date.now() - livePos.at) < 2 * 60 * 1000 && livePos.lat != null;
-    const km = gpsLive ? nearestKmForPoint(course.points, livePos.lat, livePos.lon) : session.runner.progressKm;
+    const projection = gpsLive ? nearestKmForPoint(course.points, livePos.lat, livePos.lon) : null;
+    const km = (projection && projection.distKm < ON_COURSE_KM) ? projection.km : session.runner.progressKm;
     const g = gradientAtKmForPoints(course.points, km);
     return `${g >= 0 ? '+' : ''}${g.toFixed(1)}%`;
   }, [isSpectator, session.runner, course, livePos]);
