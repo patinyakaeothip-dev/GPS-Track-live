@@ -809,6 +809,45 @@ function cpKmFor(event, cpId, distLabel) {
   const cp = event && (event.checkpoints || []).find(c => c.id === cpId);
   return cp ? (parseFloat(cp.km) || 0) : 0;
 }
+// Same idea as src/course-geo.js's nearestKmOnTrack (project a lat/lon onto
+// the recorded track, return the nearest point's km) but working against
+// this app's tuple point shape ([lat, lon, ele, km]) instead of that
+// function's {lat, lon, km} object shape — the two course-loading paths
+// (useCourse here vs buildEventCoursePaths for Live Monitor) never got
+// unified onto one point format.
+function nearestKmForPoint(points, lat, lon) {
+  let best = points[0], bestD = Infinity;
+  for (const p of points) {
+    const d = (p[0] - lat) ** 2 + (p[1] - lon) ** 2;
+    if (d < bestD) { bestD = d; best = p; }
+  }
+  return best[3];
+}
+// window.courseGeo.gradientAtKm expects {lat,lon,ele,km} object points —
+// this app's course.points are [lat,lon,ele,km] tuples, so that function
+// can't be reused directly here without converting the whole array first.
+// Same % rise/run averaged over a short window as gradientAtKm, just
+// reading tuple indices instead.
+function eleAtKmForPoints(points, km) {
+  const clamped = Math.max(0, Math.min(points[points.length - 1][3], km));
+  for (let i = 1; i < points.length; i++) {
+    if (points[i][3] >= clamped) {
+      const a = points[i - 1], b = points[i];
+      const span = b[3] - a[3] || 1;
+      const t = (clamped - a[3]) / span;
+      return { ele: a[2] + (b[2] - a[2]) * t, km: clamped };
+    }
+  }
+  return { ele: points[points.length - 1][2], km: points[points.length - 1][3] };
+}
+function gradientAtKmForPoints(points, km) {
+  const w = 0.15;
+  const p0 = eleAtKmForPoints(points, km - w);
+  const p1 = eleAtKmForPoints(points, km + w);
+  const rise = p1.ele - p0.ele;
+  const run = Math.max(0.02, (p1.km - p0.km)) * 1000;
+  return (rise / run) * 100;
+}
 
 // Writes the real finish result to the localStorage key certificate.html
 // reads (trt.finish.result), so "บันทึกใบประกาศ" always reflects this
@@ -969,13 +1008,21 @@ function RouteTab({ course, runner, event, spectatorRunner, livePos }) {
       runnerMarkerRef.current.setLatLng([pos[0], pos[1]]);
     }
   }, [course, runner.progressKm, livePos && livePos.lat, livePos && livePos.lon]);
+  // Elevation profile's "you are here" marker used to only ever move on a
+  // checkpoint scan (progressKm) even after the map dot above switched to
+  // live GPS — same GPS-preferred/checkpoint-fallback rule, just projected
+  // onto the 1-D km axis instead of plotted as raw lat/lon.
+  const gpsLiveForElevation = livePos && livePos.at && (Date.now() - livePos.at) < 2 * 60 * 1000 && livePos.lat != null;
+  const elevationKm = (gpsLiveForElevation && course)
+    ? nearestKmForPoint(course.points, livePos.lat, livePos.lon)
+    : runner.progressKm;
   return (
     <div style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
       <div ref={mapRef} style={{ flex: 1, minHeight: 260, background: '#eee' }}/>
       {spectatorRunner && <FollowedRunnerPanel runner={spectatorRunner} event={event} livePos={livePos}/>}
       <div style={{ padding: '14px 18px 90px', background: '#fff' }}>
         <Kicker>Elevation</Kicker>
-        {course && <ElevationSvg course={course} progressKm={runner.progressKm} checkpoints={(event && event.checkpoints) || []}/>}
+        {course && <ElevationSvg course={course} progressKm={elevationKm} checkpoints={(event && event.checkpoints) || []}/>}
       </div>
     </div>
   );
@@ -1489,9 +1536,11 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
   }, [isSpectator, session.runner, currentEvent, livePos]);
   const trackGradient = uM(() => {
     if (isSpectator || !session.runner || !session.runner.checkins.length || !course || !course.points) return '—';
-    const g = window.courseGeo.gradientAtKm(course.points, session.runner.progressKm);
+    const gpsLive = livePos && livePos.at && (Date.now() - livePos.at) < 2 * 60 * 1000 && livePos.lat != null;
+    const km = gpsLive ? nearestKmForPoint(course.points, livePos.lat, livePos.lon) : session.runner.progressKm;
+    const g = gradientAtKmForPoints(course.points, km);
     return `${g >= 0 ? '+' : ''}${g.toFixed(1)}%`;
-  }, [isSpectator, session.runner, course]);
+  }, [isSpectator, session.runner, course, livePos]);
 
   function toggleFavorite(bib) {
     setFavBibs(list => {
