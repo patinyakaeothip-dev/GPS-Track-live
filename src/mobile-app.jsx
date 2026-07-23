@@ -1698,6 +1698,16 @@ function MobileApp() {
   else if (screen === 'prerace') body = <PreRaceScreen event={getEvents().find(e => e.id === session.runner.eventId)} dist={session.runner.dist} onBack={() => setScreen('events')} onScan={() => setScreen('qr-start')} onPreview={() => setScreen('app')}/>;
   else if (screen === 'qr-start') body = <QrScanScreen label="จุดสตาร์ท" expectedCode={`TRT:${session.runner.eventId}:start`} onBack={() => setScreen('prerace')} onScanned={() => {
     updateRunner(r => ({ ...r, checkins: [{ cp: 'start', t: new Date().toTimeString().slice(0, 8) }], progressKm: 0 }));
+    // Same "gun goes off" GPS start as the in-app rescan path in AppShell's
+    // scanComplete — this is the one every runner actually goes through on
+    // their real first Start scan (straight from PreRaceScreen, before
+    // AppShell ever mounts), so it was the one that mattered most and had
+    // been missing entirely: GPS never actually started for a normal
+    // registration flow, only the SOS/finish stop-path existed.
+    if (window.trtGpsTracker) {
+      const bib = session.runner.bib || session.user.uid || session.user.name;
+      window.trtGpsTracker.start(session.runner.eventId, bib);
+    }
     setScreen('app');
   }}/>;
   else if (screen === 'app') body = <AppShell user={session.user} session={session} updateRunner={updateRunner}
