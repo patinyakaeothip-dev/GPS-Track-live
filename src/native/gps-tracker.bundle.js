@@ -1,4 +1,4 @@
-var trtGpsTracker = (() => {
+(() => {
   // node_modules/@capacitor/core/dist/index.js
   var createCapacitorPlatforms = (win) => {
     const defaultPlatformMap = /* @__PURE__ */ new Map();
