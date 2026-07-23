@@ -8,6 +8,10 @@
   "plugins": {
     "Geolocation": {
       "permissions": ["location"]
+    },
+    "FirebaseAuthentication": {
+      "skipNativeAuth": false,
+      "providers": ["google.com"]
     }
   }
 }

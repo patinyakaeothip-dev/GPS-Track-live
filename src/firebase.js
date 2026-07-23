@@ -9,7 +9,7 @@
 
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
 import {
-  getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signOut, onAuthStateChanged,
+  getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, signInWithCredential, getRedirectResult, signOut, onAuthStateChanged,
 } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
 import {
   getFirestore, collection, doc, getDocs, setDoc, deleteDoc, onSnapshot,
@@ -45,6 +45,15 @@ if (!configured) {
     // that outright block/close the popup (in-app webviews like Line/
     // Facebook, popup blockers) fall through to redirect.
     async signInWithGoogle() {
+      // Inside the native app shell there's no browser tab for a popup or
+      // redirect to round-trip through — see src/native/firebase-auth-native.js
+      // for why. Drive the OS-native Google Sign-In UI instead, then fold the
+      // resulting Google ID token into this same `auth` instance so the rest
+      // of the app can keep treating web and native sign-in identically.
+      if (window.trtNativeAuth && window.trtNativeAuth.isNative()) {
+        const idToken = await window.trtNativeAuth.signInWithGoogle();
+        return signInWithCredential(auth, GoogleAuthProvider.credential(idToken));
+      }
       try {
         return await signInWithPopup(auth, googleProvider);
       } catch (err) {
@@ -57,7 +66,10 @@ if (!configured) {
     // result of a Google sign-in that just navigated back. Resolves to null
     // when there's no pending redirect sign-in.
     getGoogleRedirectResult: () => getRedirectResult(auth),
-    signOutUser: () => signOut(auth),
+    async signOutUser() {
+      if (window.trtNativeAuth && window.trtNativeAuth.isNative()) await window.trtNativeAuth.signOut();
+      return signOut(auth);
+    },
     onAuthChange: (cb) => onAuthStateChanged(auth, cb),
     // Collection helpers used by src/event-store.js and friends.
     async listDocs(colName) {
