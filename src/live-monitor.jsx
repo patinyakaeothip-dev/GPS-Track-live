@@ -152,6 +152,25 @@ function LiveMonitorApp() {
     return () => window.removeEventListener('trt:runners-updated', refresh);
   }, [eventId]);
 
+  // Real-time GPS, bib -> latest fix — src/native/gps-tracker.js writes one
+  // doc per runner (id `${eventId}_${bib}`, overwritten on every fix) to the
+  // `livePos` collection. Watching the whole collection and filtering
+  // client-side is cheap regardless of race length: it's never more than
+  // one doc per currently-tracking runner, not a growing ping history.
+  // Position on the map now prefers this over checkpoint-km interpolation
+  // whenever a fix is fresh; checkpoints remain the source of truth for
+  // pace/progress, which GPS alone can't derive (start/finish times, laps).
+  const [livePosByBib, setLivePosByBib] = mS({});
+  mE(() => {
+    if (!eventId || !window.fb) { setLivePosByBib({}); return; }
+    const prefix = `${eventId}_`;
+    return window.fb.watchCollection('livePos', all => {
+      const next = {};
+      all.forEach(p => { if (p.id.startsWith(prefix)) next[p.id.slice(prefix.length)] = p; });
+      setLivePosByBib(next);
+    });
+  }, [eventId]);
+
   // Loads the *real* course (GPX uploaded per event in Admin, see
   // src/course-geo.js buildEventCoursePaths) for whichever event is
   // selected, instead of always drawing the one bundled demo course —
@@ -261,9 +280,16 @@ function LiveMonitorApp() {
       // anything about the runner, so show — same as pace instead of a
       // number that looks like real live data.
       const started = status !== 'not_started';
+      // GPS wins for *where the dot sits* whenever a fix is fresh — km/pace/
+      // gradient stay derived from checkpoints regardless, since GPS alone
+      // can't tell progress along a looped course.
+      const live = livePosByBib[r.bib];
+      const gpsLive = !!(live && live.at && (Date.now() - live.at) < 2 * 60 * 1000);
+      const mapLat = gpsLive ? live.lat : p.lat;
+      const mapLon = gpsLive ? live.lon : p.lon;
       return { bib: r.bib, id: r.id, name: r.nickname, distance: r.distance, gender: r.gender,
         color: colorFor({ status, distance: r.distance }, distColor),
-        initial: (r.nickname || '?').slice(0, 1), lat: p.lat, lon: p.lon, km, totalKm,
+        initial: (r.nickname || '?').slice(0, 1), lat: mapLat, lon: mapLon, gpsLive, km, totalKm,
         pct: Math.min(100, (km / totalKm) * 100),
         pace: fmtPace(pace),
         gradStr: started ? `${g >= 0 ? '+' : ''}${g.toFixed(0)}%` : '—',
@@ -274,7 +300,7 @@ function LiveMonitorApp() {
         emgName: r.emgName || '', emgPhone: r.emgPhone || '', bloodType: r.bloodType || '', medical: r.medical || '',
         status, statusLabel: meta.label, statusBg: meta.bg, statusFg: meta.fg, physKm };
     });
-  }, [ready, runners, coursePaths, overviewLabel, distColor, selectedEvent]);
+  }, [ready, runners, coursePaths, overviewLabel, distColor, selectedEvent, livePosByBib]);
 
   // Keep Leaflet markers in sync with real roster updates (a QR scan moves
   // someone) instead of only ever creating them once at map init.
