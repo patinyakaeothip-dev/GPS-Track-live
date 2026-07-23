@@ -51,8 +51,12 @@ if (!configured) {
       // resulting Google ID token into this same `auth` instance so the rest
       // of the app can keep treating web and native sign-in identically.
       if (window.trtNativeAuth && window.trtNativeAuth.isNative()) {
+        console.log('[trt] native: requesting Google ID token...');
         const idToken = await window.trtNativeAuth.signInWithGoogle();
-        return signInWithCredential(auth, GoogleAuthProvider.credential(idToken));
+        console.log('[trt] native: got ID token, exchanging with Firebase...', idToken && idToken.slice(0, 20));
+        const cred = await signInWithCredential(auth, GoogleAuthProvider.credential(idToken));
+        console.log('[trt] native: Firebase sign-in complete', cred && cred.user && cred.user.uid);
+        return cred;
       }
       try {
         return await signInWithPopup(auth, googleProvider);
