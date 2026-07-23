@@ -831,8 +831,11 @@ function nearestKmForPoint(points, lat, lon) {
 }
 // How far off the recorded course a GPS fix can be before it's treated as
 // "not actually near this course" for elevation/gradient purposes, rather
-// than snapped to the nearest point regardless of distance.
-const ON_COURSE_KM = 0.5;
+// than snapped to the nearest point regardless of distance. Same distance
+// this app will eventually flag as an off-route alert — keeping them equal
+// means "close enough to show on the elevation graph" and "close enough to
+// not be flagged as off-route" stay the same claim.
+const ON_COURSE_KM = 0.1;
 // window.courseGeo.gradientAtKm expects {lat,lon,ele,km} object points —
 // this app's course.points are [lat,lon,ele,km] tuples, so that function
 // can't be reused directly here without converting the whole array first.
