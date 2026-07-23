@@ -215,6 +215,14 @@ function LoginScreen({ onLogin }) {
   // not ready yet silently dropped the completed sign-in, bouncing the user
   // back to this same login screen. Wait for 'trt:firebase-ready' instead.
   uE(() => {
+    // The native app never uses signInWithRedirect() (see src/firebase.js —
+    // it drives the OS-native Google Sign-In UI instead), so this "did we
+    // just come back from a redirect" check is meaningless there. Worse,
+    // calling getRedirectResult() inside a Capacitor WKWebView never
+    // resolves, which left `busy` stuck true and the login button greyed
+    // out from the moment this screen mounted — before the user even
+    // touched it.
+    if (window.trtNativeAuth && window.trtNativeAuth.isNative()) return;
     let cancelled = false;
     function checkRedirect() {
       if (cancelled || !window.fb || !window.fb.getGoogleRedirectResult) return;
