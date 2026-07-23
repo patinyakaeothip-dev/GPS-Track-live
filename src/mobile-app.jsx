@@ -1463,6 +1463,36 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
   const ownBib = !isSpectator && session.runner && session.runner.bib;
   const livePos = useLivePos(currentEventId, isSpectator ? session.followBib : ownBib);
 
+  // Track tab's "เพซปัจจุบัน"/"ความชัน" used to be hardcoded demo strings
+  // ("6'42\"/กม.", "+4.2%") shown for every runner regardless of how they
+  // were actually doing. Pace now comes from live GPS speed when a fix is
+  // fresh (<2min), falling back to average pace-so-far (elapsed ÷ distance
+  // covered) — same reasoning as everywhere else GPS/checkpoints are mixed.
+  // Gradient reads the real course elevation at the runner's current km.
+  const trackPace = uM(() => {
+    if (isSpectator || !session.runner || !session.runner.checkins.length) return '—';
+    const gpsLive = livePos && livePos.at && (Date.now() - livePos.at) < 2 * 60 * 1000;
+    if (gpsLive && livePos.speed > 0.3) {
+      const min = 1000 / livePos.speed / 60;
+      const mm = Math.floor(min), ss = Math.round((min - mm) * 60);
+      return `${mm}'${String(ss).padStart(2, '0')}"/กม.`;
+    }
+    const combine = window.eventStatus && window.eventStatus.combineDateTime;
+    const startCk = session.runner.checkins.find(c => c.cp === 'start');
+    const startMs = startCk && combine && currentEvent ? combine(currentEvent.raceDateISO, startCk.t) : null;
+    const km = session.runner.progressKm;
+    if (!startMs || !km) return gpsLive ? 'หยุดอยู่' : '—';
+    const min = (Date.now() - startMs) / 60000 / km;
+    if (!isFinite(min) || min <= 0) return '—';
+    const mm = Math.floor(min), ss = Math.round((min - mm) * 60);
+    return `${mm}'${String(ss).padStart(2, '0')}"/กม.`;
+  }, [isSpectator, session.runner, currentEvent, livePos]);
+  const trackGradient = uM(() => {
+    if (isSpectator || !session.runner || !session.runner.checkins.length || !course || !course.points) return '—';
+    const g = window.courseGeo.gradientAtKm(course.points, session.runner.progressKm);
+    return `${g >= 0 ? '+' : ''}${g.toFixed(1)}%`;
+  }, [isSpectator, session.runner, course]);
+
   function toggleFavorite(bib) {
     setFavBibs(list => {
       const next = list.includes(bib) ? list.filter(b => b !== bib) : [...list, bib];
@@ -1515,8 +1545,7 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
         <PersonIcon size={30} onClick={onProfile}/>
       </div>
       {!isSpectator && tab === 'track' && <TrackTab runner={{ ...session.runner,
-        pace: session.runner.checkins.length ? "6'42\"/กม." : '—',
-        gradient: session.runner.checkins.length ? '+4.2%' : '—' }} event={currentEvent} onScan={doScan} onSos={onSos} onDnf={onDnf}/>}
+        pace: trackPace, gradient: trackGradient }} event={currentEvent} onScan={doScan} onSos={onSos} onDnf={onDnf}/>}
       {tab === 'route' && <RouteTab course={course} event={currentEvent}
         runner={isSpectator ? (followedRunner ? { dist: followedRunner.distance, progressKm: followedRunner.progressKm } : { dist: '22K', progressKm: 0 }) : session.runner}
         spectatorRunner={isSpectator ? followedRunner : null} livePos={livePos}/>}
