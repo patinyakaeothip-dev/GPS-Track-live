@@ -80,15 +80,22 @@
   // Generic patch — used both by the app syncing checkin/progress after a
   // QR scan, and by Admin's runner-management page editing name/phone/
   // distance/bib or marking DNF.
+  // `synced` on the return value resolves once the Firestore write actually
+  // lands (or false if it fails/there's no backend) — the local write above
+  // already happened either way (offline-first), but SOS specifically needs
+  // to know the real outcome before telling a runner "help is on the way"
+  // instead of assuming success the instant the button is tapped.
   function updateRunnerProgress(id, patch) {
     const list = loadRunners().slice();
     const idx = list.findIndex(r => r.id === id);
-    if (idx < 0) return;
+    if (idx < 0) return { runner: null, synced: Promise.resolve(false) };
     list[idx] = { ...list[idx], ...patch };
     saveRunners(list);
-    if (window.fb) window.fb.setDocById('runners', id, list[idx]).catch(err => console.warn('[runner-store] Firestore write failed', err));
+    const synced = window.fb
+      ? window.fb.setDocById('runners', id, list[idx]).then(() => true).catch(err => { console.warn('[runner-store] Firestore write failed', err); return false; })
+      : Promise.resolve(false);
     notifyUpdated();
-    return list[idx];
+    return { runner: list[idx], synced };
   }
 
   // Same "don't let a late realtime snapshot resurrect what we just

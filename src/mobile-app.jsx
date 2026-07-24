@@ -625,6 +625,65 @@ function HomeIcon({ size = 19, dark, active }) {
     </div>
   );
 }
+// Bottom tab bar icons — line-drawn to match HomeIcon/BackBtn/PersonIcon's
+// style instead of raw emoji, which render inconsistently across
+// OS/browsers and read as less deliberate than the rest of the icon set.
+// stroke="currentColor" so each just inherits the tab's active/inactive
+// color from its wrapping element, same as the label text under it.
+function TrackIcon({ size = 19 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="8.5" stroke="currentColor" strokeWidth="2"/>
+      <path d="M12 7.5V12l3.2 2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+      <path d="M9.5 2.5h5" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+    </svg>
+  );
+}
+function RouteIcon({ size = 19 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <circle cx="5.5" cy="6" r="2.3" stroke="currentColor" strokeWidth="2"/>
+      <circle cx="18.5" cy="18" r="2.3" stroke="currentColor" strokeWidth="2"/>
+      <path d="M6.5 8.3C7.5 12 10 11 12 13s2 5.7 4.3 5.7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" fill="none"/>
+    </svg>
+  );
+}
+function RankingIcon({ size = 19 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <path d="M7 4h10v5a5 5 0 0 1-10 0V4Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"/>
+      <path d="M7 5.5H4.5A1.5 1.5 0 0 0 3 7v.5A3.5 3.5 0 0 0 6.5 11" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+      <path d="M17 5.5h2.5A1.5 1.5 0 0 1 21 7v.5A3.5 3.5 0 0 1 17.5 11" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+      <path d="M12 14v3.5M9 20.5h6M9.8 17.5h4.4l.6 3H9.2l.6-3Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  );
+}
+function FriendsIcon({ size = 19 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <circle cx="9" cy="8.5" r="3" stroke="currentColor" strokeWidth="2"/>
+      <path d="M3.5 19c0-3.3 2.5-5.3 5.5-5.3s5.5 2 5.5 5.3" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+      <circle cx="16.5" cy="9.3" r="2.4" stroke="currentColor" strokeWidth="1.8"/>
+      <path d="M15.3 13.3c2.6.2 4.7 2 4.7 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+    </svg>
+  );
+}
+function CameraIcon({ size = 17, color = '#fff' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <path d="M4 8.5A1.5 1.5 0 0 1 5.5 7h2l1-2h7l1 2h2A1.5 1.5 0 0 1 20 8.5v9A1.5 1.5 0 0 1 18.5 19h-13A1.5 1.5 0 0 1 4 17.5v-9Z" stroke={color} strokeWidth="1.9" strokeLinejoin="round"/>
+      <circle cx="12" cy="12.5" r="3.4" stroke={color} strokeWidth="1.9"/>
+    </svg>
+  );
+}
+function FlagIcon({ size = 17, color = '#9b1c10' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <path d="M6 21V4" stroke={color} strokeWidth="2" strokeLinecap="round"/>
+      <path d="M6 4.5c2-1.2 4-1.2 6 0s4 1.2 6 0v8c-2 1.2-4 1.2-6 0s-4-1.2-6 0v-8Z" stroke={color} strokeWidth="1.9" strokeLinejoin="round"/>
+    </svg>
+  );
+}
 function Field({ label, children, required }) {
   return <div><div style={{ fontFamily: C.mono, fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted, marginBottom: 5 }}>{label}{required && <span style={{ color: '#9b1c10' }}> *จำเป็น</span>}</div>{children}</div>;
 }
@@ -683,7 +742,9 @@ function PreRaceScreen({ event, dist, onScan, onBack, onPreview, onCancel }) {
       <div style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 12, padding: '12px 14px', marginBottom: 16, fontSize: 12, lineHeight: 1.6, color: 'rgba(255,255,255,0.85)' }}>
         GPS จะเริ่มบันทึกตำแหน่งทันทีที่คุณสแกน QR ที่จุดสตาร์ท — ไม่ใช่ตอนนี้ · ประหยัดแบตระหว่างรอ
       </div>
-      <Btn variant="white" onClick={onScan}>📷 สแกน QR ที่จุดสตาร์ท · เริ่ม Track</Btn>
+      <Btn variant="white" onClick={onScan}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}><CameraIcon size={16} color={C.text}/> สแกน QR ที่จุดสตาร์ท · เริ่ม Track</span>
+      </Btn>
       {onPreview && (
         <Btn variant="ghost" onClick={onPreview} style={{ marginTop: 10, borderColor: 'rgba(255,255,255,0.35)', color: 'rgba(255,255,255,0.85)' }}>
           🗺 เปิด Track / Route / Ranking
@@ -958,7 +1019,9 @@ function TrackTab({ runner, event, onScan, onSos, onDnf, offRoute }) {
         <Btn variant="primary" onClick={() => window.open('certificate.html', '_blank')}>🏅 บันทึกใบประกาศ</Btn>
       ) : (
         <div style={{ display: 'flex', gap: 10 }}>
-          <Btn variant="primary" onClick={onScan} style={{ flex: 1 }}>📷 Scan QR</Btn>
+          <Btn variant="primary" onClick={onScan} style={{ flex: 1 }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><CameraIcon size={16}/> Scan QR</span>
+          </Btn>
           <Btn variant="danger" onClick={onSos} style={{ flex: 1 }}>🆘 SOS</Btn>
         </div>
       )}
@@ -979,7 +1042,7 @@ function TrackTab({ runner, event, onScan, onSos, onDnf, offRoute }) {
       </div>
 
       <Btn variant="ghost" onClick={onDnf} style={{ borderColor: '#e5b3ab', color: '#9b1c10' }}>
-        🏳️ แจ้งถอนตัว (DNF)
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><FlagIcon size={15}/> แจ้งถอนตัว (DNF)</span>
       </Btn>
     </div>
   );
@@ -1411,11 +1474,39 @@ function cpCheckinLabel(cp) {
 }
 
 // ── SOS / DNF flows ───────────────────────────────────────────────────────
+// SOS is a safety feature — the "sent" screen must reflect whether the
+// Firestore write actually landed, not just that the button was tapped.
+// `onSend` returns a promise resolving true/false; a hard timeout covers
+// the real case this matters most (no signal in a dead zone, where the
+// write promise might just hang) so the runner isn't left staring at a
+// spinner with no path forward.
+const SOS_SEND_TIMEOUT_MS = 8000;
 function SosScreen({ hotline, onCancel, onSent, onSend }) {
   const [reason, setReason] = uS(null);
-  const [sent, setSent] = uS(false);
+  const [phase, setPhase] = uS('idle'); // idle | sending | sent | failed
   const tel = (hotline || '').replace(/[^\d+]/g, '');
-  if (sent) {
+
+  async function submit() {
+    setPhase('sending');
+    let ok = false;
+    try {
+      ok = await Promise.race([
+        Promise.resolve(onSend(reason)),
+        new Promise(resolve => setTimeout(() => resolve(false), SOS_SEND_TIMEOUT_MS)),
+      ]);
+    } catch (e) { ok = false; }
+    setPhase(ok ? 'sent' : 'failed');
+  }
+
+  if (phase === 'sending') {
+    return (
+      <div style={{ height: '100%', background: '#fde9e6', fontFamily: C.font, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 32, textAlign: 'center', gap: 14 }}>
+        <div style={{ width: 34, height: 34, borderRadius: 999, border: '3px solid rgba(155,28,16,0.25)', borderTopColor: '#9b1c10', animation: 'trtSpin 0.9s linear infinite' }}/>
+        <div style={{ fontSize: 15, fontWeight: 700, color: '#9b1c10' }}>กำลังส่งสัญญาณ SOS...</div>
+      </div>
+    );
+  }
+  if (phase === 'sent') {
     return (
       <div style={{ height: '100%', background: '#fde9e6', fontFamily: C.font, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 32, textAlign: 'center', gap: 14 }}>
         <div style={{ fontSize: 40 }}>🆘</div>
@@ -1424,6 +1515,18 @@ function SosScreen({ hotline, onCancel, onSent, onSend }) {
         {tel
           ? <Btn variant="danger" onClick={() => window.location.href = `tel:${tel}`} style={{ marginTop: 10 }}>📞 โทรสายด่วนทีมกู้ภัย {hotline}</Btn>
           : <div style={{ fontFamily: C.mono, fontSize: 11, color: C.muted, marginTop: 10 }}>งานนี้ยังไม่ได้ตั้งเบอร์สายด่วนไว้ในระบบ</div>}
+        <Btn variant="ghost" onClick={onSent}>กลับสู่หน้าติดตาม</Btn>
+      </div>
+    );
+  }
+  if (phase === 'failed') {
+    return (
+      <div style={{ height: '100%', background: '#fde9e6', fontFamily: C.font, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 32, textAlign: 'center', gap: 14 }}>
+        <div style={{ fontSize: 40 }}>⚠️</div>
+        <div style={{ fontSize: 19, fontWeight: 800, color: '#9b1c10' }}>ไม่แน่ใจว่าสัญญาณส่งถึงทีมงานหรือไม่</div>
+        <div style={{ fontSize: 13, color: C.text }}>สัญญาณมือถืออาจขาดหาย · โปรดโทรสายด่วนโดยตรงทันที</div>
+        {tel && <Btn variant="danger" onClick={() => window.location.href = `tel:${tel}`} style={{ marginTop: 10 }}>📞 โทรสายด่วนทีมกู้ภัย {hotline}</Btn>}
+        <Btn variant="white" onClick={submit}>↻ ลองส่งสัญญาณอีกครั้ง</Btn>
         <Btn variant="ghost" onClick={onSent}>กลับสู่หน้าติดตาม</Btn>
       </div>
     );
@@ -1439,7 +1542,7 @@ function SosScreen({ hotline, onCancel, onSent, onSend }) {
         ))}
       </div>
       <div style={{ flex: 1 }}/>
-      <Btn variant="danger" disabled={!reason} onClick={() => { onSend(reason); setSent(true); }}>ส่งสัญญาณ SOS</Btn>
+      <Btn variant="danger" disabled={!reason} onClick={submit}>ส่งสัญญาณ SOS</Btn>
       <Btn variant="ghost" onClick={onCancel} style={{ marginTop: 8 }}>ยกเลิก</Btn>
     </div>
   );
@@ -1694,9 +1797,9 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
   if (pickingFav) return <FavoritePickerScreen eventId={currentEventId} onBack={() => setPickingFav(false)} favBibs={favBibs} onToggle={toggleFavorite}/>;
 
   const TABS = [
-    !isSpectator && ['track', '🏃', 'Track'],
-    ['route', '🗺', 'Route'], ['ranking', '🏆', 'Ranking'], ['friends', '👥', 'Friends'],
-    ['event', '📍', 'Event'],
+    !isSpectator && ['track', TrackIcon, 'Track'],
+    ['route', RouteIcon, 'Route'], ['ranking', RankingIcon, 'Ranking'], ['friends', FriendsIcon, 'Friends'],
+    ['event', null, 'Event'],
   ].filter(Boolean);
 
   return (
@@ -1705,17 +1808,19 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
         <Brand/>
         <PersonIcon size={30} onClick={onProfile}/>
       </div>
-      {!isSpectator && tab === 'track' && <TrackTab runner={{ ...session.runner,
-        pace: trackPace, gradient: trackGradient }} event={currentEvent} onScan={doScan} onSos={onSos} onDnf={onDnf} offRoute={isOffRoute}/>}
-      {tab === 'route' && <RouteTab course={course} event={currentEvent}
-        runner={isSpectator ? (followedRunner ? { dist: followedRunner.distance, progressKm: followedRunner.progressKm } : { dist: '22K', progressKm: 0 }) : session.runner}
-        spectatorRunner={isSpectator ? followedRunner : null} livePos={livePos}/>}
-      {tab === 'ranking' && <RankingTab snap={snap} eventId={!isSpectator ? session.runner.eventId : null} event={currentEvent}/>}
-      {tab === 'friends' && <FriendsTab eventId={currentEventId} followedBib={isSpectator ? session.followBib : (session.runner && session.runner.bib)} favBibs={favBibs} onAddFavorite={() => setPickingFav(true)} onRemoveFavorite={toggleFavorite}/>}
+      <div key={tab} style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', animation: 'trtFadeIn 0.2s ease' }}>
+        {!isSpectator && tab === 'track' && <TrackTab runner={{ ...session.runner,
+          pace: trackPace, gradient: trackGradient }} event={currentEvent} onScan={doScan} onSos={onSos} onDnf={onDnf} offRoute={isOffRoute}/>}
+        {tab === 'route' && <RouteTab course={course} event={currentEvent}
+          runner={isSpectator ? (followedRunner ? { dist: followedRunner.distance, progressKm: followedRunner.progressKm } : { dist: '22K', progressKm: 0 }) : session.runner}
+          spectatorRunner={isSpectator ? followedRunner : null} livePos={livePos}/>}
+        {tab === 'ranking' && <RankingTab snap={snap} eventId={!isSpectator ? session.runner.eventId : null} event={currentEvent}/>}
+        {tab === 'friends' && <FriendsTab eventId={currentEventId} followedBib={isSpectator ? session.followBib : (session.runner && session.runner.bib)} favBibs={favBibs} onAddFavorite={() => setPickingFav(true)} onRemoveFavorite={toggleFavorite}/>}
+      </div>
       <div style={{ flexShrink: 0, display: 'flex', borderTop: `1px solid #d8d2c2`, background: '#fff', padding: '6px 4px 20px' }}>
-        {TABS.map(([k, icon, label]) => (
+        {TABS.map(([k, Icon, label]) => (
           <div key={k} onClick={() => k === 'event' ? onHome() : setTab(k)} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, padding: '6px 0', color: tab === k ? C.brand : C.mute2, cursor: 'pointer' }}>
-            {k === 'event' ? <HomeIcon size={17} active={tab === k}/> : <span style={{ fontSize: 19 }}>{icon}</span>}
+            {k === 'event' ? <HomeIcon size={17} active={tab === k}/> : <Icon size={19}/>}
             <span style={{ fontFamily: C.mono, fontSize: 9.5, fontWeight: 600 }}>{label}</span>
           </div>
         ))}
@@ -1877,7 +1982,7 @@ function MobileApp() {
 
   uE(() => { const id = 'trt-mobile-style'; if (document.getElementById(id)) return;
     const st = document.createElement('style'); st.id = id;
-    st.textContent = '@keyframes trtSpin{to{transform:rotate(360deg)}} *{box-sizing:border-box} html,body{margin:0;background:#efe9dc}';
+    st.textContent = '@keyframes trtSpin{to{transform:rotate(360deg)}} @keyframes trtFadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}} *{box-sizing:border-box} html,body{margin:0;background:#efe9dc}';
     document.head.appendChild(st);
   }, []);
 
@@ -1921,7 +2026,7 @@ function MobileApp() {
 
   return (
     <div style={{ height: '100%', position: 'relative' }}>
-      {body}
+      <div key={screen} style={{ height: '100%', animation: 'trtFadeIn 0.22s ease' }}>{body}</div>
       {modal === 'profile' && <Overlay><ProfileScreen user={session.user} onClose={() => setModal(null)}
         onSave={updateUser}
         onLogout={() => { if (window.fb) window.fb.signOutUser().catch(() => {}); clearSession(); setSession(null); setModal(null); setScreen('login'); }}/></Overlay>}
@@ -1930,8 +2035,9 @@ function MobileApp() {
         onCancel={() => setModal(null)} onSent={() => setModal(null)}
         onSend={(reason) => {
           if (session.runner && session.runner.rosterId && window.runnerStore) {
-            window.runnerStore.updateRunnerProgress(session.runner.rosterId, { sos: true, sosReason: reason, sosAt: Date.now() });
+            return window.runnerStore.updateRunnerProgress(session.runner.rosterId, { sos: true, sosReason: reason, sosAt: Date.now() }).synced;
           }
+          return Promise.resolve(false);
         }}/></Overlay>}
       {modal === 'dnf' && <Overlay><DnfScreen onCancel={() => setModal(null)} onConfirm={() => {
         if (window.trtGpsTracker) window.trtGpsTracker.stop();
@@ -1945,7 +2051,7 @@ function MobileApp() {
   );
 }
 function Overlay({ children }) {
-  return <div style={{ position: 'absolute', inset: 0, zIndex: 10 }}>{children}</div>;
+  return <div style={{ position: 'absolute', inset: 0, zIndex: 10, animation: 'trtFadeIn 0.18s ease' }}>{children}</div>;
 }
 
 Object.assign(window, { MobileApp });
