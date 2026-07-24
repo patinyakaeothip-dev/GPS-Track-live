@@ -832,10 +832,13 @@ function nearestKmForPoint(points, lat, lon) {
 // How far off the recorded course a GPS fix can be before it's treated as
 // "not actually near this course" for elevation/gradient purposes, rather
 // than snapped to the nearest point regardless of distance. Same distance
-// this app will eventually flag as an off-route alert — keeping them equal
-// means "close enough to show on the elevation graph" and "close enough to
-// not be flagged as off-route" stay the same claim.
+// used for the off-route alert below — "close enough to show on the
+// elevation graph" and "close enough to not be flagged as off-route" are
+// meant to be the same claim.
 const ON_COURSE_KM = 0.1;
+// How long a runner has to stay outside ON_COURSE_KM before it's a real
+// alert instead of one noisy GPS fix.
+const OFF_ROUTE_ALERT_MS = 2 * 60 * 1000;
 // window.courseGeo.gradientAtKm expects {lat,lon,ele,km} object points —
 // this app's course.points are [lat,lon,ele,km] tuples, so that function
 // can't be reused directly here without converting the whole array first.
@@ -903,7 +906,7 @@ function saveCertificateResult(session, event, checkins) {
   } catch (err) { console.warn('[trt] certificate save failed', err); }
 }
 
-function TrackTab({ runner, event, onScan, onSos, onDnf }) {
+function TrackTab({ runner, event, onScan, onSos, onDnf, offRoute }) {
   const seq = cpSeqFor(event);
   const nextIdx = runner.checkins.length;
   const totalKm = parseFloat(runner.dist) || 29;
@@ -911,6 +914,11 @@ function TrackTab({ runner, event, onScan, onSos, onDnf }) {
   const finished = runner.checkins.some(c => c.cp === 'finish');
   return (
     <div style={{ flex: 1, overflow: 'auto', padding: '16px 18px 90px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {offRoute && (
+        <div style={{ padding: 14, background: '#fdf0d6', border: '1px solid #f0d9a0', borderRadius: 12, fontSize: 12.5, color: '#7c4a03', lineHeight: 1.6 }}>
+          ⚠ ตำแหน่งของคุณอยู่นอกเส้นทางมาสักพักแล้ว — ลองเช็คเส้นทางในแท็บ Route หรือกด SOS ถ้าต้องการความช่วยเหลือ
+        </div>
+      )}
       <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 14, padding: 16, boxShadow: '0 1px 3px rgba(31,42,28,0.08)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
           <Kicker>ระยะทาง</Kicker>
@@ -1522,6 +1530,41 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
   const ownBib = !isSpectator && session.runner && session.runner.bib;
   const livePos = useLivePos(currentEventId, isSpectator ? session.followBib : ownBib);
 
+  // Off-route alert: a single momentarily-noisy GPS fix shouldn't trigger
+  // this, so it only fires once the runner has been consistently >100m
+  // from the course for a while — tracked as a timestamp in a ref (not
+  // state) since it's an implementation detail nothing else reads.
+  // Re-evaluated on a timer too, not just when a new GPS fix arrives,
+  // because a runner who's stopped moving off-route stops producing new
+  // pings entirely (the native tracker only pushes on ~10m of movement) —
+  // without the timer, someone who wandered off and then sat down would
+  // never actually cross the sustained-duration threshold.
+  const [isOffRoute, setIsOffRoute] = uS(false);
+  const offRouteSinceRef = uR(null);
+  uE(() => {
+    const finished = session.runner && session.runner.checkins.some(c => c.cp === 'finish');
+    if (isSpectator || !session.runner || !course || !session.runner.checkins.length || finished || session.runner.dnf) {
+      offRouteSinceRef.current = null;
+      setIsOffRoute(false);
+      return;
+    }
+    function evaluate() {
+      const gpsLive = livePos && livePos.at && (Date.now() - livePos.at) < 2 * 60 * 1000 && livePos.lat != null;
+      if (!gpsLive) { offRouteSinceRef.current = null; setIsOffRoute(false); return; }
+      const { distKm } = nearestKmForPoint(course.points, livePos.lat, livePos.lon);
+      if (distKm > ON_COURSE_KM) {
+        if (!offRouteSinceRef.current) offRouteSinceRef.current = Date.now();
+        setIsOffRoute(Date.now() - offRouteSinceRef.current > OFF_ROUTE_ALERT_MS);
+      } else {
+        offRouteSinceRef.current = null;
+        setIsOffRoute(false);
+      }
+    }
+    evaluate();
+    const id = setInterval(evaluate, 20000);
+    return () => clearInterval(id);
+  }, [isSpectator, session.runner, course, livePos]);
+
   // Track tab's "เพซปัจจุบัน"/"ความชัน" used to be hardcoded demo strings
   // ("6'42\"/กม.", "+4.2%") shown for every runner regardless of how they
   // were actually doing. Pace now comes from live GPS speed when a fix is
@@ -1607,7 +1650,7 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
         <PersonIcon size={30} onClick={onProfile}/>
       </div>
       {!isSpectator && tab === 'track' && <TrackTab runner={{ ...session.runner,
-        pace: trackPace, gradient: trackGradient }} event={currentEvent} onScan={doScan} onSos={onSos} onDnf={onDnf}/>}
+        pace: trackPace, gradient: trackGradient }} event={currentEvent} onScan={doScan} onSos={onSos} onDnf={onDnf} offRoute={isOffRoute}/>}
       {tab === 'route' && <RouteTab course={course} event={currentEvent}
         runner={isSpectator ? (followedRunner ? { dist: followedRunner.distance, progressKm: followedRunner.progressKm } : { dist: '22K', progressKm: 0 }) : session.runner}
         spectatorRunner={isSpectator ? followedRunner : null} livePos={livePos}/>}

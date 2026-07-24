@@ -17,6 +17,12 @@ const M_MONO = "'JetBrains Mono',ui-monospace,monospace";
 // this — the closest proxy to "ขาดการติดต่อ" we have without live GPS pings
 // (position only updates at each checkpoint scan, not continuously).
 const STALE_MINUTES = 60;
+// Off-route: how far a live GPS fix can sit from the course before it
+// counts as "not on this course" (same distance src/mobile-app.jsx uses for
+// its own off-route alert), and how long that has to hold before it's a
+// real alert instead of one noisy fix.
+const OFF_ROUTE_KM = 0.1;
+const OFF_ROUTE_ALERT_MIN = 2;
 
 // Same Thailand-time fix as combineDateTime in admin-app.jsx: build the Date
 // with an explicit +07:00 offset instead of relying on the viewer's local
@@ -52,6 +58,7 @@ function statusMeta(status) {
   return {
     not_started: { label: 'ยังไม่เริ่ม', bg: '#ede7d8', fg: '#5d6b59' },
     active: { label: 'On course', bg: 'oklch(0.94 0.06 145)', fg: '#1f4d39' },
+    off_route: { label: '⚠ ออกนอกเส้นทาง', bg: '#fdf0d6', fg: '#7c4a03' },
     stale: { label: 'ขาดการติดต่อ', bg: '#fde9e6', fg: '#9b1c10' },
     dnf: { label: 'DNF / ถอน', bg: '#fde9e6', fg: '#9b1c10' },
     finished: { label: 'เข้าเส้นชัย', bg: M_BRAND, fg: '#fff' },
@@ -60,6 +67,7 @@ function statusMeta(status) {
 }
 function colorFor(r, distColor) {
   if (r.status === 'sos') return '#dc2626';
+  if (r.status === 'off_route') return M_WARN;
   if (r.status === 'stale') return M_ALERT;
   if (r.status === 'dnf') return M_REST;
   if (r.status === 'finished') return M_BRAND;
@@ -171,6 +179,37 @@ function LiveMonitorApp() {
     });
   }, [eventId]);
 
+  // Sustained-off-route tracking, bib -> timestamp first seen off-course.
+  // A ref (not state) since it's re-derived on a timer below regardless —
+  // a runner who wanders off then stops moving stops producing new GPS
+  // pings entirely (the tracker only pushes on ~10m of movement), so this
+  // can't rely on livePosByBib changing to notice two minutes have passed.
+  const offCourseSinceRef = mR(new Map());
+  const [offRouteTick, forceTick] = mS(0);
+  mE(() => {
+    const id = setInterval(() => forceTick(t => t + 1), 20000);
+    return () => clearInterval(id);
+  }, []);
+  mE(() => {
+    const coursePathsNow = coursePathsRef.current, geo = geoRef.current;
+    if (!coursePathsNow || !geo) return;
+    const now = Date.now();
+    runners.forEach(r => {
+      const live = livePosByBib[r.bib];
+      const gpsLive = !!(live && live.at && (now - live.at) < 2 * 60 * 1000 && live.lat != null);
+      if (!gpsLive) { offCourseSinceRef.current.delete(r.bib); return; }
+      const pts = coursePathsNow[r.distance] || coursePathsNow[overviewLabelRef.current];
+      const nearestKm = geo.nearestKmOnTrack(pts, live.lat, live.lon);
+      const nearestPt = geo.pointAtKm(pts, nearestKm);
+      const distKm = geo.haversineKm(live.lat, live.lon, nearestPt.lat, nearestPt.lon);
+      if (distKm > OFF_ROUTE_KM) {
+        if (!offCourseSinceRef.current.has(r.bib)) offCourseSinceRef.current.set(r.bib, now);
+      } else {
+        offCourseSinceRef.current.delete(r.bib);
+      }
+    });
+  }, [runners, livePosByBib, ready]);
+
   // Loads the *real* course (GPX uploaded per event in Admin, see
   // src/course-geo.js buildEventCoursePaths) for whichever event is
   // selected, instead of always drawing the one bundled demo course —
@@ -270,9 +309,16 @@ function LiveMonitorApp() {
 
       const lastAtMs = last ? checkinMs(selectedEvent, last.t) : null;
       const staleMin = lastAtMs != null ? (Date.now() - lastAtMs) / 60000 : null;
+      const offSince = offCourseSinceRef.current.get(r.bib);
+      const offRoute = !!(offSince && (Date.now() - offSince) > OFF_ROUTE_ALERT_MIN * 60000);
       // An active SOS always wins, no matter what else is going on — RD
       // needs to see it immediately, not have it buried under "on course".
-      const status = r.sos ? 'sos' : (baseStatus === 'active' && staleMin != null && staleMin > STALE_MINUTES) ? 'stale' : baseStatus;
+      // Off-route ranks above stale — someone moving but off the course is
+      // more urgent than someone who just hasn't checked in in a while.
+      const status = r.sos ? 'sos'
+        : (baseStatus === 'active' && offRoute) ? 'off_route'
+        : (baseStatus === 'active' && staleMin != null && staleMin > STALE_MINUTES) ? 'stale'
+        : baseStatus;
       const meta = statusMeta(status);
       const physKm = geo.nearestKmOnTrack(coursePaths[overviewLabel], p.lat, p.lon);
       // Before the start checkpoint is scanned, position is stuck at km 0 —
@@ -300,7 +346,7 @@ function LiveMonitorApp() {
         emgName: r.emgName || '', emgPhone: r.emgPhone || '', bloodType: r.bloodType || '', medical: r.medical || '',
         status, statusLabel: meta.label, statusBg: meta.bg, statusFg: meta.fg, physKm };
     });
-  }, [ready, runners, coursePaths, overviewLabel, distColor, selectedEvent, livePosByBib]);
+  }, [ready, runners, coursePaths, overviewLabel, distColor, selectedEvent, livePosByBib, offRouteTick]);
 
   // Keep Leaflet markers in sync with real roster updates (a QR scan moves
   // someone) instead of only ever creating them once at map init.
@@ -331,14 +377,15 @@ function LiveMonitorApp() {
 
   // SOS always sorts first regardless of how long ago it came in — it's
   // the one alert that needs eyes on it immediately.
-  const alerts = mM(() => displays.filter(d => d.status === 'sos' || d.status === 'stale' || d.status === 'dnf')
+  const alerts = mM(() => displays.filter(d => d.status === 'sos' || d.status === 'off_route' || d.status === 'stale' || d.status === 'dnf')
     .map(d => ({ ...d, msg: d.status === 'sos' ? `🆘 ${d.sosReason || 'ขอความช่วยเหลือ'} · ${d.km.toFixed(1)}/${d.totalKm.toFixed(1)}K`
+      : d.status === 'off_route' ? `⚠ ออกนอกเส้นทางมากกว่า ${OFF_ROUTE_ALERT_MIN} นาที · ใกล้ ${d.km.toFixed(1)}K`
       : d.status === 'stale' ? `ไม่มีความเคลื่อนไหว · จุดล่าสุด ${d.km.toFixed(1)}K` : `ถอนตัว (DNF) · ${d.km.toFixed(1)}/${d.totalKm.toFixed(1)}K` }))
     .sort((a, b) => (a.status === 'sos' ? 0 : 1) - (b.status === 'sos' ? 0 : 1)), [displays]);
 
   const counts = mM(() => {
     const c = { total: displays.length, on: 0, finished: 0, alert: 0, sos: 0 };
-    displays.forEach(d => { if (d.status === 'active') c.on++; if (d.status === 'finished') c.finished++; if (d.status === 'stale') c.alert++; if (d.status === 'sos') { c.alert++; c.sos++; } });
+    displays.forEach(d => { if (d.status === 'active') c.on++; if (d.status === 'finished') c.finished++; if (d.status === 'stale' || d.status === 'off_route') c.alert++; if (d.status === 'sos') { c.alert++; c.sos++; } });
     return c;
   }, [displays]);
 
@@ -468,7 +515,7 @@ function LiveMonitorApp() {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', minHeight: 560 }}>
               <div style={{ position: 'relative', borderRight: '1px solid #d8d2c2' }}>
                 <div style={{ position: 'absolute', top: 12, left: 16, zIndex: 400, display: 'flex', gap: 16, background: 'rgba(255,255,255,0.92)', padding: '6px 12px', borderRadius: 10, boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
-                  {[...distLabels.map(l => [l, distColor[l]]), ['ช้า', M_WARN], ['ขาดการติดต่อ', M_ALERT]].map(([label, color]) => (
+                  {[...distLabels.map(l => [l, distColor[l]]), ['ออกนอกเส้นทาง', M_WARN], ['ขาดการติดต่อ', M_ALERT]].map(([label, color]) => (
                     <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                       <span style={{ width: 8, height: 8, borderRadius: 99, background: color }}/>
                       <span style={{ fontFamily: M_MONO, fontSize: 10, color: '#5d6b59' }}>{label}</span>
@@ -503,7 +550,7 @@ function LiveMonitorApp() {
                   {alerts.length === 0 && <div style={{ padding: 20, textAlign: 'center', color: '#5d6b59', fontSize: 12 }}>ไม่มี alert</div>}
                   {alerts.map(al => (
                     <div key={al.bib} onClick={() => setSelectedBib(al.bib)} style={{ padding: '10px 16px', borderBottom: '1px solid #f4f3ef', cursor: 'pointer',
-                      background: al.status === 'sos' ? 'rgba(220,38,38,0.12)' : al.status === 'stale' ? 'rgba(220,38,38,0.05)' : 'transparent',
+                      background: al.status === 'sos' ? 'rgba(220,38,38,0.12)' : al.status === 'stale' ? 'rgba(220,38,38,0.05)' : al.status === 'off_route' ? 'rgba(180,83,9,0.06)' : 'transparent',
                       borderLeft: al.status === 'sos' ? '3px solid #dc2626' : 'none' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                         <span style={{ fontFamily: M_MONO, fontSize: 12, fontWeight: 700 }}>{al.status === 'sos' && '🆘 '}#{al.bib} {al.name}</span>
