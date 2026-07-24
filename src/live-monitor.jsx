@@ -43,8 +43,8 @@ function fmtPace(p) {
   if (ss === 60) { ss = 0; mm += 1; }
   return `${mm}'${String(ss).padStart(2, '0')}"`;
 }
-function gradColor(g) { const a = Math.abs(g); return a < 3 ? M_BRAND : a < 9 ? M_WARN : M_ALERT; }
-function gradArrow(g) { return g > 1 ? '▲' : g < -1 ? '▼' : '→'; }
+// Thresholds are cumulative meters climbed, not a % gradient.
+function gainColor(m) { return m < 100 ? M_BRAND : m < 300 ? M_WARN : M_ALERT; }
 function fmtAgo(sec) { return sec < 60 ? `${Math.round(sec)} วิที่แล้ว` : `${Math.floor(sec / 60)} นาทีที่แล้ว`; }
 function fmtElapsed(ms) {
   if (ms == null || ms < 0) return '—';
@@ -315,7 +315,7 @@ function LiveMonitorApp() {
       const baseStatus = r.dnf ? 'dnf' : finishCk ? 'finished' : cks.length ? 'active' : 'not_started';
       const km = Math.min(r.progressKm || 0, totalKm - (baseStatus === 'finished' ? 0 : 0.02));
       const p = geo.pointAtKm(pts, Math.max(0, km));
-      const g = geo.avgGradientToKm(pts, Math.max(0, km));
+      const gain = geo.cumulativeGainToKm(pts, Math.max(0, km));
 
       const startMs = startCk ? checkinMs(selectedEvent, startCk.t) : null;
       const endMs = finishCk ? checkinMs(selectedEvent, finishCk.t) : Date.now();
@@ -357,9 +357,8 @@ function LiveMonitorApp() {
         initial: (r.nickname || '?').slice(0, 1), lat: mapLat, lon: mapLon, gpsLive, km, totalKm,
         pct: Math.min(100, (km / totalKm) * 100),
         pace: fmtPace(pace),
-        gradStr: started ? `${g >= 0 ? '+' : ''}${g.toFixed(0)}%` : '—',
-        gradColor: started ? gradColor(g) : '#5d6b59',
-        gradArrow: started ? gradArrow(g) : '',
+        gradStr: started ? `+${gain} m` : '—',
+        gradColor: started ? gainColor(gain) : '#5d6b59',
         ele: p.ele, ago: lastAtMs != null ? fmtAgo((Date.now() - lastAtMs) / 1000) : '—',
         elapsedMs, checkinTimes,
         sos: !!r.sos, sosReason: r.sosReason || '',
@@ -595,7 +594,7 @@ function LiveMonitorApp() {
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
                         <MiniStat label="ระยะ" value={`${selected.km.toFixed(1)} / ${selected.totalKm.toFixed(1)}K`}/>
                         <MiniStat label="เพซ" value={`${selected.pace}/km`}/>
-                        <MiniStat label="ความชันตอนนี้" value={`${selected.gradArrow} ${selected.gradStr}`} color={selected.gradColor}/>
+                        <MiniStat label="ไต่ระดับสะสม" value={selected.gradStr} color={selected.gradColor}/>
                         <MiniStat label="ระดับความสูง" value={`${selected.ele.toFixed(0)} m`}/>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '9px 12px', borderRadius: 10, background: selected.statusBg, marginBottom: 10 }}>
@@ -674,7 +673,7 @@ function LiveMonitorApp() {
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                 <thead>
                   <tr style={{ position: 'sticky', top: 0, background: '#fff' }}>
-                    {['อันดับ', 'นักวิ่ง', 'ระยะ', 'ความคืบหน้า', 'เวลาที่วิ่ง', 'เพศ', 'เพซ', 'ความชัน', 'เช็คพอยท์ล่าสุด', 'สถานะ'].map((h, i) => (
+                    {['อันดับ', 'นักวิ่ง', 'ระยะ', 'ความคืบหน้า', 'เวลาที่วิ่ง', 'เพศ', 'เพซ', 'ไต่ระดับสะสม', 'เช็คพอยท์ล่าสุด', 'สถานะ'].map((h, i) => (
                       <th key={i} style={{ textAlign: 'left', padding: i === 0 || i === 9 ? '9px 20px' : '9px 14px', fontFamily: M_MONO, fontSize: 10, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#5d6b59', borderBottom: '1px solid #d8d2c2' }}>{h}</th>
                     ))}
                   </tr>
@@ -696,7 +695,7 @@ function LiveMonitorApp() {
                         <td style={{ padding: '10px 14px', fontFamily: M_MONO, fontSize: 12, fontWeight: 600 }}>{fmtElapsed(rk.elapsedMs)}</td>
                         <td style={{ padding: '10px 14px', fontFamily: M_MONO, fontSize: 11, fontWeight: 700, color: rk.gender === 'f' ? '#b3467c' : rk.gender === 'm' ? '#3a86c4' : '#5d6b59' }}>{rk.gender === 'f' ? 'หญิง' : rk.gender === 'm' ? 'ชาย' : '—'}</td>
                         <td style={{ padding: '10px 14px', fontFamily: M_MONO, fontSize: 12 }}>{rk.pace}/km</td>
-                        <td style={{ padding: '10px 14px', fontFamily: M_MONO, fontSize: 12, fontWeight: 600, color: rk.gradColor }}>{rk.gradArrow} {rk.gradStr}</td>
+                        <td style={{ padding: '10px 14px', fontFamily: M_MONO, fontSize: 12, fontWeight: 600, color: rk.gradColor }}>{rk.gradStr}</td>
                         <td style={{ padding: '10px 14px', fontFamily: M_MONO, fontSize: 10.5, color: '#5d6b59', whiteSpace: 'nowrap' }}>
                           {rk.checkinTimes.length ? (() => { const last = rk.checkinTimes[rk.checkinTimes.length - 1]; return `${last.label} ${last.t}`; })() : '—'}
                         </td>
