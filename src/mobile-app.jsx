@@ -864,12 +864,15 @@ function eleAtKmForPoints(points, km) {
   }
   return { ele: points[points.length - 1][2], km: points[points.length - 1][3] };
 }
+// Average gradient over the whole distance covered so far (start → km),
+// not just the stretch right around the runner — net elevation change so
+// far divided by distance so far, same idea as courseGeo.avgGradientToKm.
 function gradientAtKmForPoints(points, km) {
-  const w = 0.15;
-  const p0 = eleAtKmForPoints(points, km - w);
-  const p1 = eleAtKmForPoints(points, km + w);
+  if (km <= 0) return 0;
+  const p0 = { ele: points[0][2], km: points[0][3] };
+  const p1 = eleAtKmForPoints(points, km);
   const rise = p1.ele - p0.ele;
-  const run = Math.max(0.02, (p1.km - p0.km)) * 1000;
+  const run = Math.max(0.02, p1.km - p0.km) * 1000;
   return (rise / run) * 100;
 }
 

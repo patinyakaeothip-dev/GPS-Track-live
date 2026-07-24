@@ -315,7 +315,7 @@ function LiveMonitorApp() {
       const baseStatus = r.dnf ? 'dnf' : finishCk ? 'finished' : cks.length ? 'active' : 'not_started';
       const km = Math.min(r.progressKm || 0, totalKm - (baseStatus === 'finished' ? 0 : 0.02));
       const p = geo.pointAtKm(pts, Math.max(0, km));
-      const g = geo.gradientAtKm(pts, Math.max(0, km));
+      const g = geo.avgGradientToKm(pts, Math.max(0, km));
 
       const startMs = startCk ? checkinMs(selectedEvent, startCk.t) : null;
       const endMs = finishCk ? checkinMs(selectedEvent, finishCk.t) : Date.now();

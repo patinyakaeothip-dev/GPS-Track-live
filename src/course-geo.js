@@ -58,6 +58,17 @@
     return (rise / run) * 100;
   }
 
+  // % gradient averaged over the whole distance covered so far (start → km)
+  // instead of just the stretch right around the runner — net elevation
+  // change so far divided by distance so far.
+  function avgGradientToKm(pts, km) {
+    if (km <= 0) return 0;
+    const p0 = pts[0], p1 = pointAtKm(pts, km);
+    const rise = p1.ele - p0.ele;
+    const run = Math.max(0.02, p1.km) * 1000;
+    return (rise / run) * 100;
+  }
+
   function coursePolylineLatLngs(pts) {
     return pts.map(p => [p.lat, p.lon]);
   }
@@ -123,6 +134,6 @@
   }
 
   Object.assign(window, {
-    courseGeo: { loadTrack, pointAtKm, gradientAtKm, coursePolylineLatLngs, nearestKmOnTrack, haversineKm, buildEventCoursePaths, courseJsonForDistance },
+    courseGeo: { loadTrack, pointAtKm, gradientAtKm, avgGradientToKm, coursePolylineLatLngs, nearestKmOnTrack, haversineKm, buildEventCoursePaths, courseJsonForDistance },
   });
 })();
