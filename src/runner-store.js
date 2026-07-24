@@ -16,17 +16,24 @@
   function saveRunners(list) {
     try { localStorage.setItem(KEY, JSON.stringify(list)); } catch (_) {}
   }
-  function listRunners(eventId) {
-    return loadRunners().filter(r => r.eventId === eventId);
+  // Cancelled registrations stay in storage (see cancelRunner below) instead
+  // of being deleted, but every normal caller — results, ranking, live
+  // monitor, friends, bib assignment, "have I already registered" — should
+  // see them as simply gone. Pass { includeCancelled: true } for the one
+  // place that actually needs the audit trail (Admin's runner manager).
+  function listRunners(eventId, opts) {
+    const list = loadRunners().filter(r => r.eventId === eventId);
+    return (opts && opts.includeCancelled) ? list : list.filter(r => !r.cancelled);
   }
   // Cross-device lookup: "have I already registered" only worked before if
   // this exact browser's local session still remembered it. A registration
   // is really tied to the runner's Google account (uid), which is stored on
   // the roster record regardless of device — this is what lets the app
   // recognize "you already registered" after a fresh login anywhere.
-  function listRunnersByUid(uid) {
+  function listRunnersByUid(uid, opts) {
     if (!uid) return [];
-    return loadRunners().filter(r => r.uid === uid);
+    const list = loadRunners().filter(r => r.uid === uid);
+    return (opts && opts.includeCancelled) ? list : list.filter(r => !r.cancelled);
   }
 
   // Bibs are 4-digit, assigned per distance using that distance's numeric
@@ -38,7 +45,10 @@
   function nextBib(eventId, ev, distLabel) {
     const distIdx = Math.max(0, (ev.distances || []).findIndex(d => d.label === distLabel));
     const base = (distIdx + 1) * 1000;
-    const bibs = listRunners(eventId).filter(r => r.distance === distLabel).map(r => parseInt(r.bib, 10) || base);
+    // includeCancelled: a cancelled registration's bib is never handed to
+    // someone else — now that cancelled runners are kept as records instead
+    // of deleted, that's easy to actually guarantee instead of just hoped for.
+    const bibs = listRunners(eventId, { includeCancelled: true }).filter(r => r.distance === distLabel).map(r => parseInt(r.bib, 10) || base);
     const highest = bibs.length ? Math.max(...bibs) : base;
     return String(highest + 1);
   }
@@ -102,7 +112,19 @@
   // deleted" guard as event-store.js's deleteEvent.
   const pendingDeletes = new Set();
 
-  // Cancels a registration outright (mis-registration, duplicate, etc).
+  // Cancels a registration but keeps the record — a runner cancelling their
+  // own spot, or Admin cancelling a mis-registration/duplicate, should still
+  // leave something RD can look up later (a dispute over a bib, "did I
+  // actually register", etc). `by` is 'runner' or 'admin' so the two are
+  // distinguishable in Admin's audit view. Caller is still responsible for
+  // eventStore.decrementRegistration so the quota count stays in sync.
+  function cancelRunner(id, by) {
+    return updateRunnerProgress(id, { cancelled: true, cancelledAt: Date.now(), cancelledBy: by || 'admin' });
+  }
+
+  // Deletes a registration outright, no record kept — only for genuinely
+  // purging bad data (test entries, duplicates created by a UI glitch),
+  // not for normal cancellations. Prefer cancelRunner for those.
   // Caller is responsible for also calling eventStore.decrementRegistration
   // so the quota count stays in sync.
   function deleteRunner(id) {
@@ -121,7 +143,9 @@
   // and preserves registration order (oldest first) within each distance.
   function renumberBibs(ev) {
     const all = loadRunners();
-    const mine = all.filter(r => r.eventId === ev.id).slice().sort((a, b) => (a.registeredAt || 0) - (b.registeredAt || 0));
+    // Cancelled registrations keep whatever bib they had when cancelled —
+    // renumbering only makes sense for people actually racing.
+    const mine = all.filter(r => r.eventId === ev.id && !r.cancelled).slice().sort((a, b) => (a.registeredAt || 0) - (b.registeredAt || 0));
     const byDist = {};
     mine.forEach(r => { (byDist[r.distance] = byDist[r.distance] || []).push(r); });
     const newBibById = {};
@@ -155,5 +179,5 @@
   if (window.fb) startFirestoreSync();
   else window.addEventListener('trt:firebase-ready', startFirestoreSync, { once: true });
 
-  Object.assign(window, { runnerStore: { listRunners, listRunnersByUid, registerRunner, updateRunnerProgress, deleteRunner, renumberBibs } });
+  Object.assign(window, { runnerStore: { listRunners, listRunnersByUid, registerRunner, updateRunnerProgress, cancelRunner, deleteRunner, renumberBibs } });
 })();

@@ -81,9 +81,14 @@ function RunnerManagerApp({ adminEmail, onLogout }) {
   const [eventId, setEventId] = rS(() => new URLSearchParams(location.search).get('event') || (events[0] && events[0].id) || null);
   const selectedEvent = events.find(e => e.id === eventId) || null;
 
-  const [runners, setRunners] = rS(() => (window.runnerStore && eventId ? window.runnerStore.listRunners(eventId) : []));
+  // includeCancelled: true — Admin is the one place that needs the full
+  // audit trail (who cancelled, when, self or admin), not just active
+  // registrations. The showCancelled toggle below controls what's actually
+  // visible in the table; everywhere else in the app only ever sees the
+  // filtered "active" view via the default listRunners() call.
+  const [runners, setRunners] = rS(() => (window.runnerStore && eventId ? window.runnerStore.listRunners(eventId, { includeCancelled: true }) : []));
   rE(() => {
-    const refresh = () => setRunners(window.runnerStore && eventId ? window.runnerStore.listRunners(eventId) : []);
+    const refresh = () => setRunners(window.runnerStore && eventId ? window.runnerStore.listRunners(eventId, { includeCancelled: true }) : []);
     refresh();
     window.addEventListener('trt:runners-updated', refresh);
     return () => window.removeEventListener('trt:runners-updated', refresh);
@@ -91,6 +96,7 @@ function RunnerManagerApp({ adminEmail, onLogout }) {
 
   const [q, setQ] = rS('');
   const [distFilter, setDistFilter] = rS('all');
+  const [showCancelled, setShowCancelled] = rS(false);
   const [toast, setToast] = rS(null);
   const [expandedId, setExpandedId] = rS(null);
   function flash(msg) { setToast(msg); setTimeout(() => setToast(null), 1600); }
@@ -99,10 +105,17 @@ function RunnerManagerApp({ adminEmail, onLogout }) {
     window.runnerStore.updateRunnerProgress(r.id, patch);
   }
   function cancelRunner(r) {
-    if (!window.confirm(`ยกเลิกการลงทะเบียนของ "${r.nickname}" (บิบ #${r.bib})? ข้อมูลจะหายถาวร`)) return;
-    window.runnerStore.deleteRunner(r.id);
+    if (!window.confirm(`ยกเลิกการลงทะเบียนของ "${r.nickname}" (บิบ #${r.bib})? บิบนี้จะไม่ถูกใช้ซ้ำ · ยังดูประวัติย้อนหลังได้`)) return;
+    window.runnerStore.cancelRunner(r.id, 'admin');
     if (selectedEvent) window.eventStore.decrementRegistration(selectedEvent.id, r.distance);
     flash(`✓ ยกเลิก #${r.bib} แล้ว`);
+  }
+  // Genuine permanent purge — only offered on already-cancelled rows (mis-
+  // registrations, test entries), unlike cancelRunner which keeps a record.
+  function deleteRunnerForever(r) {
+    if (!window.confirm(`ลบข้อมูลของ "${r.nickname}" (บิบ #${r.bib}) ถาวร? กู้คืนไม่ได้อีก`)) return;
+    window.runnerStore.deleteRunner(r.id);
+    flash(`✓ ลบ #${r.bib} ถาวรแล้ว`);
   }
   function toggleDnf(r) {
     editRunner(r, { dnf: !r.dnf });
@@ -113,13 +126,16 @@ function RunnerManagerApp({ adminEmail, onLogout }) {
     downloadCsv(`runners-${selectedEvent ? selectedEvent.id : 'export'}.csv`, rows);
   }
   function renumberAll() {
-    if (!selectedEvent || !window.confirm(`สร้างเลขบิบใหม่ทั้งหมด ${runners.length} คนของงาน "${selectedEvent.name}"? เลขเดิม (รวมที่อาจปริ้นท์/แจกไปแล้ว) จะเปลี่ยนหมด — เรียงลำดับตามวันที่สมัคร`)) return;
+    const activeCount = runners.filter(r => !r.cancelled).length;
+    if (!selectedEvent || !window.confirm(`สร้างเลขบิบใหม่ทั้งหมด ${activeCount} คนของงาน "${selectedEvent.name}"? เลขเดิม (รวมที่อาจปริ้นท์/แจกไปแล้ว) จะเปลี่ยนหมด — เรียงลำดับตามวันที่สมัคร (ไม่กระทบคนที่ยกเลิกแล้ว)`)) return;
     window.runnerStore.renumberBibs(selectedEvent);
     flash('✓ สร้างเลขบิบใหม่ทั้งหมดแล้ว');
   }
 
   const query = q.trim().toLowerCase();
-  const filtered = runners
+  const activeRunners = runners.filter(r => !r.cancelled);
+  const cancelledRunners = runners.filter(r => r.cancelled);
+  const filtered = (showCancelled ? runners : activeRunners)
     .filter(r => distFilter === 'all' || r.distance === distFilter)
     .filter(r => !query || r.nickname.toLowerCase().includes(query) || r.bib.includes(query) || (r.phone || '').includes(query))
     .sort((a, b) => a.bib.localeCompare(b.bib, undefined, { numeric: true }));
@@ -157,12 +173,16 @@ function RunnerManagerApp({ adminEmail, onLogout }) {
             </button>
           ))}
         </div>
+        <button onClick={() => setShowCancelled(v => !v)} style={{ padding: '7px 11px', borderRadius: 999, border: `1px solid ${showCancelled ? '#5d6b59' : '#e5e0d3'}`,
+          background: showCancelled ? '#5d6b59' : '#fff', color: showCancelled ? '#fff' : '#5d6b59', fontFamily: R_MONO, fontSize: 10.5, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+          {showCancelled ? '✓ ' : ''}แสดงที่ยกเลิกแล้ว ({cancelledRunners.length})
+        </button>
         <button onClick={exportCsv} disabled={!filtered.length} style={{ padding: '8px 12px', background: 'transparent', border: '1px solid #bdb6a4', borderRadius: 8, fontFamily: R_MONO, fontSize: 11, fontWeight: 700, cursor: filtered.length ? 'pointer' : 'not-allowed', opacity: filtered.length ? 1 : 0.5 }}>⬇ Export CSV</button>
         <button onClick={renumberAll} disabled={!runners.length} title="สร้างเลขบิบใหม่ทั้งหมดของงานนี้ตามระบบ 4 หลักปัจจุบัน" style={{ padding: '8px 12px', background: 'transparent', border: '1px solid #b45309', color: '#b45309', borderRadius: 8, fontFamily: R_MONO, fontSize: 11, fontWeight: 700, cursor: runners.length ? 'pointer' : 'not-allowed', opacity: runners.length ? 1 : 0.5 }}>🔄 รีเซ็ตเลขบิบทั้งหมด</button>
       </div>
 
       <div style={{ fontFamily: R_MONO, fontSize: 11, color: '#5d6b59', marginBottom: 8 }}>
-        ทั้งหมด {runners.length} คน{filtered.length !== runners.length ? ` · ตรงตัวกรอง ${filtered.length}` : ''}
+        ลงทะเบียนอยู่ {activeRunners.length} คน{cancelledRunners.length ? ` · ยกเลิกแล้ว ${cancelledRunners.length}` : ''}{filtered.length !== (showCancelled ? runners.length : activeRunners.length) ? ` · ตรงตัวกรอง ${filtered.length}` : ''}
       </div>
 
       {!selectedEvent && <div style={{ padding: 30, textAlign: 'center', color: '#5d6b59', fontSize: 13 }}>ยังไม่มีงานแข่ง</div>}
@@ -171,7 +191,21 @@ function RunnerManagerApp({ adminEmail, onLogout }) {
 
       {filtered.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {filtered.map(r => (
+          {filtered.map(r => r.cancelled ? (
+            // Cancelled — read-only audit row instead of the full editable
+            // grid, since there's nothing left to edit and it should read
+            // clearly as "no longer registered" at a glance.
+            <div key={r.id} style={{ display: 'grid', gridTemplateColumns: '54px 1.4fr 1fr 1fr auto', gap: 8, alignItems: 'center',
+              padding: '8px 10px', background: '#f4f3ef', border: '1px solid #e5e0d3', borderRadius: 10, opacity: 0.75 }}>
+              <span style={{ fontFamily: R_MONO, fontSize: 12, fontWeight: 700, textDecoration: 'line-through' }}>#{r.bib}</span>
+              <span style={{ fontSize: 12.5 }}>{r.nickname} <span style={{ fontFamily: R_MONO, fontSize: 10.5, color: '#5d6b59' }}>· {r.phone}</span></span>
+              <span style={{ fontFamily: R_MONO, fontSize: 11, color: '#5d6b59' }}>{r.distance}</span>
+              <span style={{ fontFamily: R_MONO, fontSize: 10, color: '#5d6b59' }}>
+                ยกเลิกโดย{r.cancelledBy === 'runner' ? 'นักวิ่งเอง' : 'RD'} · {r.cancelledAt ? new Date(r.cancelledAt).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' }) : '—'}
+              </span>
+              <button onClick={() => deleteRunnerForever(r)} style={{ padding: '6px 9px', background: 'transparent', color: '#9b1c10', border: '1px solid #f0c9c4', borderRadius: 8, fontFamily: R_MONO, fontSize: 10, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>ลบถาวร</button>
+            </div>
+          ) : (
             <div key={r.id}>
             <div style={{ display: 'grid', gridTemplateColumns: '54px 1.4fr 1fr 90px 64px 80px auto auto auto', gap: 8, alignItems: 'center',
               padding: '8px 10px', background: r.dnf ? '#fef7f7' : '#fafaf8', border: `1px solid ${r.dnf ? '#f0c9c4' : '#ece7da'}`,
@@ -244,6 +278,7 @@ function RunnerManagerApp({ adminEmail, onLogout }) {
           ))}
         </div>
       )}
+
     </div>
   );
 }
