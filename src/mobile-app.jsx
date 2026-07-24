@@ -1937,6 +1937,22 @@ function MobileApp() {
       setScreen(initialScreenFor(session));
       return;
     }
+    // session.runner only ever holds one registration at a time — if this
+    // runner has registered for more than one event, whichever one the
+    // cross-device recovery above last picked (most recently registered)
+    // is what's cached there, which might not be *this* event. Look up the
+    // roster for this specific event by uid before assuming they've never
+    // registered for it and sending them to the registration form again.
+    if (session && session.user && session.user.uid && window.runnerStore) {
+      const rec = window.runnerStore.listRunnersByUid(session.user.uid).find(r => r.eventId === ev.id);
+      if (rec) {
+        const runner = { dist: rec.distance, name: rec.nickname, checkins: rec.checkins || [], progressKm: rec.progressKm || 0, eventId: rec.eventId, bib: rec.bib, rosterId: rec.id };
+        const nextSession = { ...session, runner };
+        persist(nextSession);
+        setScreen(initialScreenFor(nextSession));
+        return;
+      }
+    }
     setScreen('register');
   }
   function afterRegister(data) {
