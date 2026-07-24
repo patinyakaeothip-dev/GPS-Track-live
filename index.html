@@ -17,7 +17,12 @@
   <script src="https://unpkg.com/jsqr@1.4.0/dist/jsQR.js"></script>
 
   <style>
-    html, body { margin: 0; background: #efe9dc; font-family: 'Plus Jakarta Sans','Noto Sans Thai',ui-sans-serif,system-ui,sans-serif; }
+    /* overscroll-behavior stops a drag that escapes an inner scroll area
+       (e.g. panning the elevation chart) from rubber-banding the whole
+       page — on mobile Safari that bounce also collapses/expands the
+       address bar, resizing the 100vh #phone box and visibly shifting
+       everything below, including the bottom tab bar. */
+    html, body { margin: 0; overflow: hidden; overscroll-behavior: none; background: #efe9dc; font-family: 'Plus Jakarta Sans','Noto Sans Thai',ui-sans-serif,system-ui,sans-serif; }
     * { box-sizing: border-box; }
     #stage { min-height: calc(100vh - 41px); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; gap: 14px; }
     #phone { width: 402px; max-width: 100%; height: 850px; max-height: 90vh; border-radius: 40px; overflow: hidden;
