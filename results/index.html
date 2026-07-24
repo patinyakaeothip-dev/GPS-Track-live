@@ -149,6 +149,22 @@
         totalFinPerDist[k] = byDist[k].filter(x => x.status === 'finished').length;
       });
       items.forEach(it => { it.total_finishers = totalFinPerDist[it.distance] || 0; });
+
+      // Rank runners still on course too — who's actually leading, not just
+      // who reported in most recently. Proxy for progress is how many
+      // checkpoints they've passed (no live GPS available on this page);
+      // among runners tied on checkpoint count, whoever got there first is
+      // ahead.
+      Object.values(byDist).forEach(arr => {
+        arr.filter(x => x.status === 'active')
+          .sort((a,b) => (b.checkin_count - a.checkin_count) || ((a.last_at||0) - (b.last_at||0)))
+          .forEach((x, i) => { x.active_rank = i + 1; });
+      });
+      const totalActivePerDist = {};
+      Object.keys(byDist).forEach(k => {
+        totalActivePerDist[k] = byDist[k].filter(x => x.status === 'active').length;
+      });
+      items.forEach(it => { it.total_active = totalActivePerDist[it.distance] || 0; });
       return items;
     }
 
@@ -201,13 +217,13 @@
             (it.name || '').toLowerCase().indexOf(q) >= 0 ||
             (it.phone || '').indexOf(q.replace(/\D/g,'')) >= 0);
         }
-        // Sort: finished first (by rank), then active (by progress / last_at desc), then not-started, then dnf
+        // Sort: finished first (by rank), then active (leading first), then not-started, then dnf
         const order = { finished: 0, active: 1, not_started: 2, dnf: 3 };
         out.sort((a,b) => {
           const oa = order[a.status] ?? 9, ob = order[b.status] ?? 9;
           if (oa !== ob) return oa - ob;
           if (a.status === 'finished') return (a.rank || 999) - (b.rank || 999);
-          if (a.status === 'active') return (b.last_at || 0) - (a.last_at || 0);
+          if (a.status === 'active') return (a.active_rank || 999) - (b.active_rank || 999);
           return (b.last_at || 0) - (a.last_at || 0);
         });
         return out;
@@ -231,6 +247,15 @@
         });
         return c;
       }, [items, distLabels.join(',')]);
+
+      // Ticks once a second purely so active runners' "time since start"
+      // reads as a live running clock instead of a static number frozen at
+      // the last 30s auto-refresh.
+      const [now, setNow] = useState(() => Date.now());
+      useEffect(() => {
+        const id = setInterval(() => setNow(Date.now()), 1000);
+        return () => clearInterval(id);
+      }, []);
 
       const ago = lastAt ? Math.floor((Date.now() - lastAt) / 1000) : null;
 
@@ -320,7 +345,7 @@
                 color: MUTED }}>ไม่พบนักวิ่งตามฟิลเตอร์นี้</div>
             )}
             {filtered.map((it, i) => (
-              <ResultRow key={it.id || i} it={it} index={i}/>
+              <ResultRow key={it.id || i} it={it} index={i} now={now}/>
             ))}
           </div>
 
@@ -361,7 +386,7 @@
       );
     }
 
-    function ResultRow({ it, index }) {
+    function ResultRow({ it, index, now }) {
       const isFin = it.status === 'finished';
       const isDnf = it.status === 'dnf';
       const isNotStarted = it.status === 'not_started';
@@ -399,6 +424,13 @@
             ) : isNotStarted ? (
               <div style={{ fontFamily: MONO, fontSize: 9.5, color: MUTED,
                 fontWeight: 700 }}>REG</div>
+            ) : it.active_rank ? (
+              <>
+                <div style={{ fontSize: 16, fontWeight: 700, color: '#b45309',
+                  fontStyle: 'italic' }}>#{it.active_rank}</div>
+                <div style={{ fontFamily: MONO, fontSize: 8, color: '#b45309',
+                  fontWeight: 700 }}>RUN</div>
+              </>
             ) : (
               <div style={{ fontFamily: MONO, fontSize: 10, color: '#b45309',
                 fontWeight: 700 }}>RUN</div>
@@ -448,9 +480,19 @@
                   {paceStr}
                 </div>}
               </>
+            ) : !isNotStarted && it.start_at ? (
+              <>
+                <div style={{ fontFamily: MONO, fontSize: 14, fontWeight: 700, color: isDnf ? '#b91c1c' : '#b45309',
+                  fontVariantNumeric: 'tabular-nums' }}>
+                  {fmtElapsed((it.status === 'active' ? now : (it.last_at || it.start_at)) - it.start_at)}
+                </div>
+                <div style={{ fontFamily: MONO, fontSize: 10, color: MUTED }}>
+                  ออกตัว {fmtClockOfDay(it.start_at)}
+                </div>
+              </>
             ) : (
               <div style={{ fontFamily: MONO, fontSize: 10, color: MUTED }}>
-                {isNotStarted ? 'ยังไม่เริ่ม' : it.start_at ? `ออกตัว ${fmtClockOfDay(it.start_at)}` : '—'}
+                {isNotStarted ? 'ยังไม่เริ่ม' : '—'}
               </div>
             )}
           </div>
