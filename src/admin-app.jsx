@@ -371,9 +371,18 @@ function EventForm({ initial, onCancel, onSave, onSaveInPlace, onDelete }) {
     }));
   }
 
+  // A local-save failure (almost always localStorage quota, most likely
+  // triggered by a big embedded GPX track) used to be entirely silent —
+  // the RD would click save, see nothing wrong, and every screen would
+  // just keep showing the old/demo course forever with no explanation.
+  function saveFailedToast() {
+    setToast('⚠ บันทึกไม่สำเร็จ — พื้นที่จัดเก็บของเบราว์เซอร์อาจเต็ม (มักเกิดจากไฟล์ GPX ใหญ่เกินไปหลายไฟล์) ลองลบงานเก่าที่ไม่ใช้แล้ว หรือล้างแคชเบราว์เซอร์');
+    setTimeout(() => setToast(null), 5000);
+  }
   function save() {
     if (!ev.name.trim()) { setToast('⚠ กรอกชื่องานแข่งก่อน'); setTimeout(() => setToast(null), 2000); return; }
-    onSave({ ...ev, status: computeStatus(ev), closed: computeClosed(ev) });
+    const result = onSave({ ...ev, status: computeStatus(ev), closed: computeClosed(ev) });
+    if (result && !result.localOk) saveFailedToast();
   }
   // Saves everything immediately without leaving the form — lets admin
   // commit one distance's edits (quota, cutoff, open/closed) right away and
@@ -381,7 +390,8 @@ function EventForm({ initial, onCancel, onSave, onSaveInPlace, onDelete }) {
   // all-or-nothing save at the very bottom of the page.
   function saveDistance(label) {
     if (!ev.name.trim()) { setToast('⚠ กรอกชื่องานแข่งก่อน'); setTimeout(() => setToast(null), 2000); return; }
-    onSaveInPlace({ ...ev, status: computeStatus(ev), closed: computeClosed(ev) });
+    const result = onSaveInPlace({ ...ev, status: computeStatus(ev), closed: computeClosed(ev) });
+    if (result && !result.localOk) { saveFailedToast(); return; }
     setToast(`✓ บันทึกระยะ ${label} แล้ว`);
     setTimeout(() => setToast(null), 1600);
   }
@@ -618,18 +628,33 @@ function AdminApp({ adminEmail, onLogout }) {
   function openCreate() { setEditing(null); setView('form'); }
   function openEdit(ev) { setEditing(ev); setView('form'); }
   function cancelForm() { setView('list'); }
+  // A failed local save (e.g. localStorage quota, most likely from a big
+  // embedded GPX track) means nothing actually happened — stay on the form
+  // instead of navigating away so EventForm's own error toast (which needs
+  // to stay mounted to show it) is what the RD sees, and they can retry.
+  // A failed *cloud* sync is different: the local copy is fine, the form
+  // has already navigated away by the time that resolves, so it surfaces
+  // here instead, in the list view that's still around to show it.
+  const [listToast, setListToast] = aS(null);
+  function watchSync(result) {
+    result.synced.then(ok => {
+      if (!ok) { setListToast('⚠ บันทึกในเครื่องนี้แล้ว แต่ยังไม่ขึ้นคลาวด์ (เช็คอินเทอร์เน็ต หรือไฟล์ GPX อาจใหญ่ไป) — เปิดเครื่องนี้ทิ้งไว้สักครู่แล้วลองอีกครั้ง'); setTimeout(() => setListToast(null), 6000); }
+    });
+  }
   function saveEvent(ev) {
-    window.eventStore.upsertEvent(ev);
+    const result = window.eventStore.upsertEvent(ev);
     refresh();
-    setView('list');
+    if (result.localOk) { setView('list'); watchSync(result); }
+    return result;
   }
   // Used by the per-distance "บันทึกระยะนี้" button — persists immediately
   // without leaving the form, so admin can save one distance's edits and
   // keep working on the others instead of being kicked back to the list.
   function saveEventInPlace(ev) {
-    window.eventStore.upsertEvent(ev);
+    const result = window.eventStore.upsertEvent(ev);
     refresh();
-    setEditing(ev);
+    if (result.localOk) { setEditing(ev); watchSync(result); }
+    return result;
   }
   function deleteEvent(id) {
     if (!window.confirm('ลบงานแข่งนี้? ข้อมูลจะหายถาวร')) return;
@@ -640,6 +665,7 @@ function AdminApp({ adminEmail, onLogout }) {
 
   return (
     <div>
+      {listToast && <div style={{ position: 'fixed', top: 12, left: '50%', transform: 'translateX(-50%)', maxWidth: 380, padding: '10px 16px', background: '#7c4a03', color: '#fff', borderRadius: 6, fontSize: 12.5, zIndex: 100, boxShadow: '0 6px 20px rgba(0,0,0,0.2)' }}>{listToast}</div>}
       {onLogout && (
         <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 10, padding: '8px 20px', fontFamily: A_MONO, fontSize: 10.5, color: '#5d6b59' }}>
           <span>👤 {adminEmail}</span>
