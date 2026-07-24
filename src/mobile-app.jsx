@@ -847,11 +847,10 @@ const ON_COURSE_KM = 0.1;
 // How long a runner has to stay outside ON_COURSE_KM before it's a real
 // alert instead of one noisy GPS fix.
 const OFF_ROUTE_ALERT_MS = 2 * 60 * 1000;
-// window.courseGeo.gradientAtKm expects {lat,lon,ele,km} object points —
-// this app's course.points are [lat,lon,ele,km] tuples, so that function
-// can't be reused directly here without converting the whole array first.
-// Same % rise/run averaged over a short window as gradientAtKm, just
-// reading tuple indices instead.
+// window.courseGeo's helpers expect {lat,lon,ele,km} object points — this
+// app's course.points are [lat,lon,ele,km] tuples, so they can't be reused
+// directly here without converting the whole array first. Interpolates the
+// elevation at km by reading tuple indices instead.
 function eleAtKmForPoints(points, km) {
   const clamped = Math.max(0, Math.min(points[points.length - 1][3], km));
   for (let i = 1; i < points.length; i++) {
@@ -864,16 +863,26 @@ function eleAtKmForPoints(points, km) {
   }
   return { ele: points[points.length - 1][2], km: points[points.length - 1][3] };
 }
-// Average gradient over the whole distance covered so far (start → km),
-// not just the stretch right around the runner — net elevation change so
-// far divided by distance so far, same idea as courseGeo.avgGradientToKm.
-function gradientAtKmForPoints(points, km) {
+// Cumulative elevation gain (meters climbed) from the start of the course
+// to km — sums every uphill step along the recorded track, same idea as
+// courseGeo.cumulativeGainToKm, just reading tuple indices instead.
+function gainAtKmForPoints(points, km) {
   if (km <= 0) return 0;
-  const p0 = { ele: points[0][2], km: points[0][3] };
-  const p1 = eleAtKmForPoints(points, km);
-  const rise = p1.ele - p0.ele;
-  const run = Math.max(0.02, p1.km - p0.km) * 1000;
-  return (rise / run) * 100;
+  let gain = 0, prevEle = points[0][2];
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1], b = points[i];
+    if (b[3] > km) {
+      if (a[3] <= km) {
+        const t = (km - a[3]) / (b[3] - a[3] || 1);
+        const partialEle = a[2] + (b[2] - a[2]) * t;
+        if (partialEle > prevEle) gain += partialEle - prevEle;
+      }
+      break;
+    }
+    if (b[2] > prevEle) gain += b[2] - prevEle;
+    prevEle = b[2];
+  }
+  return Math.round(gain);
 }
 
 // Writes the real finish result to the localStorage key certificate.html
@@ -940,7 +949,7 @@ function TrackTab({ runner, event, onScan, onSos, onDnf, offRoute }) {
         </div>
         <div style={{ display: 'flex', gap: 14, marginTop: 14 }}>
           <Stat label="เพซปัจจุบัน" value={runner.pace}/>
-          <Stat label="ความชัน" value={runner.gradient} accent={runner.gradient.startsWith('-') ? C.brand : C.orange}/>
+          <Stat label="ไต่ระดับสะสม" value={runner.gradient} accent={C.orange}/>
           <Stat label="จุดถัดไป" value={nextIdx < seq.length ? cpLabelFor(event, seq[nextIdx]) : '—'}/>
         </div>
       </div>
@@ -1637,8 +1646,8 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
     const gpsLive = livePos && livePos.at && (Date.now() - livePos.at) < 2 * 60 * 1000 && livePos.lat != null;
     const projection = gpsLive ? nearestKmForPoint(course.points, livePos.lat, livePos.lon) : null;
     const km = (projection && projection.distKm < ON_COURSE_KM) ? projection.km : session.runner.progressKm;
-    const g = gradientAtKmForPoints(course.points, km);
-    return `${g >= 0 ? '+' : ''}${g.toFixed(1)}%`;
+    const gain = gainAtKmForPoints(course.points, km);
+    return `+${gain} ม.`;
   }, [isSpectator, session.runner, course, livePos]);
 
   function toggleFavorite(bib) {

@@ -69,6 +69,29 @@
     return (rise / run) * 100;
   }
 
+  // Cumulative elevation gain (meters climbed) from the start of the course
+  // to km — sums every uphill step along the recorded track instead of just
+  // the net start-to-here difference, so a climb followed by a descent back
+  // to the same height still counts as real gain, not 0.
+  function cumulativeGainToKm(pts, km) {
+    if (km <= 0) return 0;
+    let gain = 0, prevEle = pts[0].ele;
+    for (let i = 1; i < pts.length; i++) {
+      const a = pts[i - 1], b = pts[i];
+      if (b.km > km) {
+        if (a.km <= km) {
+          const t = (km - a.km) / (b.km - a.km || 1);
+          const partialEle = a.ele + (b.ele - a.ele) * t;
+          if (partialEle > prevEle) gain += partialEle - prevEle;
+        }
+        break;
+      }
+      if (b.ele > prevEle) gain += b.ele - prevEle;
+      prevEle = b.ele;
+    }
+    return Math.round(gain);
+  }
+
   function coursePolylineLatLngs(pts) {
     return pts.map(p => [p.lat, p.lon]);
   }
@@ -134,6 +157,6 @@
   }
 
   Object.assign(window, {
-    courseGeo: { loadTrack, pointAtKm, gradientAtKm, avgGradientToKm, coursePolylineLatLngs, nearestKmOnTrack, haversineKm, buildEventCoursePaths, courseJsonForDistance },
+    courseGeo: { loadTrack, pointAtKm, gradientAtKm, avgGradientToKm, cumulativeGainToKm, coursePolylineLatLngs, nearestKmOnTrack, haversineKm, buildEventCoursePaths, courseJsonForDistance },
   });
 })();
