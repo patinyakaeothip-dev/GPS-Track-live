@@ -82,7 +82,7 @@ function useElevationProfile(geo, coursePaths, distance) {
     const totalKm = pts[pts.length - 1].km;
     const sample = [];
     for (let i = 0; i <= N; i++) sample.push(geo.pointAtKm(pts, totalKm * i / N));
-    const w = 1100, h = 170, padL = 6, padR = 6, padT = 14, padB = 34;
+    const w = 1100, h = 170, padL = 44, padR = 6, padT = 14, padB = 34;
     const eles = sample.map(p => p.ele);
     const minE = Math.min(...eles) - 15, maxE = Math.max(...eles) + 15;
     const x = km => padL + (w - padL - padR) * (km / totalKm);
@@ -90,7 +90,10 @@ function useElevationProfile(geo, coursePaths, distance) {
     let d = `M ${x(0)} ${y(minE)} L ${x(0)} ${y(sample[0].ele)}`;
     sample.forEach(p => { d += ` L ${x(p.km)} ${y(p.ele)}`; });
     d += ` L ${x(totalKm)} ${y(minE)} Z`;
-    return { d, w, h, x, y, baseY: y(minE), totalKm };
+    // 4 evenly spaced elevation labels for the Y axis, rounded to whole
+    // meters — actual course elevation, not just a relative silhouette.
+    const yTicks = Array.from({ length: 4 }, (_, i) => Math.round(minE + 15 + (maxE - 15 - (minE + 15)) * i / 3));
+    return { d, w, h, x, y, baseY: y(minE), totalKm, padL, yTicks };
   }, [geo, coursePaths, distance]);
 }
 
@@ -613,6 +616,12 @@ function LiveMonitorApp() {
               </div>
               {overviewProfile && (
                 <svg viewBox={`0 0 ${overviewProfile.w} ${overviewProfile.h}`} style={{ width: '100%', height: 180, display: 'block' }}>
+                  {overviewProfile.yTicks.map((ele, i) => (
+                    <g key={i}>
+                      <line x1={overviewProfile.padL} y1={overviewProfile.y(ele)} x2={overviewProfile.w - 6} y2={overviewProfile.y(ele)} stroke="#5d6b59" strokeWidth="1" strokeDasharray="2 3" opacity="0.3"/>
+                      <text x={overviewProfile.padL - 6} y={overviewProfile.y(ele) + 3} textAnchor="end" fontFamily={M_MONO} fontSize="9" fill="#5d6b59">{ele}m</text>
+                    </g>
+                  ))}
                   <path d={overviewProfile.d} fill="oklch(0.9 0.03 145 / 0.5)" stroke="#1f4d39" strokeWidth="1.4"/>
                   {[[0, 'START'], ...checkpointsRef.current.map(cp => [parseFloat(cp.km) || 0, cp.label]), [overviewProfile.totalKm, 'FINISH']].map(([km, label], i) => (
                     <g key={i}>
