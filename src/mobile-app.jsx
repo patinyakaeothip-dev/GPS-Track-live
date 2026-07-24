@@ -1062,7 +1062,7 @@ function RouteTab({ course, runner, event, spectatorRunner, livePos }) {
     map.flyTo(marker.getLatLng(), Math.max(map.getZoom(), 15));
   }
   return (
-    <div style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ flex: 1, overflow: 'auto', overscrollBehavior: 'contain', display: 'flex', flexDirection: 'column' }}>
       <div style={{ position: 'relative', flex: 1, minHeight: 260 }}>
         <div ref={mapRef} style={{ position: 'absolute', inset: 0, background: '#eee' }}/>
         <div onClick={recenterToMe} style={{ position: 'absolute', bottom: 12, right: 12, zIndex: 400,
