@@ -690,9 +690,9 @@ function PreRaceScreen({ event, dist, onScan, onBack, onPreview, onCancel }) {
         </Btn>
       )}
       {onCancel && (
-        <div onClick={onCancel} style={{ textAlign: 'center', marginTop: 14, fontSize: 12, color: 'rgba(255,255,255,0.55)', textDecoration: 'underline', cursor: 'pointer' }}>
-          ยกเลิกการลงทะเบียน
-        </div>
+        <Btn variant="ghost" onClick={onCancel} style={{ marginTop: 10, borderColor: 'rgba(220,100,90,0.55)', color: '#f5a99f' }}>
+          ✕ ยกเลิกการลงทะเบียน
+        </Btn>
       )}
     </div>
   );
@@ -978,9 +978,9 @@ function TrackTab({ runner, event, onScan, onSos, onDnf, offRoute }) {
         })}
       </div>
 
-      <div onClick={onDnf} style={{ textAlign: 'center', fontFamily: C.mono, fontSize: 11, color: '#9b1c10', cursor: 'pointer', textDecoration: 'underline' }}>
-        แจ้งถอนตัว (DNF)
-      </div>
+      <Btn variant="ghost" onClick={onDnf} style={{ borderColor: '#e5b3ab', color: '#9b1c10' }}>
+        🏳️ แจ้งถอนตัว (DNF)
+      </Btn>
     </div>
   );
 }
