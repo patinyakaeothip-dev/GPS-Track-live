@@ -674,7 +674,7 @@ function LiveMonitorApp() {
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                 <thead>
                   <tr style={{ position: 'sticky', top: 0, background: '#fff' }}>
-                    {['อันดับ', 'นักวิ่ง', 'ระยะ', 'ความคืบหน้า', 'เวลาที่วิ่ง', 'เพศ', 'เพซ', 'ความชัน', 'เช็คพอยท์', 'สถานะ'].map((h, i) => (
+                    {['อันดับ', 'นักวิ่ง', 'ระยะ', 'ความคืบหน้า', 'เวลาที่วิ่ง', 'เพศ', 'เพซ', 'ความชัน', 'เช็คพอยท์ล่าสุด', 'สถานะ'].map((h, i) => (
                       <th key={i} style={{ textAlign: 'left', padding: i === 0 || i === 9 ? '9px 20px' : '9px 14px', fontFamily: M_MONO, fontSize: 10, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#5d6b59', borderBottom: '1px solid #d8d2c2' }}>{h}</th>
                     ))}
                   </tr>
@@ -698,7 +698,7 @@ function LiveMonitorApp() {
                         <td style={{ padding: '10px 14px', fontFamily: M_MONO, fontSize: 12 }}>{rk.pace}/km</td>
                         <td style={{ padding: '10px 14px', fontFamily: M_MONO, fontSize: 12, fontWeight: 600, color: rk.gradColor }}>{rk.gradArrow} {rk.gradStr}</td>
                         <td style={{ padding: '10px 14px', fontFamily: M_MONO, fontSize: 10.5, color: '#5d6b59', whiteSpace: 'nowrap' }}>
-                          {rk.checkinTimes.length ? rk.checkinTimes.map(c => `${c.label} ${c.t}`).join(' · ') : '—'}
+                          {rk.checkinTimes.length ? (() => { const last = rk.checkinTimes[rk.checkinTimes.length - 1]; return `${last.label} ${last.t}`; })() : '—'}
                         </td>
                         <td style={{ padding: '10px 20px' }}><span style={{ padding: '3px 8px', borderRadius: 7, fontSize: 11, fontWeight: 600, background: rk.statusBg, color: rk.statusFg }}>{rk.statusLabel}</span></td>
                       </tr>
