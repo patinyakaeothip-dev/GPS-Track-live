@@ -52,7 +52,7 @@ async function start(eventId, bib, onPingCb) {
     watcherId = await BackgroundGeolocation.addWatcher(
       {
         backgroundMessage: 'กำลังติดตามตำแหน่ง GPS ระหว่างวิ่ง',
-        backgroundTitle: 'Rayong Trail Running',
+        backgroundTitle: 'Rayong Trail',
         requestPermissions: true,
         stale: false,
         distanceFilter: 10, // meters — trail pace doesn't need denser pings than this
