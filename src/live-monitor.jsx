@@ -46,6 +46,17 @@ function fmtPace(p) {
 function gradColor(g) { const a = Math.abs(g); return a < 3 ? M_BRAND : a < 9 ? M_WARN : M_ALERT; }
 function gradArrow(g) { return g > 1 ? '▲' : g < -1 ? '▼' : '→'; }
 function fmtAgo(sec) { return sec < 60 ? `${Math.round(sec)} วิที่แล้ว` : `${Math.floor(sec / 60)} นาทีที่แล้ว`; }
+function fmtElapsed(ms) {
+  if (ms == null || ms < 0) return '—';
+  const s = Math.floor(ms / 1000);
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), r = s % 60;
+  return (h > 0 ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(r).padStart(2, '0');
+}
+function cpLabel(cp) {
+  if (cp === 'start') return 'START';
+  if (cp === 'finish') return 'FINISH';
+  return String(cp || '').toUpperCase();
+}
 // A runner's checkin only stores a wall-clock "HH:MM" string (see
 // mobile-app.jsx scanComplete) — reconstruct a real timestamp against the
 // event's race date the same way Results does, so pace/staleness can be
@@ -309,6 +320,11 @@ function LiveMonitorApp() {
       const startMs = startCk ? checkinMs(selectedEvent, startCk.t) : null;
       const endMs = finishCk ? checkinMs(selectedEvent, finishCk.t) : Date.now();
       const pace = (startMs != null && km > 0 && endMs > startMs) ? ((endMs - startMs) / 60000) / km : null;
+      // Elapsed time since start — live-ticking for runners still on course
+      // (frozen at finish once they're done), plus the checkpoint times
+      // themselves, both for the Ranking table.
+      const elapsedMs = startMs != null ? (endMs - startMs) : null;
+      const checkinTimes = cks.map(c => ({ cp: c.cp, label: cpLabel(c.cp), t: c.t }));
 
       const lastAtMs = last ? checkinMs(selectedEvent, last.t) : null;
       const staleMin = lastAtMs != null ? (Date.now() - lastAtMs) / 60000 : null;
@@ -345,6 +361,7 @@ function LiveMonitorApp() {
         gradColor: started ? gradColor(g) : '#5d6b59',
         gradArrow: started ? gradArrow(g) : '',
         ele: p.ele, ago: lastAtMs != null ? fmtAgo((Date.now() - lastAtMs) / 1000) : '—',
+        elapsedMs, checkinTimes,
         sos: !!r.sos, sosReason: r.sosReason || '',
         emgName: r.emgName || '', emgPhone: r.emgPhone || '', bloodType: r.bloodType || '', medical: r.medical || '',
         status, statusLabel: meta.label, statusBg: meta.bg, statusFg: meta.fg, physKm };
@@ -657,15 +674,15 @@ function LiveMonitorApp() {
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                 <thead>
                   <tr style={{ position: 'sticky', top: 0, background: '#fff' }}>
-                    {['อันดับ', 'นักวิ่ง', 'ระยะ', 'ความคืบหน้า', 'เพศ', 'เพซ', 'ความชัน', 'สถานะ'].map((h, i) => (
-                      <th key={i} style={{ textAlign: 'left', padding: i === 0 || i === 7 ? '9px 20px' : '9px 14px', fontFamily: M_MONO, fontSize: 10, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#5d6b59', borderBottom: '1px solid #d8d2c2' }}>{h}</th>
+                    {['อันดับ', 'นักวิ่ง', 'ระยะ', 'ความคืบหน้า', 'เวลาที่วิ่ง', 'เพศ', 'เพซ', 'ความชัน', 'เช็คพอยท์', 'สถานะ'].map((h, i) => (
+                      <th key={i} style={{ textAlign: 'left', padding: i === 0 || i === 9 ? '9px 20px' : '9px 14px', fontFamily: M_MONO, fontSize: 10, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#5d6b59', borderBottom: '1px solid #d8d2c2' }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {rankRows.map(rk => (
                     <React.Fragment key={rk.bib}>
-                      {rk.firstInGroup && <tr><td colSpan={8} style={{ padding: '10px 20px 4px', fontFamily: M_MONO, fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#5d6b59', fontWeight: 700, background: '#faf8f2' }}>ระยะ {rk.groupLabel}</td></tr>}
+                      {rk.firstInGroup && <tr><td colSpan={10} style={{ padding: '10px 20px 4px', fontFamily: M_MONO, fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#5d6b59', fontWeight: 700, background: '#faf8f2' }}>ระยะ {rk.groupLabel}</td></tr>}
                       <tr onClick={() => setDetailBib(rk.bib)} style={{ cursor: 'pointer', borderBottom: '1px solid #f4f3ef' }}>
                         <td style={{ padding: '10px 20px', fontFamily: M_MONO, fontWeight: 700, color: rk.rank <= 3 ? M_BRAND : '#5d6b59' }}>#{rk.rank} {rk.medal}</td>
                         <td style={{ padding: '10px 14px' }}>
@@ -676,9 +693,13 @@ function LiveMonitorApp() {
                         </td>
                         <td style={{ padding: '10px 14px', fontFamily: M_MONO, fontSize: 12 }}>{rk.distance}</td>
                         <td style={{ padding: '10px 14px', fontFamily: M_MONO, fontSize: 12 }}>{rk.km.toFixed(1)} / {rk.totalKm.toFixed(1)}K</td>
+                        <td style={{ padding: '10px 14px', fontFamily: M_MONO, fontSize: 12, fontWeight: 600 }}>{fmtElapsed(rk.elapsedMs)}</td>
                         <td style={{ padding: '10px 14px', fontFamily: M_MONO, fontSize: 11, fontWeight: 700, color: rk.gender === 'f' ? '#b3467c' : rk.gender === 'm' ? '#3a86c4' : '#5d6b59' }}>{rk.gender === 'f' ? 'หญิง' : rk.gender === 'm' ? 'ชาย' : '—'}</td>
                         <td style={{ padding: '10px 14px', fontFamily: M_MONO, fontSize: 12 }}>{rk.pace}/km</td>
                         <td style={{ padding: '10px 14px', fontFamily: M_MONO, fontSize: 12, fontWeight: 600, color: rk.gradColor }}>{rk.gradArrow} {rk.gradStr}</td>
+                        <td style={{ padding: '10px 14px', fontFamily: M_MONO, fontSize: 10.5, color: '#5d6b59', whiteSpace: 'nowrap' }}>
+                          {rk.checkinTimes.length ? rk.checkinTimes.map(c => `${c.label} ${c.t}`).join(' · ') : '—'}
+                        </td>
                         <td style={{ padding: '10px 20px' }}><span style={{ padding: '3px 8px', borderRadius: 7, fontSize: 11, fontWeight: 600, background: rk.statusBg, color: rk.statusFg }}>{rk.statusLabel}</span></td>
                       </tr>
                     </React.Fragment>
