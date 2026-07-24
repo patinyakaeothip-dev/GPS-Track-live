@@ -79,10 +79,9 @@ function inputStyle(extra) {
 function GpxCard({ label, filename, stats, filled, onParsed }) {
   const inputRef = aR(null);
   const [error, setError] = aS(null);
+  const [dragOver, setDragOver] = aS(false);
 
-  async function handleFile(e) {
-    const file = e.target.files && e.target.files[0];
-    e.target.value = '';
+  async function loadFile(file) {
     if (!file) return;
     setError(null);
     try {
@@ -92,6 +91,22 @@ function GpxCard({ label, filename, stats, filled, onParsed }) {
       setError(err.message || 'อ่านไฟล์ GPX ไม่สำเร็จ');
     }
   }
+  function handleFile(e) {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = '';
+    loadFile(file);
+  }
+  // The dropzone said "ลากไฟล์ .gpx" (drag a file here) but never actually
+  // had drag/drop handlers wired up — dropping just did nothing, only the
+  // click-to-browse path worked. onDragOver must preventDefault or the
+  // browser rejects the drop entirely and never fires onDrop.
+  function handleDragOver(e) { e.preventDefault(); setDragOver(true); }
+  function handleDragLeave() { setDragOver(false); }
+  function handleDrop(e) {
+    e.preventDefault();
+    setDragOver(false);
+    loadFile(e.dataTransfer.files && e.dataTransfer.files[0]);
+  }
 
   const picker = <input ref={inputRef} type="file" accept=".gpx" onChange={handleFile} style={{ display: 'none' }}/>;
 
@@ -100,7 +115,8 @@ function GpxCard({ label, filename, stats, filled, onParsed }) {
       <div>
         {picker}
         <div style={{ fontFamily: A_MONO, fontSize: 10, fontWeight: 700, color: '#1f4d39', marginBottom: 6 }}>GPX · {label}</div>
-        <div style={{ background: 'oklch(0.96 0.03 145)', border: '1px solid #bcd9c9', borderRadius: 10, padding: '10px 12px' }}>
+        <div onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}
+          style={{ background: dragOver ? 'oklch(0.92 0.05 145)' : 'oklch(0.96 0.03 145)', border: `1px solid ${dragOver ? A_BRAND : '#bcd9c9'}`, borderRadius: 10, padding: '10px 12px' }}>
           <div style={{ fontSize: 11.5, fontWeight: 600, color: '#1f4d39' }}>✓ {filename}</div>
           <div style={{ fontFamily: A_MONO, fontSize: 9.5, color: '#5d6b59', marginTop: 3 }}>{stats}</div>
           <button onClick={() => inputRef.current.click()} style={{ marginTop: 6, padding: '5px 9px', background: 'transparent', border: '1px solid #bdb6a4', borderRadius: 8, fontFamily: A_MONO, fontSize: 9.5, fontWeight: 600, color: '#1f2a1c', cursor: 'pointer' }}>เปลี่ยนไฟล์</button>
@@ -113,7 +129,8 @@ function GpxCard({ label, filename, stats, filled, onParsed }) {
     <div>
       {picker}
       <div style={{ fontFamily: A_MONO, fontSize: 10, fontWeight: 700, color: '#5d6b59', marginBottom: 6 }}>GPX · {label}</div>
-      <div onClick={() => inputRef.current.click()} style={{ border: '2px dashed #bdb6a4', borderRadius: 10, padding: '14px 10px', textAlign: 'center', cursor: 'pointer' }}>
+      <div onClick={() => inputRef.current.click()} onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}
+        style={{ border: `2px dashed ${dragOver ? A_BRAND : '#bdb6a4'}`, background: dragOver ? 'oklch(0.96 0.03 145)' : 'transparent', borderRadius: 10, padding: '14px 10px', textAlign: 'center', cursor: 'pointer' }}>
         <div style={{ fontSize: 16 }}>📍</div>
         <div style={{ fontSize: 10.5, color: '#1f2a1c', marginTop: 4 }}>ลากไฟล์ .gpx หรือ <span style={{ color: A_BRAND, textDecoration: 'underline' }}>เลือกไฟล์</span></div>
       </div>
