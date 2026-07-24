@@ -1044,9 +1044,19 @@ function RouteTab({ course, runner, event, spectatorRunner, livePos }) {
   const gpsLiveForElevation = livePos && livePos.at && (Date.now() - livePos.at) < 2 * 60 * 1000 && livePos.lat != null;
   const gpsProjection = (gpsLiveForElevation && course) ? nearestKmForPoint(course.points, livePos.lat, livePos.lon) : null;
   const elevationKm = (gpsProjection && gpsProjection.distKm < ON_COURSE_KM) ? gpsProjection.km : runner.progressKm;
+  function recenterToMe() {
+    const map = mapObj.current, marker = runnerMarkerRef.current;
+    if (!map || !marker) return;
+    map.flyTo(marker.getLatLng(), Math.max(map.getZoom(), 15));
+  }
   return (
     <div style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
-      <div ref={mapRef} style={{ flex: 1, minHeight: 260, background: '#eee' }}/>
+      <div style={{ position: 'relative', flex: 1, minHeight: 260 }}>
+        <div ref={mapRef} style={{ position: 'absolute', inset: 0, background: '#eee' }}/>
+        <div onClick={recenterToMe} style={{ position: 'absolute', bottom: 12, right: 12, zIndex: 400,
+          width: 40, height: 40, borderRadius: 999, background: '#fff', boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 18 }}>📍</div>
+      </div>
       {spectatorRunner && <FollowedRunnerPanel runner={spectatorRunner} event={event} livePos={livePos}/>}
       <div style={{ padding: '14px 18px 90px', background: '#fff' }}>
         <Kicker>Elevation</Kicker>
