@@ -1067,7 +1067,11 @@ function RouteTab({ course, runner, event, spectatorRunner, livePos }) {
         <div ref={mapRef} style={{ position: 'absolute', inset: 0, background: '#eee' }}/>
         <div onClick={recenterToMe} style={{ position: 'absolute', bottom: 12, right: 12, zIndex: 400,
           width: 40, height: 40, borderRadius: 999, background: '#fff', boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 18 }}>📍</div>
+          display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+          <svg width="19" height="19" viewBox="0 0 24 24" fill={C.text}>
+            <path d="M12 2 L20 20 L12 15.5 L4 20 Z"/>
+          </svg>
+        </div>
       </div>
       {spectatorRunner && <FollowedRunnerPanel runner={spectatorRunner} event={event} livePos={livePos}/>}
       <div style={{ padding: '14px 18px 90px', background: '#fff' }}>
