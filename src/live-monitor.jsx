@@ -545,7 +545,7 @@ function LiveMonitorApp() {
             <img src="assets/rayong-trail-icon.png" alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }}/>
           </div>
           <div>
-            <div style={{ fontFamily: M_MONO, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#5d6b59' }}>{selectedEvent ? selectedEvent.name : 'Rayong Trail Running'}</div>
+            <div style={{ fontFamily: M_MONO, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#5d6b59' }}>{selectedEvent ? selectedEvent.name : 'Rayong Trail'}</div>
             <div style={{ fontFamily: 'Georgia,serif', fontStyle: 'italic', fontSize: 17, fontWeight: 600, color: '#1f4d39' }}>Live GPS Monitor</div>
           </div>
           {events.length > 0 && (

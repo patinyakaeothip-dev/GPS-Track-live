@@ -140,7 +140,7 @@ function Logo({ size = 18 }) {
 function Brand() {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-      <Logo size={44}/><span style={{ fontSize: 17, fontWeight: 800, color: C.brandDk }}>Rayong Trail Running</span>
+      <Logo size={44}/><span style={{ fontSize: 17, fontWeight: 800, color: C.brandDk }}>Rayong Trail</span>
     </div>
   );
 }
@@ -156,7 +156,7 @@ function SplashScreen({ onDone }) {
         <div style={{ width: 76, height: 76, borderRadius: 20, background: '#fff', padding: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
           <img src="assets/rayong-trail-icon.png" alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', borderRadius: 8 }}/>
         </div>
-        <div style={{ fontFamily: 'Georgia,serif', fontStyle: 'italic', fontSize: 24, fontWeight: 700 }}>Rayong Trail Running</div>
+        <div style={{ fontFamily: 'Georgia,serif', fontStyle: 'italic', fontSize: 24, fontWeight: 700 }}>Rayong Trail</div>
         <Kicker>2026 · GPS TRACKER</Kicker>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
@@ -543,7 +543,7 @@ function RegisterScreen({ event, profile, onDone, onBack }) {
       <div style={{ padding: '40px 24px 18px', background: C.brand, color: '#fff' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
           <BackBtn onClick={onBack} dark inline/>
-          <Logo size={24}/><span style={{ fontSize: 12.5, fontWeight: 700 }}>{(event && event.name) || 'Rayong Trail Running'}</span>
+          <Logo size={24}/><span style={{ fontSize: 12.5, fontWeight: 700 }}>{(event && event.name) || 'Rayong Trail'}</span>
         </div>
         <Kicker><span style={{ color: 'rgba(255,255,255,0.65)' }}>ลงทะเบียน</span></Kicker>
         <div style={{ fontSize: 22, fontWeight: 800, marginTop: 8 }}>สวัสดี! กรอกข้อมูลก่อนเริ่มวิ่ง</div>
@@ -745,7 +745,7 @@ function PreRaceScreen({ event, dist, onScan, onBack, onPreview, onCancel }) {
     <div style={{ height: '100%', background: `linear-gradient(180deg,${C.brandDk} 0%,#152f24 100%)`, color: '#fff', fontFamily: C.font, display: 'flex', flexDirection: 'column', padding: '40px 24px 30px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
         <BackBtn onClick={onBack} dark inline/>
-        <Logo size={24}/><span style={{ fontSize: 12.5, fontWeight: 700 }}>{(event && event.name) || 'Rayong Trail Running'}</span>
+        <Logo size={24}/><span style={{ fontSize: 12.5, fontWeight: 700 }}>{(event && event.name) || 'Rayong Trail'}</span>
       </div>
       <Kicker><span style={{ color: 'rgba(255,255,255,0.65)' }}>WAVE {dist}</span></Kicker>
       <div style={{ fontSize: 20, fontWeight: 600, marginTop: 8 }}>รอเวลาปล่อยตัว</div>

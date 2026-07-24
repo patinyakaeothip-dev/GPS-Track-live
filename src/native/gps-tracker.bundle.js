@@ -546,7 +546,7 @@
       watcherId = await BackgroundGeolocation.addWatcher(
         {
           backgroundMessage: "\u0E01\u0E33\u0E25\u0E31\u0E07\u0E15\u0E34\u0E14\u0E15\u0E32\u0E21\u0E15\u0E33\u0E41\u0E2B\u0E19\u0E48\u0E07 GPS \u0E23\u0E30\u0E2B\u0E27\u0E48\u0E32\u0E07\u0E27\u0E34\u0E48\u0E07",
-          backgroundTitle: "Rayong Trail Running",
+          backgroundTitle: "Rayong Trail",
           requestPermissions: true,
           stale: false,
           distanceFilter: 10
