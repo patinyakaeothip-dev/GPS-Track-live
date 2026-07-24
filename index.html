@@ -2,7 +2,7 @@
 <html lang="th">
 <head>
   <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <meta name="theme-color" content="#2d6a4f"/>
   <title>Rayong Trail Running · GPS Tracker</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -22,23 +22,32 @@
        page — on mobile Safari that bounce also collapses/expands the
        address bar, resizing the 100vh #phone box and visibly shifting
        everything below, including the bottom tab bar. */
+    /* body is a column flexbox (nav + stage) instead of #stage subtracting
+       a hardcoded 41px for the nav bar's height — the native app shell
+       hides .trt-nav via the script below, and a fixed 41px calc would
+       leave a blank gap where that bar used to be. flex:1/min-height:0 on
+       #stage sizes it to whatever's actually left, nav present or not. */
     html, body { margin: 0; overflow: hidden; overscroll-behavior: none; background: #efe9dc; font-family: 'Plus Jakarta Sans','Noto Sans Thai',ui-sans-serif,system-ui,sans-serif; }
+    body { height: 100vh; display: flex; flex-direction: column; }
     * { box-sizing: border-box; }
-    #stage { min-height: calc(100vh - 41px); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; gap: 14px; }
+    #stage { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; gap: 14px; }
     #phone { width: 402px; max-width: 100%; height: 850px; max-height: 90vh; border-radius: 40px; overflow: hidden;
       box-shadow: 0 30px 70px rgba(31,42,28,0.25), 0 0 0 10px #1a1a1a; position: relative; background: #efe9dc; }
     #root { height: 100%; }
-    .trt-nav { display: flex; gap: 6px; align-items: center; padding: 10px 20px; background: #fff;
+    .trt-nav { flex-shrink: 0; display: flex; gap: 6px; align-items: center; padding: 10px 20px; background: #fff;
       border-bottom: 1px solid #d8d2c2; font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; }
     .trt-nav a { color: #5d6b59; text-decoration: none; padding: 6px 10px; border-radius: 6px; }
     .trt-nav a.active { color: #fff; background: #2d6a4f; }
     .trt-nav a:hover:not(.active) { background: #f5f1e8; color: #1f4d39; }
 
-    /* On real phones, skip the mockup bezel and run the app edge-to-edge. */
+    /* On real phones, skip the mockup bezel and run the app edge-to-edge.
+       Safe-area padding reserves space for the notch/Dynamic Island and
+       home indicator so content doesn't render underneath them. */
     @media (max-width: 480px) {
-      #stage { min-height: calc(100vh - 41px); padding: 0; gap: 0; }
-      #phone { width: 100%; height: calc(100vh - 41px); max-height: none; border-radius: 0;
-        box-shadow: none; background: #efe9dc; }
+      #stage { padding: 0; gap: 0; }
+      #phone { width: 100%; height: 100%; max-height: none; border-radius: 0;
+        box-shadow: none; background: #efe9dc;
+        padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
     }
   </style>
 </head>
