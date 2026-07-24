@@ -873,6 +873,18 @@ function gradientAtKmForPoints(points, km) {
   return (rise / run) * 100;
 }
 
+// Gradient bands shown under the elevation profile so a runner can tell at
+// a glance roughly how steep any point on the course is, not just the
+// single current-gradient number in the Track tab stats.
+const GRADIENT_BANDS = [
+  { max: -3, color: '#2f6fb0', label: 'ลงเขา' },
+  { max: 3, color: '#7bab6e', label: 'ราบ' },
+  { max: 8, color: '#d9a441', label: 'ชันเล็กน้อย' },
+  { max: 15, color: '#d9662f', label: 'ชันปานกลาง' },
+  { max: Infinity, color: '#b0261b', label: 'ชันมาก' },
+];
+function gradientBand(g) { return GRADIENT_BANDS.find(b => g <= b.max) || GRADIENT_BANDS[GRADIENT_BANDS.length - 1]; }
+
 // Writes the real finish result to the localStorage key certificate.html
 // reads (trt.finish.result), so "บันทึกใบประกาศ" always reflects this
 // runner's actual checkpoint times/rank instead of the old hardcoded demo
@@ -1187,11 +1199,26 @@ function ElevationSvg({ course, progressKm, checkpoints }) {
   }).join(' ');
   const markX = x(Math.min(progressKm, course.totalKm));
   const marks = [[0, 'START'], ...(checkpoints || []).map(cp => [parseFloat(cp.km) || 0, cp.label]), [course.totalKm, 'FINISH']];
+  const bandY = h - padBottom + 3, bandH = 4;
+  // Sample gradient every ~150m of course (denser when zoomed in) and paint
+  // a colored strip under the profile so a runner can see, at a glance,
+  // roughly how steep any upcoming stretch is — not just the current spot.
+  const bandStep = Math.max(0.05, Math.min(0.25, visibleKm / 60));
+  const bands = uM(() => {
+    const out = [];
+    for (let km = 0; km < totalKm; km += bandStep) {
+      const kmEnd = Math.min(totalKm, km + bandStep);
+      const g = gradientAtKmForPoints(pts, (km + kmEnd) / 2);
+      out.push({ x1: x(km), x2: x(kmEnd), color: gradientBand(g).color });
+    }
+    return out;
+  }, [pts, totalKm, bandStep, panKm, visibleKm]);
   return (
     <div style={{ position: 'relative' }}>
       <svg viewBox={`0 0 ${w} ${h}`} style={{ width: '100%', height: h, marginTop: 6, touchAction: 'none', cursor: zoom > 1 ? 'grab' : 'default' }}
         onWheel={onWheel} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}>
         <path d={path} fill="none" stroke={C.brand} strokeWidth="2"/>
+        {bands.map((b, i) => <rect key={i} x={b.x1} y={bandY} width={Math.max(0.3, b.x2 - b.x1)} height={bandH} fill={b.color}/>)}
         <line x1={markX} y1="0" x2={markX} y2={h - padBottom} stroke={C.orange} strokeWidth="1.5" strokeDasharray="3 3"/>
         {marks.map(([km, label], i) => (
           <g key={i}>
@@ -1201,6 +1228,14 @@ function ElevationSvg({ course, progressKm, checkpoints }) {
           </g>
         ))}
       </svg>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 10px', marginTop: 4, padding: '0 2px' }}>
+        {GRADIENT_BANDS.map(b => (
+          <div key={b.label} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <span style={{ width: 8, height: 8, borderRadius: 2, background: b.color, flexShrink: 0 }}/>
+            <span style={{ fontFamily: C.mono, fontSize: 8.5, color: C.muted }}>{b.label}</span>
+          </div>
+        ))}
+      </div>
       {zoom > 1.02 && (
         <div onClick={resetZoom} style={{ position: 'absolute', top: 2, right: 2, padding: '3px 8px', background: '#fff', border: `1px solid ${C.border}`, borderRadius: 999, fontFamily: C.mono, fontSize: 9.5, color: C.muted, cursor: 'pointer', boxShadow: '0 1px 3px rgba(31,42,28,0.1)' }}>↺ รีเซ็ตซูม</div>
       )}
