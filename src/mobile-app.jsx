@@ -1011,6 +1011,12 @@ function TrackTab({ runner, event, onScan, onSos, onDnf, offRoute }) {
   const finished = runner.checkins.some(c => c.cp === 'finish');
   return (
     <div style={{ flex: 1, overflow: 'auto', padding: '16px 18px 90px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {runner.dnf && (
+        <div style={{ padding: 14, background: '#fef2f2', border: '1px solid #f0c9c4', borderRadius: 12, fontSize: 12.5, color: '#9b1c10', lineHeight: 1.6, display: 'flex', alignItems: 'center', gap: 10 }}>
+          <FlagIcon size={18}/>
+          <div><b>ถอนตัวแล้ว (DNF)</b><br/>ทีมงานรับทราบตำแหน่งล่าสุดของคุณแล้ว · ระบบหยุดติดตาม GPS แล้ว</div>
+        </div>
+      )}
       {offRoute && (
         <div style={{ padding: 14, background: '#fdf0d6', border: '1px solid #f0d9a0', borderRadius: 12, fontSize: 12.5, color: '#7c4a03', lineHeight: 1.6 }}>
           ⚠ ตำแหน่งของคุณอยู่นอกเส้นทางมาสักพักแล้ว — ลองเช็คเส้นทางในแท็บ Route หรือกด SOS ถ้าต้องการความช่วยเหลือ
@@ -1033,14 +1039,14 @@ function TrackTab({ runner, event, onScan, onSos, onDnf, offRoute }) {
 
       {finished ? (
         <Btn variant="primary" onClick={() => window.open('certificate.html', '_blank')}>🏅 บันทึกใบประกาศ</Btn>
-      ) : (
+      ) : !runner.dnf ? (
         <div style={{ display: 'flex', gap: 10 }}>
           <Btn variant="primary" onClick={onScan} style={{ flex: 1 }}>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><CameraIcon size={16}/> Scan QR</span>
           </Btn>
           <Btn variant="danger" onClick={onSos} style={{ flex: 1 }}>🆘 SOS</Btn>
         </div>
-      )}
+      ) : null}
 
       <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 14, overflow: 'hidden' }}>
         <div style={{ padding: '10px 14px', borderBottom: `1px solid ${C.border}`, fontFamily: C.mono, fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted, fontWeight: 600 }}>Checkpoints</div>
@@ -1057,9 +1063,11 @@ function TrackTab({ runner, event, onScan, onSos, onDnf, offRoute }) {
         })}
       </div>
 
-      <Btn variant="ghost" onClick={onDnf} style={{ borderColor: '#e5b3ab', color: '#9b1c10' }}>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><FlagIcon size={15}/> แจ้งถอนตัว (DNF)</span>
-      </Btn>
+      {!runner.dnf && !finished && (
+        <Btn variant="ghost" onClick={onDnf} style={{ borderColor: '#e5b3ab', color: '#9b1c10' }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><FlagIcon size={15}/> แจ้งถอนตัว (DNF)</span>
+        </Btn>
+      )}
     </div>
   );
 }
@@ -2074,6 +2082,11 @@ function MobileApp() {
       {modal === 'dnf' && <Overlay><DnfScreen onCancel={() => setModal(null)} onConfirm={() => {
         if (window.trtGpsTracker) window.trtGpsTracker.stop();
         if (session.runner && session.runner.rosterId && window.runnerStore) window.runnerStore.updateRunnerProgress(session.runner.rosterId, { dnf: true });
+        // Roster gets patched above, but session.runner is this device's
+        // own separate copy — without also updating it here, the Track tab
+        // (which reads runner.dnf straight off session.runner) would show
+        // no sign anything happened once back from the confirmation screen.
+        persist({ ...session, runner: { ...session.runner, dnf: true } });
         setModal(null);
       }}/></Overlay>}
       {modal === 'cancel-reg' && <Overlay><ConfirmScreen
