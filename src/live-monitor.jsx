@@ -183,14 +183,31 @@ function LiveMonitorApp() {
   // whenever a fix is fresh; checkpoints remain the source of truth for
   // pace/progress, which GPS alone can't derive (start/finish times, laps).
   const [livePosByBib, setLivePosByBib] = mS({});
+  // At full field size (100+ runners all pinging independently), the raw
+  // Firestore listener can fire many times a second — applying every single
+  // one straight to state would re-render the whole 150-row map/ranking
+  // dashboard that often. Throttle to at most once every 2s: the freshest
+  // snapshot is always applied, just not more often than that, so the RD's
+  // screen stays responsive without the GPS dots feeling delayed.
+  const pendingLiveRef = mR(null);
+  const liveThrottleRef = mR(null);
   mE(() => {
     if (!eventId || !window.fb) { setLivePosByBib({}); return; }
     const prefix = `${eventId}_`;
-    return window.fb.watchCollection('livePos', all => {
+    const unsub = window.fb.watchCollection('livePos', all => {
       const next = {};
       all.forEach(p => { if (p.id.startsWith(prefix)) next[p.id.slice(prefix.length)] = p; });
-      setLivePosByBib(next);
+      pendingLiveRef.current = next;
+      if (liveThrottleRef.current) return;
+      liveThrottleRef.current = setTimeout(() => {
+        liveThrottleRef.current = null;
+        setLivePosByBib(pendingLiveRef.current);
+      }, 2000);
     });
+    return () => {
+      unsub();
+      if (liveThrottleRef.current) { clearTimeout(liveThrottleRef.current); liveThrottleRef.current = null; }
+    };
   }, [eventId]);
 
   // Sustained-off-route tracking, bib -> timestamp first seen off-course.
