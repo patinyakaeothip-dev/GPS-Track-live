@@ -60,8 +60,15 @@
     return SEED_EVENTS;
   }
 
+  // Returns whether the write actually landed — a large embedded GPX track
+  // (see gpx-parse.js) can push this past localStorage's quota, and that
+  // used to fail completely silently: the event (and everything else in the
+  // same write) just never saved, with no error anywhere.
   function saveEvents(list) {
-    try { localStorage.setItem(KEY, JSON.stringify(list)); } catch (_) {}
+    try { localStorage.setItem(KEY, JSON.stringify(list)); return true; } catch (err) {
+      console.warn('[event-store] localStorage write failed', err);
+      return false;
+    }
   }
 
   // Firestore rejects arrays-of-arrays ("Nested arrays are not supported") —
@@ -100,18 +107,27 @@
   // over anything a snapshot reports until our own write has landed.
   const pendingWrites = new Map();
 
+  // `synced` resolves to whether the Firestore write actually landed (false
+  // on failure or when there's no backend) — same "don't just assume it
+  // worked" pattern as runnerStore.updateRunnerProgress's SOS fix. `localOk`
+  // reports the localStorage write outcome synchronously. A course upload
+  // is exactly the kind of edit big enough to trip either limit, and the
+  // caller (Admin's event form) needs to actually tell the RD when that
+  // happens instead of the save silently doing nothing.
   function upsertEvent(ev) {
     const list = loadEvents().slice();
     const idx = list.findIndex(e => e.id === ev.id);
     if (idx >= 0) list[idx] = ev; else list.push(ev);
-    saveEvents(list);
+    const localOk = saveEvents(list);
+    let synced = Promise.resolve(false);
     if (window.fb) {
       pendingWrites.set(ev.id, ev);
-      window.fb.setDocById('events', ev.id, toFirestoreSafe(ev))
-        .catch(err => console.warn('[event-store] Firestore write failed', err))
-        .then(() => pendingWrites.delete(ev.id));
+      synced = window.fb.setDocById('events', ev.id, toFirestoreSafe(ev))
+        .then(() => true)
+        .catch(err => { console.warn('[event-store] Firestore write failed', err); return false; })
+        .then(ok => { pendingWrites.delete(ev.id); return ok; });
     }
-    return list;
+    return { list, localOk, synced };
   }
 
   // Deletes fired against Firestore are async and take a moment to actually

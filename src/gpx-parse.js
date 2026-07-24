@@ -47,7 +47,7 @@
     });
 
     return {
-      points,
+      points: decimate(points),
       bbox: { minLat, maxLat, minLon, maxLon },
       totalKm: Math.round(km * 1000) / 1000,
       ascent: Math.round(ascent),
@@ -55,6 +55,26 @@
       minEle: Math.round(minEle),
       maxEle: Math.round(maxEle),
     };
+  }
+
+  // A real GPS recording can have thousands of points — a watch pinging
+  // every second over a few hours easily produces 5000+. Stored verbatim on
+  // the event doc (every distance's course, uploaded once and read by every
+  // runner/spectator forever after), that's enough to threaten Firestore's
+  // 1MiB document limit and even localStorage's quota — and both those
+  // writes fail *silently* (see event-store.js), so a course that's too big
+  // just quietly never saves, and every screen keeps showing the old/demo
+  // course with no error anywhere. ascent/descent above are already computed
+  // from the full-resolution data before this runs, so downsampling here
+  // only affects map/elevation rendering detail, not those stats — 1500
+  // points is already far more resolution than a phone screen can show.
+  const MAX_POINTS = 1500;
+  function decimate(points) {
+    if (points.length <= MAX_POINTS) return points;
+    const step = (points.length - 1) / (MAX_POINTS - 1);
+    const out = [];
+    for (let i = 0; i < MAX_POINTS; i++) out.push(points[Math.round(i * step)]);
+    return out;
   }
 
   function parseGpxFile(file) {
