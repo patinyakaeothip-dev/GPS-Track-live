@@ -1962,7 +1962,7 @@ function MobileApp() {
   // can't cancel after materials (bib/shirt) are already being prepared.
   function cancelRegistration() {
     if (!session.runner) return;
-    if (session.runner.rosterId && window.runnerStore) window.runnerStore.deleteRunner(session.runner.rosterId);
+    if (session.runner.rosterId && window.runnerStore) window.runnerStore.cancelRunner(session.runner.rosterId, 'runner');
     if (window.eventStore) window.eventStore.decrementRegistration(session.runner.eventId, session.runner.dist);
     persist({ ...session, runner: null });
     setScreen('events');
