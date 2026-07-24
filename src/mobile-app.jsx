@@ -528,16 +528,23 @@ function FavoritePickerScreen({ eventId, onBack, favBibs, onToggle }) {
 
 // ── Screen: Registration ─────────────────────────────────────────────────
 function RegisterScreen({ event, profile, onDone, onBack }) {
-  const distLabels = (event && event.distances && event.distances.length) ? event.distances.map(d => d.label) : ['11K', '22K', '29K'];
+  // `d.open` (Admin's per-distance "เปิด/ปิดรับสมัคร" toggle, also flipped
+  // automatically when a distance's quota fills — see admin-app.jsx) used
+  // to be stored but never actually checked here, so closing one distance
+  // did nothing: every distance stayed pickable and registrable regardless.
+  const distances = (event && event.distances && event.distances.length) ? event.distances : ['11K', '22K', '29K'].map(label => ({ label, open: true }));
+  const distLabels = distances.map(d => d.label);
+  const firstOpen = distances.find(d => d.open !== false);
   // Pre-fill from the runner's existing profile (Profile screen) so someone
   // who already filled this in once doesn't have to retype it per event —
   // only the distance is genuinely event-specific and starts unset.
   const [nick, setNick] = uS((profile && (profile.nickname || profile.name)) || '');
   const [phone, setPhone] = uS((profile && profile.phone) || '');
-  const [dist, setDist] = uS(distLabels[0]);
+  const [dist, setDist] = uS((firstOpen || distances[0]).label);
   const [gender, setGender] = uS((profile && profile.gender) || 'm');
   const [emg, setEmg] = uS((profile && profile.emgPhone) || '');
-  const canSubmit = nick.trim() && phone.trim();
+  const selectedDist = distances.find(d => d.label === dist);
+  const canSubmit = nick.trim() && phone.trim() && selectedDist && selectedDist.open !== false;
   return (
     <div style={{ height: '100%', background: C.bg2, fontFamily: C.font, display: 'flex', flexDirection: 'column', position: 'relative' }}>
       <div style={{ padding: '40px 24px 18px', background: C.brand, color: '#fff' }}>
@@ -554,12 +561,23 @@ function RegisterScreen({ event, profile, onDone, onBack }) {
         <Field label="เบอร์โทร"><input value={phone} onChange={e => setPhone(e.target.value)} placeholder="08X-XXX-XXXX" style={{ ...fieldStyle(), fontFamily: C.mono }}/></Field>
         <Field label="ระยะที่ลงวิ่ง">
           <div style={{ display: 'grid', gridTemplateColumns: `repeat(${distLabels.length}, 1fr)`, gap: 6 }}>
-            {distLabels.map(d => (
-              <div key={d} onClick={() => setDist(d)} style={{ padding: 12, textAlign: 'center', borderRadius: 10, fontWeight: 600, cursor: 'pointer',
-                background: dist === d ? C.brand : '#fff', color: dist === d ? '#fff' : C.text, border: `1px solid ${dist === d ? C.brand : '#bdb6a4'}` }}>{d}</div>
-            ))}
+            {distances.map(d => {
+              const closed = d.open === false;
+              return (
+                <div key={d.label} onClick={() => !closed && setDist(d.label)} style={{ padding: 12, textAlign: 'center', borderRadius: 10, fontWeight: 600,
+                  cursor: closed ? 'not-allowed' : 'pointer', opacity: closed ? 0.5 : 1,
+                  background: dist === d.label && !closed ? C.brand : '#fff', color: dist === d.label && !closed ? '#fff' : C.text,
+                  border: `1px solid ${dist === d.label && !closed ? C.brand : '#bdb6a4'}` }}>
+                  {d.label}
+                  {closed && <div style={{ fontSize: 9, fontWeight: 600, marginTop: 2 }}>ปิดรับสมัคร</div>}
+                </div>
+              );
+            })}
           </div>
         </Field>
+        {selectedDist && selectedDist.open === false && (
+          <div style={{ fontSize: 11.5, color: '#9b1c10' }}>ระยะ {dist} ปิดรับสมัครแล้ว กรุณาเลือกระยะอื่น</div>
+        )}
         <Field label="เพศ (ใช้จัดอันดับแยกชาย/หญิง)">
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
             {[['m', 'ชาย'], ['f', 'หญิง']].map(([v, l]) => (
