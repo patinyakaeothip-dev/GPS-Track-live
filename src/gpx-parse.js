@@ -14,8 +14,14 @@
   function parseGpxText(text) {
     const doc = new DOMParser().parseFromString(text, 'application/xml');
     if (doc.querySelector('parsererror')) throw new Error('ไฟล์ GPX เสียหรืออ่านไม่ได้');
-    const trkpts = Array.from(doc.getElementsByTagName('trkpt'));
-    if (!trkpts.length) throw new Error('ไม่พบเส้นทาง (trkpt) ในไฟล์นี้');
+    // Most GPX exports use <trk>/<trkpt> (track points), but some apps —
+    // Suunto app among them — export a plain <rte>/<rtept> (route points)
+    // instead, same lat/lon/ele shape either way. Fall back to route points
+    // rather than rejecting a perfectly good file just because it took the
+    // other valid GPX shape.
+    let trkpts = Array.from(doc.getElementsByTagName('trkpt'));
+    if (!trkpts.length) trkpts = Array.from(doc.getElementsByTagName('rtept'));
+    if (!trkpts.length) throw new Error('ไม่พบเส้นทาง (trkpt/rtept) ในไฟล์นี้');
 
     let km = 0, ascent = 0, descent = 0;
     let minLat = Infinity, maxLat = -Infinity, minLon = Infinity, maxLon = -Infinity;
