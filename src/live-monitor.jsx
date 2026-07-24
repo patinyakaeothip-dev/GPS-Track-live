@@ -85,27 +85,117 @@ function colorFor(r, distColor) {
   return (distColor || M_DIST)[r.distance] || '#5d6b59';
 }
 
-function useElevationProfile(geo, coursePaths, distance) {
-  return mM(() => {
-    if (!geo || !coursePaths) return null;
-    const pts = coursePaths[distance];
-    const N = 220;
-    const totalKm = pts[pts.length - 1].km;
-    const sample = [];
-    for (let i = 0; i <= N; i++) sample.push(geo.pointAtKm(pts, totalKm * i / N));
-    const w = 1100, h = 170, padL = 44, padR = 6, padT = 14, padB = 34;
-    const eles = sample.map(p => p.ele);
-    const minE = Math.min(...eles) - 15, maxE = Math.max(...eles) + 15;
-    const x = km => padL + (w - padL - padR) * (km / totalKm);
-    const y = ele => padT + (h - padT - padB) * (1 - (ele - minE) / (maxE - minE));
-    let d = `M ${x(0)} ${y(minE)} L ${x(0)} ${y(sample[0].ele)}`;
-    sample.forEach(p => { d += ` L ${x(p.km)} ${y(p.ele)}`; });
-    d += ` L ${x(totalKm)} ${y(minE)} Z`;
-    // 4 evenly spaced elevation labels for the Y axis, rounded to whole
-    // meters — actual course elevation, not just a relative silhouette.
-    const yTicks = Array.from({ length: 4 }, (_, i) => Math.round(minE + 15 + (maxE - 15 - (minE + 15)) * i / 3));
-    return { d, w, h, x, y, baseY: y(minE), totalKm, padL, yTicks };
-  }, [geo, coursePaths, distance]);
+// Pan by dragging (one finger/mouse), zoom by pinch (two fingers) or the
+// mouse wheel — same pattern as the runner app's Route-tab elevation chart
+// (mobile-app.jsx's ElevationSvg), so the RD can zoom into a busy stretch
+// of course instead of squinting at 220 samples spread over the whole race.
+function LiveElevationSvg({ geo, coursePaths, distance, checkpoints, displays, selectedBib, onSelectBib }) {
+  const w = 1100, h = 170, padL = 44, padR = 6, padT = 14, padB = 34;
+  const pts = coursePaths[distance];
+  const totalKm = pts[pts.length - 1].km;
+
+  const [zoom, setZoom] = mS(1);
+  const [panKm, setPanKm] = mS(0);
+  const pointers = mR(new Map());
+  const pinchStart = mR(null); // { dist, zoom }
+  const dragStart = mR(null); // { x, panKm }
+
+  const visibleKm = totalKm / zoom;
+  const clampPan = p => Math.max(0, Math.min(Math.max(0, totalKm - visibleKm), p));
+  const x = km => padL + ((km - panKm) / visibleKm) * (w - padL - padR);
+
+  function zoomAround(nextZoomRaw, anchorKm) {
+    const nextZoom = Math.min(10, Math.max(1, nextZoomRaw));
+    const nextVisible = totalKm / nextZoom;
+    const frac = visibleKm ? (anchorKm - panKm) / visibleKm : 0;
+    setZoom(nextZoom);
+    setPanKm(clampPan(anchorKm - frac * nextVisible));
+  }
+  function onWheel(e) {
+    e.preventDefault();
+    const rect = e.currentTarget.getBoundingClientRect();
+    const svgX = ((e.clientX - rect.left) / rect.width) * w;
+    const anchorKm = panKm + Math.max(0, (svgX - padL) / (w - padL - padR)) * visibleKm;
+    zoomAround(zoom * (e.deltaY < 0 ? 1.25 : 1 / 1.25), anchorKm);
+  }
+  function onPointerDown(e) {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    pointers.current.set(e.pointerId, e.clientX);
+    if (pointers.current.size === 1) dragStart.current = { x: e.clientX, panKm };
+    else if (pointers.current.size === 2) {
+      const [a, b] = [...pointers.current.values()];
+      pinchStart.current = { dist: Math.abs(a - b) || 1, zoom };
+      dragStart.current = null;
+    }
+  }
+  function onPointerMove(e) {
+    if (!pointers.current.has(e.pointerId)) return;
+    pointers.current.set(e.pointerId, e.clientX);
+    if (pointers.current.size === 2 && pinchStart.current) {
+      const [a, b] = [...pointers.current.values()];
+      const dist = Math.abs(a - b) || 1;
+      zoomAround(pinchStart.current.zoom * (dist / pinchStart.current.dist), panKm + visibleKm / 2);
+    } else if (pointers.current.size === 1 && dragStart.current) {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const dxKm = ((e.clientX - dragStart.current.x) / rect.width) * w / (w - padL - padR) * visibleKm;
+      setPanKm(clampPan(dragStart.current.panKm - dxKm));
+    }
+  }
+  function onPointerUp(e) {
+    pointers.current.delete(e.pointerId);
+    pinchStart.current = null;
+    dragStart.current = pointers.current.size === 1
+      ? { x: [...pointers.current.values()][0], panKm } : null;
+  }
+  function resetZoom() { setZoom(1); setPanKm(0); }
+
+  const N = 400;
+  const sample = mM(() => {
+    const out = [];
+    for (let i = 0; i <= N; i++) out.push(geo.pointAtKm(pts, totalKm * i / N));
+    return out;
+  }, [pts, totalKm]);
+  const eles = sample.map(p => p.ele);
+  const minE = Math.min(...eles) - 15, maxE = Math.max(...eles) + 15;
+  const y = ele => padT + (h - padT - padB) * (1 - (ele - minE) / (maxE - minE));
+  const baseY = y(minE);
+  let d = `M ${x(0)} ${baseY} L ${x(0)} ${y(sample[0].ele)}`;
+  sample.forEach(p => { d += ` L ${x(p.km)} ${y(p.ele)}`; });
+  d += ` L ${x(totalKm)} ${baseY} Z`;
+  // 4 evenly spaced elevation labels for the Y axis, rounded to whole
+  // meters — actual course elevation, not just a relative silhouette.
+  const yTicks = Array.from({ length: 4 }, (_, i) => Math.round(minE + 15 + (maxE - 15 - (minE + 15)) * i / 3));
+  const marks = [[0, 'START'], ...checkpoints.map(cp => [parseFloat(cp.km) || 0, cp.label]), [totalKm, 'FINISH']];
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <svg viewBox={`0 0 ${w} ${h}`} style={{ width: '100%', height: 180, display: 'block', touchAction: 'none', cursor: zoom > 1 ? 'grab' : 'default' }}
+        onWheel={onWheel} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}>
+        {yTicks.map((ele, i) => (
+          <g key={i}>
+            <line x1={padL} y1={y(ele)} x2={w - padR} y2={y(ele)} stroke="#5d6b59" strokeWidth="1" strokeDasharray="2 3" opacity="0.3"/>
+            <text x={padL - 6} y={y(ele) + 3} textAnchor="end" fontFamily={M_MONO} fontSize="9" fill="#5d6b59">{ele}m</text>
+          </g>
+        ))}
+        <path d={d} fill="oklch(0.9 0.03 145 / 0.5)" stroke="#1f4d39" strokeWidth="1.4"/>
+        {marks.map(([km, label], i) => (
+          <g key={i}>
+            <line x1={x(km)} y1={8} x2={x(km)} y2={baseY} stroke="#2d6a4f" strokeWidth="1" strokeDasharray="2 3" opacity="0.5"/>
+            <text x={x(km)} y={h - 20} textAnchor="middle" fontFamily={M_MONO} fontSize="9" fill="#5d6b59">{label}</text>
+            <text x={x(km)} y={h - 6} textAnchor="middle" fontFamily={M_MONO} fontSize="8.5" fill="#5d6b59" opacity="0.75">{km.toFixed(1)}K</text>
+          </g>
+        ))}
+        {displays.map(dd => (
+          <circle key={dd.bib} cx={x(dd.physKm)} cy={y(dd.ele)} r={selectedBib === dd.bib ? 8 : 4.5}
+            fill={dd.color} stroke="#fff" strokeWidth={selectedBib === dd.bib ? 2.5 : 1}
+            onClick={() => onSelectBib(dd.bib)} style={{ cursor: 'pointer' }}/>
+        ))}
+      </svg>
+      {zoom > 1.02 && (
+        <div onClick={resetZoom} style={{ position: 'absolute', top: 4, right: 4, padding: '3px 8px', background: '#fff', border: '1px solid #d8d2c2', borderRadius: 999, fontFamily: M_MONO, fontSize: 9.5, color: '#5d6b59', cursor: 'pointer', boxShadow: '0 1px 3px rgba(31,42,28,0.1)' }}>↺ รีเซ็ตซูม</div>
+      )}
+    </div>
+  );
 }
 
 function LiveMonitorApp() {
@@ -314,7 +404,6 @@ function LiveMonitorApp() {
 
   const geo = geoRef.current, coursePaths = coursePathsRef.current;
   const overviewLabel = overviewLabelRef.current;
-  const overviewProfile = useElevationProfile(geo, coursePaths, overviewLabel);
 
   // Real roster → map/ranking rows. Position is each runner's last QR
   // check-in km (progressKm), and pace/staleness are derived from
@@ -647,28 +736,10 @@ function LiveMonitorApp() {
               <div style={{ fontFamily: M_MONO, fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#5d6b59', marginBottom: 8 }}>
                 Elevation profile · ภาพรวมเส้นทาง {overviewLabel} · {displays.length} นักวิ่ง
               </div>
-              {overviewProfile && (
-                <svg viewBox={`0 0 ${overviewProfile.w} ${overviewProfile.h}`} style={{ width: '100%', height: 180, display: 'block' }}>
-                  {overviewProfile.yTicks.map((ele, i) => (
-                    <g key={i}>
-                      <line x1={overviewProfile.padL} y1={overviewProfile.y(ele)} x2={overviewProfile.w - 6} y2={overviewProfile.y(ele)} stroke="#5d6b59" strokeWidth="1" strokeDasharray="2 3" opacity="0.3"/>
-                      <text x={overviewProfile.padL - 6} y={overviewProfile.y(ele) + 3} textAnchor="end" fontFamily={M_MONO} fontSize="9" fill="#5d6b59">{ele}m</text>
-                    </g>
-                  ))}
-                  <path d={overviewProfile.d} fill="oklch(0.9 0.03 145 / 0.5)" stroke="#1f4d39" strokeWidth="1.4"/>
-                  {[[0, 'START'], ...checkpointsRef.current.map(cp => [parseFloat(cp.km) || 0, cp.label]), [overviewProfile.totalKm, 'FINISH']].map(([km, label], i) => (
-                    <g key={i}>
-                      <line x1={overviewProfile.x(km)} y1={8} x2={overviewProfile.x(km)} y2={overviewProfile.baseY} stroke="#2d6a4f" strokeWidth="1" strokeDasharray="2 3" opacity="0.5"/>
-                      <text x={overviewProfile.x(km)} y={overviewProfile.h - 20} textAnchor="middle" fontFamily={M_MONO} fontSize="9" fill="#5d6b59">{label}</text>
-                      <text x={overviewProfile.x(km)} y={overviewProfile.h - 6} textAnchor="middle" fontFamily={M_MONO} fontSize="8.5" fill="#5d6b59" opacity="0.75">{km.toFixed(1)}K</text>
-                    </g>
-                  ))}
-                  {displays.map(d => (
-                    <circle key={d.bib} cx={overviewProfile.x(d.physKm)} cy={overviewProfile.y(d.ele)} r={selected && selected.bib === d.bib ? 8 : 4.5}
-                      fill={d.color} stroke="#fff" strokeWidth={selected && selected.bib === d.bib ? 2.5 : 1}
-                      onClick={() => setSelectedBib(d.bib)} style={{ cursor: 'pointer' }}/>
-                  ))}
-                </svg>
+              {geo && coursePaths && (
+                <LiveElevationSvg geo={geo} coursePaths={coursePaths} distance={overviewLabel}
+                  checkpoints={checkpointsRef.current} displays={displays}
+                  selectedBib={selected && selected.bib} onSelectBib={setSelectedBib}/>
               )}
             </div>
         </div>
