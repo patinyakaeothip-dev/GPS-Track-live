@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1024" y2="1024" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#357a5c"/>
+      <stop offset="1" stop-color="#1a3d2e"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Full-bleed background — iOS/Android apply their own corner mask,
+       so this fills the entire square with no built-in padding. -->
+  <rect width="1024" height="1024" fill="url(#bg)"/>
+
+  <!-- Back mountain -->
+  <path d="M 312 700 L 512 300 L 712 700 Z" fill="#ffffff" opacity="0.28"/>
+
+  <!-- Front mountain -->
+  <path d="M 200 740 L 470 260 L 740 740 Z" fill="#ffffff"/>
+
+  <!-- Tree trunk -->
+  <rect x="497" y="620" width="30" height="130" rx="6" fill="#1a3d2e"/>
+
+  <!-- Tree canopy — bold dots, sized to stay legible at small icon sizes -->
+  <g fill="#1a3d2e">
+    <circle cx="512" cy="560" r="46"/>
+    <circle cx="450" cy="590" r="38"/>
+    <circle cx="574" cy="590" r="38"/>
+    <circle cx="470" cy="640" r="34"/>
+    <circle cx="554" cy="640" r="34"/>
+    <circle cx="512" cy="615" r="40"/>
+  </g>
+</svg>
