@@ -523,13 +523,16 @@ function FavoritePickerScreen({ eventId, onBack, favBibs, onToggle }) {
 }
 
 // ── Screen: Registration ─────────────────────────────────────────────────
-function RegisterScreen({ event, onDone, onBack }) {
+function RegisterScreen({ event, profile, onDone, onBack }) {
   const distLabels = (event && event.distances && event.distances.length) ? event.distances.map(d => d.label) : ['11K', '22K', '29K'];
-  const [nick, setNick] = uS('');
-  const [phone, setPhone] = uS('');
+  // Pre-fill from the runner's existing profile (Profile screen) so someone
+  // who already filled this in once doesn't have to retype it per event —
+  // only the distance is genuinely event-specific and starts unset.
+  const [nick, setNick] = uS((profile && (profile.nickname || profile.name)) || '');
+  const [phone, setPhone] = uS((profile && profile.phone) || '');
   const [dist, setDist] = uS(distLabels[0]);
-  const [gender, setGender] = uS('m');
-  const [emg, setEmg] = uS('');
+  const [gender, setGender] = uS((profile && profile.gender) || 'm');
+  const [emg, setEmg] = uS((profile && profile.emgPhone) || '');
   const canSubmit = nick.trim() && phone.trim();
   return (
     <div style={{ height: '100%', background: C.bg2, fontFamily: C.font, display: 'flex', flexDirection: 'column', position: 'relative' }}>
@@ -648,7 +651,7 @@ function GpsPermissionScreen({ onAllow, onBack }) {
 }
 
 // ── Screen: Pre-race waiting + QR scan (simulated) ───────────────────────
-function PreRaceScreen({ event, dist, onScan, onBack, onPreview }) {
+function PreRaceScreen({ event, dist, onScan, onBack, onPreview, onCancel }) {
   const de = event && (event.distances || []).find(d => d.label === dist);
   const startClock = de && de.cpTimes && de.cpTimes.start;
   const startAt = uM(() => (event && startClock && window.eventStatus ? window.eventStatus.combineDateTime(event.raceDateISO, startClock) : null), [event, startClock]);
@@ -685,6 +688,11 @@ function PreRaceScreen({ event, dist, onScan, onBack, onPreview }) {
         <Btn variant="ghost" onClick={onPreview} style={{ marginTop: 10, borderColor: 'rgba(255,255,255,0.35)', color: 'rgba(255,255,255,0.85)' }}>
           🗺 เปิด Track / Route / Ranking
         </Btn>
+      )}
+      {onCancel && (
+        <div onClick={onCancel} style={{ textAlign: 'center', marginTop: 14, fontSize: 12, color: 'rgba(255,255,255,0.55)', textDecoration: 'underline', cursor: 'pointer' }}>
+          ยกเลิกการลงทะเบียน
+        </div>
       )}
     </div>
   );
@@ -1401,6 +1409,18 @@ function SosScreen({ hotline, onCancel, onSent, onSend }) {
   );
 }
 
+function ConfirmScreen({ title, body, confirmLabel, onCancel, onConfirm }) {
+  return (
+    <div style={{ height: '100%', background: C.bg2, fontFamily: C.font, display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '40px 24px' }}>
+      <div style={{ fontSize: 20, fontWeight: 800 }}>{title}</div>
+      <div style={{ fontSize: 13, color: C.muted, marginTop: 8, lineHeight: 1.6 }}>{body}</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 24 }}>
+        <Btn variant="danger" onClick={onConfirm}>{confirmLabel}</Btn>
+        <Btn variant="ghost" onClick={onCancel}>ไม่ยกเลิก</Btn>
+      </div>
+    </div>
+  );
+}
 function DnfScreen({ onCancel, onConfirm }) {
   const [reason, setReason] = uS(null);
   const [done, setDone] = uS(false);
@@ -1795,6 +1815,17 @@ function MobileApp() {
     });
     setScreen('register-success');
   }
+  // Self-service cancel — mirrors what Admin's runner table already does
+  // (runnerStore.deleteRunner + eventStore.decrementRegistration), gated on
+  // the same registration-close cutoff used everywhere else so a runner
+  // can't cancel after materials (bib/shirt) are already being prepared.
+  function cancelRegistration() {
+    if (!session.runner) return;
+    if (session.runner.rosterId && window.runnerStore) window.runnerStore.deleteRunner(session.runner.rosterId);
+    if (window.eventStore) window.eventStore.decrementRegistration(session.runner.eventId, session.runner.dist);
+    persist({ ...session, runner: null });
+    setScreen('events');
+  }
   function updateRunner(fn) {
     const nextRunner = fn(session.runner);
     persist({ ...session, runner: nextRunner });
@@ -1826,10 +1857,15 @@ function MobileApp() {
     persist({ ...session, spectator: true, followBib: bib, followEventId: pendingEvent && pendingEvent.id, runner: null });
     setScreen('app');
   }}/>;
-  else if (screen === 'register') body = <RegisterScreen event={pendingEvent} onDone={afterRegister} onBack={() => setScreen('events')}/>;
+  else if (screen === 'register') body = <RegisterScreen event={pendingEvent} profile={session.user} onDone={afterRegister} onBack={() => setScreen('events')}/>;
   else if (screen === 'register-success') body = <RegisterSuccessScreen dist={session.runner.dist} onContinue={() => setScreen('gps')}/>;
   else if (screen === 'gps') body = <GpsPermissionScreen onAllow={() => setScreen('prerace')} onBack={() => setScreen('register')}/>;
-  else if (screen === 'prerace') body = <PreRaceScreen event={getEvents().find(e => e.id === session.runner.eventId)} dist={session.runner.dist} onBack={() => setScreen('events')} onScan={() => setScreen('qr-start')} onPreview={() => setScreen('app')}/>;
+  else if (screen === 'prerace') {
+    const preraceEvent = getEvents().find(e => e.id === session.runner.eventId);
+    const canCancel = !preraceEvent || !window.eventStatus.computeClosed(preraceEvent);
+    body = <PreRaceScreen event={preraceEvent} dist={session.runner.dist} onBack={() => setScreen('events')} onScan={() => setScreen('qr-start')} onPreview={() => setScreen('app')}
+      onCancel={canCancel ? () => setModal('cancel-reg') : null}/>;
+  }
   else if (screen === 'qr-start') body = <QrScanScreen label="จุดสตาร์ท" expectedCode={`TRT:${session.runner.eventId}:start`} onBack={() => setScreen('prerace')} onScanned={() => {
     updateRunner(r => ({ ...r, checkins: [{ cp: 'start', t: new Date().toTimeString().slice(0, 8) }], progressKm: 0 }));
     // Same "gun goes off" GPS start as the in-app rescan path in AppShell's
@@ -1866,6 +1902,9 @@ function MobileApp() {
         if (session.runner && session.runner.rosterId && window.runnerStore) window.runnerStore.updateRunnerProgress(session.runner.rosterId, { dnf: true });
         setModal(null);
       }}/></Overlay>}
+      {modal === 'cancel-reg' && <Overlay><ConfirmScreen
+        title="ยกเลิกการลงทะเบียน?" body="เบอร์บิบและข้อมูลการลงทะเบียนของคุณสำหรับงานนี้จะถูกลบ · สามารถลงทะเบียนใหม่ได้จนกว่าจะปิดรับสมัคร"
+        confirmLabel="ยืนยันยกเลิก" onCancel={() => setModal(null)} onConfirm={() => { setModal(null); cancelRegistration(); }}/></Overlay>}
     </div>
   );
 }
