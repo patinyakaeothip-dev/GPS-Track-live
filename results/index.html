@@ -113,7 +113,15 @@
         const totalMs = (startMs != null && finishMs != null) ? finishMs - startMs : null;
         const distKm = parseInt(r.distance, 10) || 0;
         const paceMinPerKm = (totalMs && distKm) ? (totalMs / 60000) / distKm : null;
-        const status = r.dnf ? 'dnf' : finish ? 'finished' : cks.length ? 'active' : 'not_started';
+        // A runner who started but never scanned finish used to show as
+        // "active" (and their elapsed clock kept ticking off the live
+        // clock) forever — even hours/days after the race's own cutoff had
+        // passed. Once this distance's finish cutoff passes without a
+        // finish scan, treat them as timed out instead of still running.
+        const distDef = (ev && ev.distances || []).find(d => d.label === r.distance);
+        const cutoffMs = distDef && distDef.cpTimes ? checkinMs(distDef.cpTimes.finish) : null;
+        const timedOut = !finish && cks.length > 0 && cutoffMs && Date.now() > cutoffMs;
+        const status = r.dnf ? 'dnf' : finish ? 'finished' : timedOut ? 'timed_out' : cks.length ? 'active' : 'not_started';
         return {
           id: r.id,
           bib: r.bib,
@@ -130,6 +138,7 @@
           total_ms: totalMs,
           pace_min_per_km: paceMinPerKm,
           checkin_count: cks.length,
+          cutoff_at: cutoffMs || null,
         };
       });
 
@@ -218,7 +227,7 @@
             (it.phone || '').indexOf(q.replace(/\D/g,'')) >= 0);
         }
         // Sort: finished first (by rank), then active (leading first), then not-started, then dnf
-        const order = { finished: 0, active: 1, not_started: 2, dnf: 3 };
+        const order = { finished: 0, active: 1, timed_out: 2, not_started: 3, dnf: 4 };
         out.sort((a,b) => {
           const oa = order[a.status] ?? 9, ob = order[b.status] ?? 9;
           if (oa !== ob) return oa - ob;
@@ -325,7 +334,7 @@
               ['all','ทั้งหมด'], ...distLabels.map(l => [l, l]),
             ]}/>
             <FilterGroup value={statusFilter} onChange={setStatusFilter} options={[
-              ['all','ทั้งหมด'],['finished','เข้าเส้น'],['active','ยังวิ่ง'],['not_started','ยังไม่เริ่ม'],['dnf','DNF'],
+              ['all','ทั้งหมด'],['finished','เข้าเส้น'],['active','ยังวิ่ง'],['timed_out','เลยเวลา'],['not_started','ยังไม่เริ่ม'],['dnf','DNF'],
             ]}/>
             <input value={query} onChange={e => setQuery(e.target.value)}
               placeholder="ค้นหา ชื่อ / เบอร์"
@@ -390,6 +399,7 @@
       const isFin = it.status === 'finished';
       const isDnf = it.status === 'dnf';
       const isNotStarted = it.status === 'not_started';
+      const isTimedOut = it.status === 'timed_out';
       const adjusted = it.distance_original && it.distance_original !== it.distance;
       const paceStr = (() => {
         if (!it.pace_min_per_km) return null;
@@ -411,7 +421,7 @@
           gap: 10, padding: '12px 14px',
           alignItems: 'center',
           borderTop: index ? `1px solid ${BORDER}` : 'none',
-          background: isFin ? '#fff' : isDnf ? '#fef7f7' : isNotStarted ? '#fafaf8' : '#fffbf2',
+          background: isFin ? '#fff' : (isDnf || isTimedOut) ? '#fef7f7' : isNotStarted ? '#fafaf8' : '#fffbf2',
         }}>
           {/* Rank or status badge */}
           <div style={{ textAlign: 'center' }}>
@@ -421,6 +431,9 @@
             ) : isDnf ? (
               <div style={{ fontFamily: MONO, fontSize: 10, color: '#b91c1c',
                 fontWeight: 700 }}>DNF</div>
+            ) : isTimedOut ? (
+              <div style={{ fontFamily: MONO, fontSize: 9, color: '#b91c1c',
+                fontWeight: 700 }}>เลยเวลา</div>
             ) : isNotStarted ? (
               <div style={{ fontFamily: MONO, fontSize: 9.5, color: MUTED,
                 fontWeight: 700 }}>REG</div>
@@ -482,9 +495,9 @@
               </>
             ) : !isNotStarted && it.start_at ? (
               <>
-                <div style={{ fontFamily: MONO, fontSize: 14, fontWeight: 700, color: isDnf ? '#b91c1c' : '#b45309',
+                <div style={{ fontFamily: MONO, fontSize: 14, fontWeight: 700, color: (isDnf || isTimedOut) ? '#b91c1c' : '#b45309',
                   fontVariantNumeric: 'tabular-nums' }}>
-                  {fmtElapsed((it.status === 'active' ? now : (it.last_at || it.start_at)) - it.start_at)}
+                  {fmtElapsed((it.status === 'active' ? now : isTimedOut ? (it.cutoff_at || it.last_at || it.start_at) : (it.last_at || it.start_at)) - it.start_at)}
                 </div>
                 <div style={{ fontFamily: MONO, fontSize: 10, color: MUTED }}>
                   ออกตัว {fmtClockOfDay(it.start_at)}
