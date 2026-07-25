@@ -71,7 +71,7 @@ function statusMeta(status) {
     active: { label: 'On course', bg: 'oklch(0.94 0.06 145)', fg: '#1f4d39' },
     off_route: { label: '⚠ ออกนอกเส้นทาง', bg: '#fdf0d6', fg: '#7c4a03' },
     stale: { label: 'ขาดการติดต่อ', bg: '#fde9e6', fg: '#9b1c10' },
-    timed_out: { label: 'เลยเวลา cut-off', bg: '#fde9e6', fg: '#9b1c10' },
+    dns: { label: 'DNS · ไม่ได้เริ่ม', bg: '#ede7d8', fg: '#5d6b59' },
     dnf: { label: 'DNF / ถอน', bg: '#fde9e6', fg: '#9b1c10' },
     finished: { label: 'เข้าเส้นชัย', bg: M_BRAND, fg: '#fff' },
     sos: { label: '🆘 SOS', bg: '#dc2626', fg: '#fff' },
@@ -81,8 +81,8 @@ function colorFor(r, distColor) {
   if (r.status === 'sos') return '#dc2626';
   if (r.status === 'off_route') return M_WARN;
   if (r.status === 'stale') return M_ALERT;
-  if (r.status === 'timed_out') return M_ALERT;
   if (r.status === 'dnf') return M_REST;
+  if (r.status === 'dns') return M_REST;
   if (r.status === 'finished') return M_BRAND;
   return (distColor || M_DIST)[r.distance] || '#5d6b59';
 }
@@ -447,22 +447,29 @@ function LiveMonitorApp() {
       const startCk = cks.find(c => c.cp === 'start');
       const finishCk = cks.find(c => c.cp === 'finish');
       const last = cks[cks.length - 1];
-      const baseStatus = r.dnf ? 'dnf' : finishCk ? 'finished' : cks.length ? 'active' : 'not_started';
+      // Once this distance's own finish cutoff passes without a finish
+      // scan: someone who checked in somewhere (started, didn't make it
+      // back in time) is a DNF; someone who never checked in at all is a
+      // DNS (never actually started) — instead of sitting as "active"/
+      // "ยังไม่เริ่ม" forever with no real outcome, or (the original bug)
+      // an elapsed clock that just kept climbing off Date.now() forever.
+      const distDef = (selectedEvent && selectedEvent.distances || []).find(d => d.label === r.distance);
+      const cutoffMs = distDef && distDef.cpTimes && checkinMs(selectedEvent, distDef.cpTimes.finish);
+      const overCutoff = !!(cutoffMs && Date.now() > cutoffMs);
+      const baseStatus = r.dnf ? 'dnf'
+        : finishCk ? 'finished'
+        : (overCutoff && !cks.length) ? 'dns'
+        : (overCutoff && cks.length) ? 'dnf'
+        : cks.length ? 'active' : 'not_started';
       const km = Math.min(r.progressKm || 0, totalKm - (baseStatus === 'finished' ? 0 : 0.02));
       const p = geo.pointAtKm(pts, Math.max(0, km));
       const gain = geo.cumulativeGainToKm(pts, Math.max(0, km));
 
       const startMs = startCk ? checkinMs(selectedEvent, startCk.t) : null;
-      // A runner who started but never scanned finish used to have their
-      // elapsed time tick up forever off Date.now() — still climbing hours
-      // or days after the race's own cutoff had passed, long after the
-      // event itself had gone 'past'. Cap the live-ticking end at this
-      // distance's own finish cutoff instead: once that passes without a
-      // finish scan, they're effectively timed out, not still running.
-      const distDef = (selectedEvent && selectedEvent.distances || []).find(d => d.label === r.distance);
-      const cutoffMs = distDef && distDef.cpTimes && checkinMs(selectedEvent, distDef.cpTimes.finish);
-      const timedOut = !finishCk && cutoffMs && Date.now() > cutoffMs;
-      const endMs = finishCk ? checkinMs(selectedEvent, finishCk.t) : (timedOut ? cutoffMs : Date.now());
+      // Cap the live-ticking end at this distance's own finish cutoff once
+      // it's passed without a finish scan, rather than off Date.now() —
+      // same reasoning as the DNF/DNS reclassification above.
+      const endMs = finishCk ? checkinMs(selectedEvent, finishCk.t) : (overCutoff ? cutoffMs : Date.now());
       const pace = (startMs != null && km > 0 && endMs > startMs) ? ((endMs - startMs) / 60000) / km : null;
       // Elapsed time since start — live-ticking for runners still on course
       // (frozen at finish once they're done, or at cutoff once they've
@@ -480,7 +487,6 @@ function LiveMonitorApp() {
       // Off-route ranks above stale — someone moving but off the course is
       // more urgent than someone who just hasn't checked in in a while.
       const status = r.sos ? 'sos'
-        : (baseStatus === 'active' && timedOut) ? 'timed_out'
         : (baseStatus === 'active' && offRoute) ? 'off_route'
         : (baseStatus === 'active' && staleMin != null && staleMin > STALE_MINUTES) ? 'stale'
         : baseStatus;
@@ -547,11 +553,10 @@ function LiveMonitorApp() {
 
   // SOS always sorts first regardless of how long ago it came in — it's
   // the one alert that needs eyes on it immediately.
-  const alerts = mM(() => displays.filter(d => d.status === 'sos' || d.status === 'off_route' || d.status === 'stale' || d.status === 'dnf' || d.status === 'timed_out')
+  const alerts = mM(() => displays.filter(d => d.status === 'sos' || d.status === 'off_route' || d.status === 'stale' || d.status === 'dnf')
     .map(d => ({ ...d, msg: d.status === 'sos' ? `🆘 ${d.sosReason || 'ขอความช่วยเหลือ'} · ${d.km.toFixed(1)}/${d.totalKm.toFixed(1)}K`
       : d.status === 'off_route' ? `⚠ ออกนอกเส้นทางมากกว่า ${OFF_ROUTE_ALERT_MIN} นาที · ใกล้ ${d.km.toFixed(1)}K`
-      : d.status === 'stale' ? `ไม่มีความเคลื่อนไหว · จุดล่าสุด ${d.km.toFixed(1)}K`
-      : d.status === 'timed_out' ? `⏱ เลยเวลา cut-off แล้วยังไม่เข้าเส้นชัย · ${d.km.toFixed(1)}/${d.totalKm.toFixed(1)}K` : `ถอนตัว (DNF) · ${d.km.toFixed(1)}/${d.totalKm.toFixed(1)}K` }))
+      : d.status === 'stale' ? `ไม่มีความเคลื่อนไหว · จุดล่าสุด ${d.km.toFixed(1)}K` : `ถอนตัว (DNF) · ${d.km.toFixed(1)}/${d.totalKm.toFixed(1)}K` }))
     .sort((a, b) => (a.status === 'sos' ? 0 : 1) - (b.status === 'sos' ? 0 : 1)), [displays]);
 
   const counts = mM(() => {
