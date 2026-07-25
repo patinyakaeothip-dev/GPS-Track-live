@@ -252,6 +252,7 @@ function LiveMonitorApp() {
   const mapHostRef = mR(null);
   const mapRef = mR(null);
   const markersRef = mR(new Map());
+  const courseLayerRef = mR(null);
 
   // Real per-event roster (src/runner-store.js) — position is each
   // runner's last QR check-in km (see mobile-app.jsx scanComplete), not a
@@ -356,22 +357,14 @@ function LiveMonitorApp() {
 
   mE(() => {
     if (!ready || !mapHostRef.current || mapRef.current) return;
-    const L = window.L, geo = geoRef.current, coursePaths = coursePathsRef.current, checkpoints = checkpointsRef.current;
+    const L = window.L;
+    const geo = geoRef.current, coursePaths = coursePathsRef.current;
     const cOverview = coursePaths[overviewLabelRef.current];
-    const latlngs = geo.coursePolylineLatLngs(cOverview);
-    const bounds = L.latLngBounds(latlngs);
+    const bounds = L.latLngBounds(geo.coursePolylineLatLngs(cOverview));
     const map = L.map(mapHostRef.current, { zoomControl: false, attributionControl: false }).fitBounds(bounds, { padding: [24, 24] });
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-    L.polyline(latlngs, { color: '#1f4d39', weight: 4, opacity: 0.8 }).addTo(map);
-    [[0, 'START'], ...checkpoints.map(cp => [parseFloat(cp.km) || 0, cp.label]), [cOverview[cOverview.length - 1].km, 'FINISH']]
-      .forEach(([km, label]) => {
-        const p = geo.pointAtKm(cOverview, km);
-        L.marker([p.lat, p.lon], { icon: L.divIcon({ className: '', html:
-          `<div style="padding:2px 7px;background:#2d6a4f;color:#fff;border-radius:7px;font:600 10px 'JetBrains Mono',monospace;letter-spacing:0.04em;white-space:nowrap;transform:translate(-50%,-130%)">${label}</div>`,
-          iconSize: [0, 0] }) }).addTo(map);
-      });
     mapRef.current = map;
-    return () => { map.remove(); mapRef.current = null; markersRef.current.clear(); };
+    return () => { map.remove(); mapRef.current = null; markersRef.current.clear(); courseLayerRef.current = null; };
   // Also re-run when showDashboard flips true: for an "upcoming" event the
   // course/runner data (ready) usually finishes loading *before* the RD
   // clicks "ดูแผนที่ / เส้นทาง" (see #69's preview gate), so the map's host
@@ -382,6 +375,35 @@ function LiveMonitorApp() {
   // fixes that without touching the guard itself.
   }, [ready, showDashboard]);
 
+  // Draws the course polyline + START/checkpoint/FINISH markers for
+  // whichever distance is currently selected (distFilter), falling back to
+  // the overview/longest distance when "ทุกระยะ" is picked — separate from
+  // map creation above so switching distances redraws just this layer
+  // instead of tearing down and rebuilding the whole Leaflet map. distFilter
+  // used to only ever affect the Ranking table; the course shown here was
+  // always the single longest distance regardless, so a course uploaded for
+  // a shorter distance never had anywhere to actually be seen.
+  mE(() => {
+    const map = mapRef.current;
+    if (!map || !ready) return;
+    const L = window.L, geo = geoRef.current, coursePaths = coursePathsRef.current, checkpoints = checkpointsRef.current;
+    const label = distFilter || overviewLabelRef.current;
+    const course = coursePaths[label] || coursePaths[overviewLabelRef.current];
+    if (courseLayerRef.current) { map.removeLayer(courseLayerRef.current); courseLayerRef.current = null; }
+    const group = L.layerGroup().addTo(map);
+    const latlngs = geo.coursePolylineLatLngs(course);
+    L.polyline(latlngs, { color: '#1f4d39', weight: 4, opacity: 0.8 }).addTo(group);
+    [[0, 'START'], ...checkpoints.map(cp => [parseFloat(cp.km) || 0, cp.label]), [course[course.length - 1].km, 'FINISH']]
+      .forEach(([km, cpLbl]) => {
+        const p = geo.pointAtKm(course, km);
+        L.marker([p.lat, p.lon], { icon: L.divIcon({ className: '', html:
+          `<div style="padding:2px 7px;background:#2d6a4f;color:#fff;border-radius:7px;font:600 10px 'JetBrains Mono',monospace;letter-spacing:0.04em;white-space:nowrap;transform:translate(-50%,-130%)">${cpLbl}</div>`,
+          iconSize: [0, 0] }) }).addTo(group);
+      });
+    courseLayerRef.current = group;
+    map.flyToBounds(L.latLngBounds(latlngs), { padding: [24, 24], duration: 0.4 });
+  }, [ready, showDashboard, distFilter]);
+
   mE(() => { if (mapRef.current && dashView === 'map') setTimeout(() => mapRef.current.invalidateSize(), 60); }, [dashView]);
 
   function recenter() {
@@ -390,7 +412,8 @@ function LiveMonitorApp() {
     if (selectedBib && markersRef.current.has(selectedBib)) {
       map.flyTo(markersRef.current.get(selectedBib).getLatLng(), 15, { duration: 0.5 });
     } else {
-      const bounds = window.L.latLngBounds(geoRef.current.coursePolylineLatLngs(coursePathsRef.current[overviewLabelRef.current]));
+      const label = distFilter || overviewLabelRef.current;
+      const bounds = window.L.latLngBounds(geoRef.current.coursePolylineLatLngs(coursePathsRef.current[label] || coursePathsRef.current[overviewLabelRef.current]));
       map.flyToBounds(bounds, { padding: [24, 24], duration: 0.5 });
     }
   }
@@ -406,6 +429,10 @@ function LiveMonitorApp() {
 
   const geo = geoRef.current, coursePaths = coursePathsRef.current;
   const overviewLabel = overviewLabelRef.current;
+  // Whichever distance's course is actually being shown on the map/
+  // elevation right now — the selected distFilter chip, or the overview
+  // (longest) course when "ทุกระยะ" is picked.
+  const viewLabel = distFilter || overviewLabel;
 
   // Real roster → map/ranking rows. Position is each runner's last QR
   // check-in km (progressKm), and pace/staleness are derived from
@@ -458,7 +485,7 @@ function LiveMonitorApp() {
         : (baseStatus === 'active' && staleMin != null && staleMin > STALE_MINUTES) ? 'stale'
         : baseStatus;
       const meta = statusMeta(status);
-      const physKm = geo.nearestKmOnTrack(coursePaths[overviewLabel], p.lat, p.lon);
+      const physKm = geo.nearestKmOnTrack(coursePaths[viewLabel] || coursePaths[overviewLabel], p.lat, p.lon);
       // Before the start checkpoint is scanned, position is stuck at km 0 —
       // the "gradient" there is just the course's starting slope, not
       // anything about the runner, so show — same as pace instead of a
@@ -484,15 +511,20 @@ function LiveMonitorApp() {
         emgName: r.emgName || '', emgPhone: r.emgPhone || '', bloodType: r.bloodType || '', medical: r.medical || '',
         status, statusLabel: meta.label, statusBg: meta.bg, statusFg: meta.fg, physKm };
     });
-  }, [ready, runners, coursePaths, overviewLabel, distColor, selectedEvent, livePosByBib, offRouteTick]);
+  }, [ready, runners, coursePaths, overviewLabel, viewLabel, distColor, selectedEvent, livePosByBib, offRouteTick]);
 
   // Keep Leaflet markers in sync with real roster updates (a QR scan moves
-  // someone) instead of only ever creating them once at map init.
+  // someone) instead of only ever creating them once at map init. Filtered
+  // to the currently-viewed distance — same distFilter chip the Ranking
+  // tab already uses — so switching to one distance's course doesn't leave
+  // every other distance's runners cluttering a map that's now zoomed into
+  // a completely different, unrelated course.
+  const mapDisplays = mM(() => distFilter ? displays.filter(d => d.distance === distFilter) : displays, [displays, distFilter]);
   mE(() => {
     const map = mapRef.current, L = window.L;
     if (!map) return;
     const seen = new Set();
-    displays.forEach(d => {
+    mapDisplays.forEach(d => {
       seen.add(d.bib);
       let m = markersRef.current.get(d.bib);
       if (!m) {
@@ -508,7 +540,7 @@ function LiveMonitorApp() {
     markersRef.current.forEach((m, bib) => {
       if (!seen.has(bib)) { map.removeLayer(m); markersRef.current.delete(bib); }
     });
-  }, [displays]);
+  }, [mapDisplays]);
 
   const byBib = mM(() => Object.fromEntries(displays.map(d => [d.bib, d])), [displays]);
   const selected = selectedBib ? byBib[selectedBib] : null;
@@ -748,11 +780,11 @@ function LiveMonitorApp() {
 
             <div style={{ padding: '16px 20px 20px', borderTop: '1px solid #d8d2c2' }}>
               <div style={{ fontFamily: M_MONO, fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#5d6b59', marginBottom: 8 }}>
-                Elevation profile · ภาพรวมเส้นทาง {overviewLabel} · {displays.length} นักวิ่ง
+                Elevation profile · เส้นทาง {viewLabel}{!distFilter ? ' (ภาพรวม)' : ''} · {mapDisplays.length} นักวิ่ง
               </div>
               {geo && coursePaths && (
-                <LiveElevationSvg geo={geo} coursePaths={coursePaths} distance={overviewLabel}
-                  checkpoints={checkpointsRef.current} displays={displays}
+                <LiveElevationSvg geo={geo} coursePaths={coursePaths} distance={viewLabel}
+                  checkpoints={checkpointsRef.current} displays={mapDisplays}
                   selectedBib={selected && selected.bib} onSelectBib={setSelectedBib}/>
               )}
             </div>
