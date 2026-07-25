@@ -411,6 +411,12 @@ function EventForm({ initial, onCancel, onSave, onSaveInPlace, onDelete }) {
         </div>
       </div>
 
+      {!isNew && liveStatus === 'past' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#fdf0d6', border: '1px solid #f0d9a0', borderRadius: 10, padding: '12px 14px', marginBottom: 14, fontSize: 12.5, color: '#7c4a03', lineHeight: 1.6 }}>
+          <span style={{ fontSize: 18 }}>⚠️</span>
+          <span>งานนี้จบไปแล้ว — แก้ไขได้ตามปกติ แต่การแก้เวลาสตาร์ท/cut-off ตอนนี้อาจกระทบผลวิ่ง/ใบประกาศที่บันทึกไว้แล้วของนักวิ่งที่ลงสนามไปแล้ว โปรดตรวจสอบให้แน่ใจก่อนบันทึก</span>
+        </div>
+      )}
       <div style={{ background: '#fff', border: '1px solid #e5e0d3', borderRadius: 14, boxShadow: '0 1px 3px rgba(31,42,28,0.08)', padding: 24 }}>
         <div style={{ marginBottom: 14 }}>
           <Field label="โลโก้งาน (ไม่บังคับ — แสดงในแอพนักวิ่งแทนไอคอนเริ่มต้น)">
