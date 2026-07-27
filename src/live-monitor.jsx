@@ -234,8 +234,17 @@ function LiveMonitorApp() {
   }, []);
   const [eventId, setEventId] = mS(() => {
     const list = window.eventStore ? window.eventStore.loadEvents() : [];
-    const live = list.find(e => window.eventStatus.computeStatus(e) === 'live');
-    return (live || list[0] || {}).id || null;
+    const withStatus = list.map(ev => ({ ev, status: window.eventStatus.computeStatus(ev) }));
+    const byDateAsc = (a, b) => (a.ev.raceDateISO || '').localeCompare(b.ev.raceDateISO || '');
+    // Prefer a currently-live event, then the soonest upcoming one, and
+    // only fall back to the most recent past event if there's nothing else
+    // — opening Live Monitor shouldn't dump the RD on old, already-over
+    // races by default.
+    const live = withStatus.find(x => x.status === 'live');
+    const upcoming = withStatus.filter(x => x.status === 'upcoming').sort(byDateAsc)[0];
+    const past = withStatus.filter(x => x.status === 'past').sort((a, b) => -byDateAsc(a, b))[0];
+    const pick = live || upcoming || past || withStatus[0];
+    return (pick && pick.ev && pick.ev.id) || null;
   });
   const selectedEvent = events.find(e => e.id === eventId) || null;
   // The event picker used to just list events in raw creation order —
