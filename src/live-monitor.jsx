@@ -111,6 +111,7 @@ function LiveElevationSvg({ geo, coursePaths, distance, checkpoints, displays, s
   const pointers = mR(new Map());
   const pinchStart = mR(null); // { dist, zoom }
   const dragStart = mR(null); // { x, panKm }
+  const svgRef = mR(null);
 
   const visibleKm = totalKm / zoom;
   const clampPan = p => Math.max(0, Math.min(Math.max(0, totalKm - visibleKm), p));
@@ -130,6 +131,16 @@ function LiveElevationSvg({ geo, coursePaths, distance, checkpoints, displays, s
     const anchorKm = panKm + Math.max(0, (svgX - padL) / (w - padL - padR)) * visibleKm;
     zoomAround(zoom * (e.deltaY < 0 ? 1.25 : 1 / 1.25), anchorKm);
   }
+  // React attaches onWheel as a passive native listener by default (since
+  // v17), which silently defeats e.preventDefault() above — the page still
+  // scrolls even though the handler runs. Attach a real non-passive
+  // listener instead so zooming the chart doesn't also scroll the page.
+  mE(() => {
+    const el = svgRef.current;
+    if (!el) return;
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [zoom, panKm, visibleKm]);
   function onPointerDown(e) {
     e.currentTarget.setPointerCapture(e.pointerId);
     pointers.current.set(e.pointerId, e.clientX);
@@ -181,8 +192,8 @@ function LiveElevationSvg({ geo, coursePaths, distance, checkpoints, displays, s
 
   return (
     <div style={{ position: 'relative' }}>
-      <svg viewBox={`0 0 ${w} ${h}`} style={{ width: '100%', height: 180, display: 'block', touchAction: 'none', cursor: zoom > 1 ? 'grab' : 'default' }}
-        onWheel={onWheel} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}>
+      <svg ref={svgRef} viewBox={`0 0 ${w} ${h}`} style={{ width: '100%', height: 180, display: 'block', touchAction: 'none', cursor: zoom > 1 ? 'grab' : 'default' }}
+        onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}>
         {yTicks.map((ele, i) => (
           <g key={i}>
             <line x1={padL} y1={y(ele)} x2={w - padR} y2={y(ele)} stroke="#5d6b59" strokeWidth="1" strokeDasharray="2 3" opacity="0.3"/>
