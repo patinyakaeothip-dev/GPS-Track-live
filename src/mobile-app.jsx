@@ -2040,7 +2040,15 @@ function MobileApp() {
 
   function handleLogin(authedUser) {
     const profile = loadProfile();
-    persist({ user: { ...authedUser, ...(profile || {}) }, runner: null });
+    // profile persists device-wide (not per-account) so onboarding only
+    // asks once — but that means its cached identity fields (email, name,
+    // uid, photo, provider) are stale the moment someone signs in with a
+    // *different* account/provider on the same device. Those must always
+    // come from whichever account just actually authenticated; only the
+    // supplementary fields the runner filled in by hand (nickname, phone,
+    // emergency contact, blood type, medical notes) should carry over.
+    const { email: _e, name: _n, uid: _u, photo: _p, provider: _pr, ...savedPrefs } = profile || {};
+    persist({ user: { ...savedPrefs, ...authedUser }, runner: null });
     setScreen(profile && profile.profileCompleted ? 'events' : 'onboard');
   }
   function finishOnboard(nextUser) {
