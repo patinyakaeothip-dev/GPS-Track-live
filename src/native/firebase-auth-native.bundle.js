@@ -1170,6 +1170,13 @@ var trtFirebaseAuthNative = (() => {
     if (!idToken) throw new Error("[firebase-auth-native] no idToken returned from native Google sign-in");
     return idToken;
   }
+  async function signInWithApple() {
+    const result = await FirebaseAuthentication.signInWithApple();
+    const idToken = result && result.credential && result.credential.idToken;
+    const rawNonce = result && result.credential && result.credential.nonce;
+    if (!idToken) throw new Error("[firebase-auth-native] no idToken returned from native Apple sign-in");
+    return { idToken, rawNonce };
+  }
   async function signOut() {
     try {
       await FirebaseAuthentication.signOut();
@@ -1177,7 +1184,7 @@ var trtFirebaseAuthNative = (() => {
       console.warn("[firebase-auth-native] native sign-out failed", err);
     }
   }
-  window.trtNativeAuth = { isNative, signInWithGoogle, signOut };
+  window.trtNativeAuth = { isNative, signInWithGoogle, signInWithApple, signOut };
 })();
 /*! Bundled license information:
 

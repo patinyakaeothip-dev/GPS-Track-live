@@ -9,7 +9,7 @@
 
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
 import {
-  getAuth, initializeAuth, indexedDBLocalPersistence, GoogleAuthProvider, signInWithPopup, signInWithRedirect, signInWithCredential, getRedirectResult, signOut, onAuthStateChanged,
+  getAuth, initializeAuth, indexedDBLocalPersistence, GoogleAuthProvider, OAuthProvider, signInWithPopup, signInWithRedirect, signInWithCredential, getRedirectResult, signOut, onAuthStateChanged,
 } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
 import {
   getFirestore, collection, doc, getDocs, setDoc, deleteDoc, onSnapshot,
@@ -33,6 +33,9 @@ if (!configured) {
   const auth = isNativeShell ? initializeAuth(app, { persistence: indexedDBLocalPersistence }) : getAuth(app);
   const db = getFirestore(app);
   const googleProvider = new GoogleAuthProvider();
+  // Apple requires apps that offer any third-party login (Google here) to
+  // also offer Sign in with Apple — App Store review guideline 4.8.
+  const appleProvider = new OAuthProvider('apple.com');
 
   window.fb = {
     app, auth, db,
@@ -69,9 +72,32 @@ if (!configured) {
         throw err;
       }
     },
+    // Apple sign-in — same popup-first/redirect-fallback shape as Google
+    // above, just building the credential differently: native hands back
+    // an idToken + rawNonce pair (see src/native/firebase-auth-native.js),
+    // while web popup/redirect resolve with the credential already
+    // attached to the result.
+    async signInWithApple() {
+      if (window.trtNativeAuth && window.trtNativeAuth.isNative()) {
+        const { idToken, rawNonce } = await window.trtNativeAuth.signInWithApple();
+        return signInWithCredential(auth, appleProvider.credential({ idToken, rawNonce }));
+      }
+      try {
+        return await signInWithPopup(auth, appleProvider);
+      } catch (err) {
+        const popupFailureCodes = ['auth/popup-blocked', 'auth/popup-closed-by-user', 'auth/cancelled-popup-request', 'auth/operation-not-supported-in-this-environment'];
+        if (popupFailureCodes.includes(err.code)) return signInWithRedirect(auth, appleProvider);
+        throw err;
+      }
+    },
     // Only relevant on the redirect path — call on page load to pick up the
-    // result of a Google sign-in that just navigated back. Resolves to null
-    // when there's no pending redirect sign-in.
+    // result of a Google *or* Apple sign-in that just navigated back
+    // (Firebase's getRedirectResult isn't provider-specific — whichever one
+    // actually completed comes back here, distinguishable via
+    // result.providerId). Resolves to null when there's no pending redirect
+    // sign-in. Kept the old Google-specific name too since existing callers
+    // use it — same underlying call either way.
+    getRedirectResult: () => getRedirectResult(auth),
     getGoogleRedirectResult: () => getRedirectResult(auth),
     async signOutUser() {
       if (window.trtNativeAuth && window.trtNativeAuth.isNative()) await window.trtNativeAuth.signOut();
