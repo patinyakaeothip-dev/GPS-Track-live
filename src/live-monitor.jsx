@@ -227,6 +227,23 @@ function LiveMonitorApp() {
     return (live || list[0] || {}).id || null;
   });
   const selectedEvent = events.find(e => e.id === eventId) || null;
+  // The event picker used to just list events in raw creation order —
+  // fine with two or three events, unusable once old/finished ones pile
+  // up alongside the ones actually worth switching to. Live sorts first,
+  // then upcoming soonest-first, then past most-recent-first at the
+  // bottom, grouped visually via <optgroup> so "still relevant" and
+  // "already over" are never confused for each other in the list.
+  const eventGroups = mM(() => {
+    const withStatus = events.map(ev => ({ ev, status: window.eventStatus.computeStatus(ev) }));
+    const byDateAsc = (a, b) => (a.ev.raceDateISO || '').localeCompare(b.ev.raceDateISO || '');
+    const active = withStatus.filter(x => x.status === 'live' || x.status === 'upcoming')
+      .sort((a, b) => (a.status === b.status ? byDateAsc(a, b) : (a.status === 'live' ? -1 : 1)))
+      .map(x => x.ev);
+    const past = withStatus.filter(x => x.status === 'past')
+      .sort((a, b) => -byDateAsc(a, b))
+      .map(x => x.ev);
+    return { active, past };
+  }, [events]);
   // Distances/colors follow the selected event's own `distances` list (set
   // up in Admin) instead of a fixed 29K/22K/11K set — an event's own color
   // per distance is reused so the map legend matches what RD already sees
@@ -632,9 +649,20 @@ function LiveMonitorApp() {
             <select value={eventId || ''} onChange={e => { setEventId(e.target.value); setPreviewOpen(false); }} style={{
               padding: '6px 10px', border: '1px solid #e5e0d3', borderRadius: 6, background: '#fff',
               fontFamily: M_MONO, fontSize: 11, color: '#1f2a1c', maxWidth: 260 }}>
-              {events.map(ev => (
-                <option key={ev.id} value={ev.id}>{ev.name} · {ev.date}</option>
-              ))}
+              {eventGroups.active.length > 0 && (
+                <optgroup label="🔴 กำลังแข่ง / จะมาถึง">
+                  {eventGroups.active.map(ev => (
+                    <option key={ev.id} value={ev.id}>{ev.name} · {ev.date}</option>
+                  ))}
+                </optgroup>
+              )}
+              {eventGroups.past.length > 0 && (
+                <optgroup label="✓ ผ่านมาแล้ว">
+                  {eventGroups.past.map(ev => (
+                    <option key={ev.id} value={ev.id}>{ev.name} · {ev.date}</option>
+                  ))}
+                </optgroup>
+              )}
             </select>
           )}
           <div style={{ flex: 1 }}/>
