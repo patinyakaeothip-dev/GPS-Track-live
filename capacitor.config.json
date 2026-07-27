@@ -1,9 +1,11 @@
 {
   "appId": "com.rayongtrail.live",
-  "appName": "Rayong Trail Running",
+  "appName": "Rayong Trail",
   "webDir": "www",
   "server": {
-    "androidScheme": "https"
+    "androidScheme": "https",
+    "url": "https://gps-track-live.pages.dev",
+    "cleartext": false
   },
   "plugins": {
     "Geolocation": {
