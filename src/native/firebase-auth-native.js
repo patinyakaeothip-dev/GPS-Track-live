@@ -30,8 +30,21 @@ async function signInWithGoogle() {
   return idToken;
 }
 
+// Apple requires the raw nonce alongside the idToken to build a Firebase
+// credential (src/firebase.js does that part, via OAuthProvider('apple.com')
+// — this plugin only drives the native "Sign in with Apple" sheet and hands
+// back what it returned). Required by App Store review guideline 4.8
+// whenever a third-party login (Google, here) is offered.
+async function signInWithApple() {
+  const result = await FirebaseAuthentication.signInWithApple();
+  const idToken = result && result.credential && result.credential.idToken;
+  const rawNonce = result && result.credential && result.credential.nonce;
+  if (!idToken) throw new Error('[firebase-auth-native] no idToken returned from native Apple sign-in');
+  return { idToken, rawNonce };
+}
+
 async function signOut() {
   try { await FirebaseAuthentication.signOut(); } catch (err) { console.warn('[firebase-auth-native] native sign-out failed', err); }
 }
 
-window.trtNativeAuth = { isNative, signInWithGoogle, signOut };
+window.trtNativeAuth = { isNative, signInWithGoogle, signInWithApple, signOut };

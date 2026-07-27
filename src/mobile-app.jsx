@@ -225,13 +225,17 @@ function LoginScreen({ onLogin }) {
     if (window.trtNativeAuth && window.trtNativeAuth.isNative()) return;
     let cancelled = false;
     function checkRedirect() {
-      if (cancelled || !window.fb || !window.fb.getGoogleRedirectResult) return;
+      if (cancelled || !window.fb || !window.fb.getRedirectResult) return;
       setBusy(true);
-      window.fb.getGoogleRedirectResult().then(result => {
+      // getRedirectResult isn't provider-specific — whichever of
+      // Google/Apple actually completed a redirect round-trip comes back
+      // here, distinguished by providerId.
+      window.fb.getRedirectResult().then(result => {
         if (cancelled) return;
         if (result && result.user) {
           const u = result.user;
-          onLogin({ uid: u.uid, name: u.displayName || 'นักวิ่ง', email: u.email, photo: u.photoURL, provider: 'google' });
+          const provider = result.providerId === 'apple.com' ? 'apple' : 'google';
+          onLogin({ uid: u.uid, name: u.displayName || 'นักวิ่ง', email: u.email, photo: u.photoURL, provider });
         } else {
           setBusy(false);
         }
@@ -256,6 +260,30 @@ function LoginScreen({ onLogin }) {
       if (result && result.user) {
         const u = result.user;
         onLogin({ uid: u.uid, name: u.displayName || 'นักวิ่ง', email: u.email, photo: u.photoURL, provider: 'google' });
+      }
+    } catch (e) {
+      setError('เข้าสู่ระบบไม่สำเร็จ ลองอีกครั้ง');
+      setBusy(false);
+    }
+  }
+  // Required alongside Google (App Store review guideline 4.8: any app
+  // offering third-party login must also offer Sign in with Apple) — same
+  // popup-first/redirect-fallback/native-sheet shape as googleLogin above.
+  async function appleLogin() {
+    if (!window.fb) { onLogin({ name: 'มิ้น', provider: 'apple' }); return; }
+    setBusy(true); setError(null);
+    try {
+      const result = await window.fb.signInWithApple();
+      if (result && result.user) {
+        const u = result.user;
+        // Apple only ever hands back displayName on the very first
+        // sign-in ever for this app — every time after that it's null,
+        // so falling back straight to 'นักวิ่ง' would erase a name a
+        // returning user already had. Keep whatever's already saved
+        // locally instead when Apple doesn't send one this time.
+        const existing = loadProfile();
+        const name = u.displayName || (existing && existing.name) || 'นักวิ่ง';
+        onLogin({ uid: u.uid, name, email: u.email, photo: u.photoURL, provider: 'apple' });
       }
     } catch (e) {
       setError('เข้าสู่ระบบไม่สำเร็จ ลองอีกครั้ง');
@@ -291,6 +319,11 @@ function LoginScreen({ onLogin }) {
         <Btn variant="white" onClick={googleLogin} disabled={busy || !!inAppBrowser}>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
             <GoogleLogo size={18}/> {busy ? 'กำลังเข้าสู่ระบบ…' : 'เข้าสู่ระบบด้วย Google'}
+          </span>
+        </Btn>
+        <Btn variant="black" onClick={appleLogin} disabled={busy || !!inAppBrowser}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+            <AppleLogo size={18}/> {busy ? 'กำลังเข้าสู่ระบบ…' : 'เข้าสู่ระบบด้วย Apple'}
           </span>
         </Btn>
       </div>
@@ -628,6 +661,16 @@ function GoogleLogo({ size = 18 }) {
       <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.9-2.26 5.36-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
       <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
       <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+    </svg>
+  );
+}
+// Standard Apple logo glyph, white — for the black "Sign in with Apple"
+// button, matching Apple's Human Interface Guidelines for third-party
+// implementations of the button (white mark on solid black).
+function AppleLogo({ size = 18 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" style={{ flexShrink: 0 }} fill="#fff">
+      <path d="M16.365 1.43c0 1.14-.416 2.06-1.25 2.87-.94.9-2.02 1.42-3.16 1.32-.03-1.09.44-2.09 1.25-2.89.83-.85 2.15-1.44 3.16-1.3z M20.85 17.28c-.36.83-.55 1.2-1.03 1.94-.66 1.02-1.6 2.29-2.76 2.3-1.03.01-1.3-.67-2.7-.66-1.4.01-1.7.67-2.73.66-1.16-.01-2.05-1.16-2.71-2.18-1.85-2.85-2.05-6.19-.9-7.96.81-1.25 2.1-1.98 3.3-1.98 1.23 0 2 .68 3.02.68.99 0 1.6-.68 3.02-.68 1.06 0 2.18.58 2.99 1.58-2.62 1.44-2.2 5.18.7 6.3z"/>
     </svg>
   );
 }
