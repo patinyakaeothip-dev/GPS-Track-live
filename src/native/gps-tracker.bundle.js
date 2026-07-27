@@ -549,8 +549,8 @@
           backgroundTitle: "Rayong Trail",
           requestPermissions: true,
           stale: false,
-          distanceFilter: 10
-          // meters — trail pace doesn't need denser pings than this
+          distanceFilter: 50
+          // meters — spectators only need map-level precision; denser pings just burn battery + Firestore writes for no visible benefit
         },
         (location, error) => {
           if (error) {
