@@ -110,7 +110,16 @@
         const last = cks[cks.length - 1];
         const startMs = start ? checkinMs(start.t) : null;
         const finishMs = finish ? checkinMs(finish.t) : null;
-        const totalMs = (startMs != null && finishMs != null) ? finishMs - startMs : null;
+        const distDefForGun = (ev && ev.distances || []).find(d => d.label === r.distance);
+        const gunMs = distDefForGun && distDefForGun.cpTimes ? checkinMs(distDefForGun.cpTimes.start) : null;
+        // Chip time — never better than the official gun time. A runner who
+        // scanned start early (crowding, a mis-scan) has their *result*
+        // clamped up to the gun; a late scan (queue at the mat) is
+        // unaffected and still uses their own actual scan time. start_at
+        // below stays the raw actual scan time for display ("ออกตัว
+        // HH:MM") — chipStartMs is only used for the actual time/pace math.
+        const chipStartMs = (startMs != null && gunMs != null && startMs < gunMs) ? gunMs : startMs;
+        const totalMs = (chipStartMs != null && finishMs != null) ? finishMs - chipStartMs : null;
         const distKm = parseInt(r.distance, 10) || 0;
         const paceMinPerKm = (totalMs && distKm) ? (totalMs / 60000) / distKm : null;
         // A runner who started but never scanned finish used to show as
@@ -121,8 +130,7 @@
         // time), someone who never checked in at all is a DNS (never
         // actually started) — instead of sitting as "active"/"ยังไม่เริ่ม"
         // forever with no real outcome.
-        const distDef = (ev && ev.distances || []).find(d => d.label === r.distance);
-        const cutoffMs = distDef && distDef.cpTimes ? checkinMs(distDef.cpTimes.finish) : null;
+        const cutoffMs = distDefForGun && distDefForGun.cpTimes ? checkinMs(distDefForGun.cpTimes.finish) : null;
         const overCutoff = !!(cutoffMs && Date.now() > cutoffMs);
         const status = r.dnf ? 'dnf'
           : finish ? 'finished'
@@ -139,6 +147,7 @@
           distance_original: r.distance,
           status,
           start_at: startMs,
+          chip_start_at: chipStartMs,
           finish_at: finishMs,
           last_cp: last ? last.cp : null,
           last_at: last ? checkinMs(last.t) : null,
@@ -504,7 +513,7 @@
               <>
                 <div style={{ fontFamily: MONO, fontSize: 14, fontWeight: 700, color: isDnf ? '#b91c1c' : '#b45309',
                   fontVariantNumeric: 'tabular-nums' }}>
-                  {fmtElapsed((it.status === 'active' ? now : (it.last_at || it.start_at)) - it.start_at)}
+                  {fmtElapsed((it.status === 'active' ? now : (it.last_at || it.chip_start_at)) - it.chip_start_at)}
                 </div>
                 <div style={{ fontFamily: MONO, fontSize: 10, color: MUTED }}>
                   ออกตัว {fmtClockOfDay(it.start_at)}

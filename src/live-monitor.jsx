@@ -46,6 +46,16 @@ function fmtPace(p) {
 // Thresholds are cumulative meters climbed, not a % gradient.
 function gainColor(m) { return m < 100 ? M_BRAND : m < 300 ? M_WARN : M_ALERT; }
 function fmtAgo(sec) { return sec < 60 ? `${Math.round(sec)} วิที่แล้ว` : `${Math.floor(sec / 60)} นาทีที่แล้ว`; }
+// A runner's chip time is never allowed to be better than the official gun
+// time — if they scanned start early (crowding, a mis-scan, whatever), their
+// effective start clamps up to the gun time instead of giving them a head
+// start no one else got. A late scan (queue at the mat) is unaffected and
+// still uses their own actual scan time, which is the whole point of chip
+// time over gun time in the first place.
+function effectiveStartMs(startMs, gunMs) {
+  if (startMs == null) return startMs;
+  return (gunMs != null && startMs < gunMs) ? gunMs : startMs;
+}
 function fmtElapsed(ms) {
   if (ms == null || ms < 0) return '—';
   const s = Math.floor(ms / 1000);
@@ -314,6 +324,13 @@ function LiveMonitorApp() {
     const id = setInterval(() => forceTick(t => t + 1), 20000);
     return () => clearInterval(id);
   }, []);
+  // Just for the gun-time clock in the header to visibly tick — everything
+  // else on this page already re-renders often enough on its own.
+  const [clockNow, setClockNow] = mS(() => Date.now());
+  mE(() => {
+    const id = setInterval(() => setClockNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
   mE(() => {
     const coursePathsNow = coursePathsRef.current, geo = geoRef.current;
     if (!coursePathsNow || !geo) return;
@@ -433,6 +450,15 @@ function LiveMonitorApp() {
   // elevation right now — the selected distFilter chip, or the overview
   // (longest) course when "ทุกระยะ" is picked.
   const viewLabel = distFilter || overviewLabel;
+  // Official gun time for whichever distance is currently being viewed —
+  // falls back to the event's earliest gun time across all distances when
+  // that distance has no schedule of its own yet.
+  const viewGunMs = mM(() => {
+    const distDef = (selectedEvent && selectedEvent.distances || []).find(d => d.label === viewLabel);
+    const t = distDef && distDef.cpTimes && distDef.cpTimes.start;
+    const ms = t && checkinMs(selectedEvent, t);
+    return ms || (earliestStart && earliestStart.getTime()) || null;
+  }, [selectedEvent, viewLabel, earliestStart]);
 
   // Real roster → map/ranking rows. Position is each runner's last QR
   // check-in km (progressKm), and pace/staleness are derived from
@@ -465,7 +491,9 @@ function LiveMonitorApp() {
       const p = geo.pointAtKm(pts, Math.max(0, km));
       const gain = geo.cumulativeGainToKm(pts, Math.max(0, km));
 
-      const startMs = startCk ? checkinMs(selectedEvent, startCk.t) : null;
+      const rawStartMs = startCk ? checkinMs(selectedEvent, startCk.t) : null;
+      const gunMs = distDef && distDef.cpTimes && checkinMs(selectedEvent, distDef.cpTimes.start);
+      const startMs = effectiveStartMs(rawStartMs, gunMs);
       // Cap the live-ticking end at this distance's own finish cutoff once
       // it's passed without a finish scan, rather than off Date.now() —
       // same reasoning as the DNF/DNS reclassification above.
@@ -474,7 +502,8 @@ function LiveMonitorApp() {
       // Elapsed time since start — live-ticking for runners still on course
       // (frozen at finish once they're done, or at cutoff once they've
       // timed out without finishing), plus the checkpoint times themselves,
-      // both for the Ranking table.
+      // both for the Ranking table. Chip time: clamped to never start
+      // before the official gun (effectiveStartMs above).
       const elapsedMs = startMs != null ? (endMs - startMs) : null;
       const checkinTimes = cks.map(c => ({ cp: c.cp, label: cpLabel(c.cp), t: c.t }));
 
@@ -609,6 +638,14 @@ function LiveMonitorApp() {
             </select>
           )}
           <div style={{ flex: 1 }}/>
+          {viewGunMs && (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', padding: '4px 12px', borderRight: '1px solid #e5e0d3' }}>
+              <span style={{ fontFamily: M_MONO, fontSize: 8.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#5d6b59' }}>Gun time · {viewLabel}</span>
+              <span style={{ fontFamily: M_MONO, fontSize: 14, fontWeight: 700, color: clockNow >= viewGunMs ? '#1f4d39' : '#7c4a03', fontVariantNumeric: 'tabular-nums' }}>
+                {clockNow >= viewGunMs ? `+${fmtElapsed(clockNow - viewGunMs)}` : `-${fmtElapsed(viewGunMs - clockNow)}`}
+              </span>
+            </div>
+          )}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', border: '1px solid #e5e0d3', borderRadius: 6, boxShadow: '0 1px 3px rgba(31,42,28,0.08)' }}>
             <span style={{ width: 8, height: 8, borderRadius: 99, background: M_BRAND, boxShadow: '0 0 0 3px rgba(45,106,79,0.18)' }}/>
             <span style={{ fontFamily: M_MONO, fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 600 }}>Live · {counts.total} นักวิ่ง</span>
