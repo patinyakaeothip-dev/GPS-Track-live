@@ -101,13 +101,14 @@ function colorFor(r, distColor) {
 // mouse wheel — same pattern as the runner app's Route-tab elevation chart
 // (mobile-app.jsx's ElevationSvg), so the RD can zoom into a busy stretch
 // of course instead of squinting at 220 samples spread over the whole race.
-function LiveElevationSvg({ geo, coursePaths, distance, checkpoints, displays, selectedBib, onSelectBib }) {
+function LiveElevationSvg({ geo, coursePaths, distance, checkpoints, displays, selectedBib, onSelectBib, focusBib }) {
   const w = 1100, h = 170, padL = 44, padR = 6, padT = 14, padB = 34;
   const pts = coursePaths[distance];
   const totalKm = pts[pts.length - 1].km;
 
   const [zoom, setZoom] = mS(1);
   const [panKm, setPanKm] = mS(0);
+  const [hoverBib, setHoverBib] = mS(null);
   const pointers = mR(new Map());
   const pinchStart = mR(null); // { dist, zoom }
   const dragStart = mR(null); // { x, panKm }
@@ -208,15 +209,32 @@ function LiveElevationSvg({ geo, coursePaths, distance, checkpoints, displays, s
             <text x={x(km)} y={h - 6} textAnchor="middle" fontFamily={M_MONO} fontSize="8.5" fill="#5d6b59" opacity="0.75">{km.toFixed(1)}K</text>
           </g>
         ))}
-        {displays.map(dd => (
-          <circle key={dd.bib} cx={x(dd.physKm)} cy={y(dd.ele)} r={selectedBib === dd.bib ? 8 : 4.5}
-            fill={dd.color} stroke="#fff" strokeWidth={selectedBib === dd.bib ? 2.5 : 1}
-            onClick={() => onSelectBib(dd.bib)} style={{ cursor: 'pointer' }}/>
-        ))}
+        {displays.map(dd => {
+          const dimmed = focusBib != null && focusBib !== dd.bib;
+          return (
+            <circle key={dd.bib} cx={x(dd.physKm)} cy={y(dd.ele)} r={selectedBib === dd.bib ? 8 : 4.5}
+              fill={dd.color} stroke="#fff" strokeWidth={selectedBib === dd.bib ? 2.5 : 1} opacity={dimmed ? 0.2 : 1}
+              onClick={() => onSelectBib(dd.bib)} onMouseEnter={() => setHoverBib(dd.bib)} onMouseLeave={() => setHoverBib(h => h === dd.bib ? null : h)}
+              style={{ cursor: 'pointer' }}/>
+          );
+        })}
       </svg>
       {zoom > 1.02 && (
         <div onClick={resetZoom} style={{ position: 'absolute', top: 4, right: 4, padding: '3px 8px', background: '#fff', border: '1px solid #d8d2c2', borderRadius: 999, fontFamily: M_MONO, fontSize: 9.5, color: '#5d6b59', cursor: 'pointer', boxShadow: '0 1px 3px rgba(31,42,28,0.1)' }}>↺ รีเซ็ตซูม</div>
       )}
+      {hoverBib && (() => {
+        const dd = displays.find(r => r.bib === hoverBib);
+        if (!dd) return null;
+        const leftPct = (x(dd.physKm) / w) * 100;
+        return (
+          <div style={{ position: 'absolute', left: `${leftPct}%`, top: `${(y(dd.ele) / h) * 100}%`, transform: 'translate(-50%, -130%)',
+            background: '#1f2a1c', color: '#fff', padding: '5px 9px', borderRadius: 8, fontSize: 11, whiteSpace: 'nowrap', pointerEvents: 'none',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.25)', zIndex: 5 }}>
+            <div style={{ fontWeight: 700 }}>#{dd.bib} {dd.name}</div>
+            <div style={{ fontFamily: M_MONO, fontSize: 10, opacity: 0.85 }}>{dd.km.toFixed(1)}K · {dd.pace}/km</div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
@@ -598,21 +616,22 @@ function LiveMonitorApp() {
     const seen = new Set();
     mapDisplays.forEach(d => {
       seen.add(d.bib);
+      const dimmed = focusBib != null && focusBib !== d.bib;
       let m = markersRef.current.get(d.bib);
       if (!m) {
-        m = L.circleMarker([d.lat, d.lon], { radius: 7, color: '#fff', weight: 2, fillColor: d.color, fillOpacity: 1 }).addTo(map);
+        m = L.circleMarker([d.lat, d.lon], { radius: 7, color: '#fff', weight: 2, fillColor: d.color, fillOpacity: dimmed ? 0.15 : 1, opacity: dimmed ? 0.15 : 1 }).addTo(map);
         m.bindTooltip(`#${d.bib} ${d.name}`, { direction: 'top', offset: [0, -8] });
         m.on('click', () => { setSelectedBib(d.bib); setFocusBib(null); });
         markersRef.current.set(d.bib, m);
       } else {
         m.setLatLng([d.lat, d.lon]);
-        m.setStyle({ fillColor: d.color });
+        m.setStyle({ fillColor: d.color, fillOpacity: dimmed ? 0.15 : 1, opacity: dimmed ? 0.15 : 1 });
       }
     });
     markersRef.current.forEach((m, bib) => {
       if (!seen.has(bib)) { map.removeLayer(m); markersRef.current.delete(bib); }
     });
-  }, [mapDisplays]);
+  }, [mapDisplays, focusBib]);
 
   const byBib = mM(() => Object.fromEntries(displays.map(d => [d.bib, d])), [displays]);
   const selected = selectedBib ? byBib[selectedBib] : null;
@@ -875,7 +894,7 @@ function LiveMonitorApp() {
               {geo && coursePaths && (
                 <LiveElevationSvg geo={geo} coursePaths={coursePaths} distance={viewLabel}
                   checkpoints={checkpointsRef.current} displays={mapDisplays}
-                  selectedBib={selected && selected.bib} onSelectBib={setSelectedBib}/>
+                  selectedBib={selected && selected.bib} onSelectBib={setSelectedBib} focusBib={focusBib}/>
               )}
             </div>
         </div>
