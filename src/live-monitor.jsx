@@ -666,7 +666,7 @@ function LiveMonitorApp() {
             </select>
           )}
           <div style={{ flex: 1 }}/>
-          {viewGunMs && (
+          {viewGunMs && selectedStatus !== 'past' && (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', padding: '4px 12px', borderRight: '1px solid #e5e0d3' }}>
               <span style={{ fontFamily: M_MONO, fontSize: 8.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#5d6b59' }}>Gun time · {viewLabel}</span>
               <span style={{ fontFamily: M_MONO, fontSize: 14, fontWeight: 700, color: clockNow >= viewGunMs ? '#1f4d39' : '#7c4a03', fontVariantNumeric: 'tabular-nums' }}>
