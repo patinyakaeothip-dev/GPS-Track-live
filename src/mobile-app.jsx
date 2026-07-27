@@ -406,9 +406,24 @@ function EventPickerScreen({ user, session, onOpenApp, onFollow, onProfile }) {
   }, []);
   const filtered = events.filter(e => window.eventStatus.computeStatus(e) === tab && (!q || e.name.toLowerCase().includes(q.toLowerCase())));
 
+  // session.runner only ever caches one registration (whichever event was
+  // opened most recently) — checking just that against `ev.id` wrongly
+  // treats a runner as "not registered" for every *other* event they've
+  // signed up for, greying out their own Runner Space button (and blocking
+  // it outright below) the moment that other event closes registration.
+  // Same class of bug fixed for openRunnerSpace's navigation in the past;
+  // this covers the list screen's own registered-check too.
+  const registeredEventIds = uM(() => {
+    const ids = new Set();
+    if (session && session.runner && session.runner.eventId) ids.add(session.runner.eventId);
+    if (session && session.user && session.user.uid && window.runnerStore) {
+      window.runnerStore.listRunnersByUid(session.user.uid).forEach(r => ids.add(r.eventId));
+    }
+    return ids;
+  }, [session, events]);
+
   function handleRunnerSpace(ev) {
-    const isRegistered = session.runner && session.runner.eventId === ev.id;
-    if (window.eventStatus.computeClosed(ev) && !isRegistered) {
+    if (window.eventStatus.computeClosed(ev) && !registeredEventIds.has(ev.id)) {
       setToast('ปิดรับสมัครแล้วสำหรับงานนี้');
       setTimeout(() => setToast(null), 2400);
       return;
@@ -443,7 +458,7 @@ function EventPickerScreen({ user, session, onOpenApp, onFollow, onProfile }) {
         </div>
         {filtered.map(ev => (
           <EventCard key={ev.id} ev={ev}
-            isRegistered={!!(session.runner && session.runner.eventId === ev.id)}
+            isRegistered={registeredEventIds.has(ev.id)}
             onRunnerSpace={() => handleRunnerSpace(ev)}
             onFollow={() => onFollow(ev)}
             onSeeResult={() => window.location.href = 'results/'} />
