@@ -1070,6 +1070,32 @@ function TrackTab({ runner, event, onScan, onSos, onDnf, offRoute }) {
   const totalKm = parseFloat(runner.dist) || 29;
   const pct = Math.min(100, (runner.progressKm / totalKm) * 100);
   const finished = runner.checkins.some(c => c.cp === 'finish');
+
+  // Chip time: elapsed since the runner's own start scan, clamped so a
+  // scan before the official gun time can't count as an early start —
+  // same rule used for official results (see effectiveStartMs in
+  // src/live-monitor.jsx and results/index.html). Ticks live so it keeps
+  // counting up while the runner is out on course.
+  const [, setTick] = uS(0);
+  uE(() => { const id = setInterval(() => setTick(t => t + 1), 1000); return () => clearInterval(id); }, []);
+  const combine = window.eventStatus && window.eventStatus.combineDateTime;
+  const checkins = runner.checkins || [];
+  const startCk = checkins.find(c => c.cp === 'start');
+  const rawStartMs = startCk && combine ? combine(event && event.raceDateISO, startCk.t) : null;
+  const distDef = (event && event.distances || []).find(d => d.label === runner.dist);
+  const gunMs = distDef && distDef.cpTimes && combine ? combine(event && event.raceDateISO, distDef.cpTimes.start) : null;
+  const startMs = (rawStartMs != null && gunMs != null && rawStartMs < gunMs) ? gunMs : rawStartMs;
+  const finishCk = checkins.find(c => c.cp === 'finish');
+  const finishMs = finishCk && combine ? combine(event && event.raceDateISO, finishCk.t) : null;
+  const totalMs = (startMs != null && finishMs != null) ? finishMs - startMs : null;
+  const elapsedMs = startMs != null && !finished ? Date.now() - startMs : null;
+  function fmtElapsed(ms) {
+    if (ms == null) return '—';
+    const s = Math.floor(ms / 1000);
+    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), r = s % 60;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}`;
+  }
+
   return (
     <div style={{ flex: 1, overflow: 'auto', padding: '16px 18px 90px', display: 'flex', flexDirection: 'column', gap: 14 }}>
       {runner.dnf && (
@@ -1081,6 +1107,14 @@ function TrackTab({ runner, event, onScan, onSos, onDnf, offRoute }) {
       {offRoute && (
         <div style={{ padding: 14, background: '#fdf0d6', border: '1px solid #f0d9a0', borderRadius: 12, fontSize: 12.5, color: '#7c4a03', lineHeight: 1.6 }}>
           ⚠ ตำแหน่งของคุณอยู่นอกเส้นทางมาสักพักแล้ว — ลองเช็คเส้นทางในแท็บ Route หรือกด SOS ถ้าต้องการความช่วยเหลือ
+        </div>
+      )}
+      {startMs != null && (
+        <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 14, padding: 16, boxShadow: '0 1px 3px rgba(31,42,28,0.08)' }}>
+          <Kicker>{finished ? 'เวลารวม' : 'เวลาที่วิ่งมาแล้ว'}</Kicker>
+          <div style={{ fontFamily: C.mono, fontSize: 30, fontWeight: 800, color: C.text, marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>
+            {fmtElapsed(finished ? totalMs : elapsedMs)}
+          </div>
         </div>
       )}
       <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 14, padding: 16, boxShadow: '0 1px 3px rgba(31,42,28,0.08)' }}>
