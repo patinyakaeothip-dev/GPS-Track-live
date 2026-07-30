@@ -215,6 +215,12 @@
       const [events, setEvents] = useState(() => (window.eventStore ? window.eventStore.loadEvents() : []));
       const [eventId, setEventId] = useState(() => {
         const list = window.eventStore ? window.eventStore.loadEvents() : [];
+        // "See Result" on a specific event's card links here with ?event=<id>
+        // — honor that over the live/first-event default so results for the
+        // event actually clicked open, instead of always landing on
+        // whichever event happens to be live (or first in the list).
+        const requestedId = new URLSearchParams(window.location.search).get('event');
+        if (requestedId && list.some(e => e.id === requestedId)) return requestedId;
         const live = list.find(e => window.eventStatus.computeStatus(e) === 'live');
         return (live || list[0] || {}).id || null;
       });

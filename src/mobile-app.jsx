@@ -461,7 +461,7 @@ function EventPickerScreen({ user, session, onOpenApp, onFollow, onProfile }) {
             isRegistered={registeredEventIds.has(ev.id)}
             onRunnerSpace={() => handleRunnerSpace(ev)}
             onFollow={() => onFollow(ev)}
-            onSeeResult={() => window.location.href = 'results/'} />
+            onSeeResult={() => window.location.href = `results/?event=${encodeURIComponent(ev.id)}`} />
         ))}
         {filtered.length === 0 && <div style={{ textAlign: 'center', color: C.muted, fontSize: 13, padding: 30 }}>ไม่มีงานในหมวดนี้</div>}
       </div>
