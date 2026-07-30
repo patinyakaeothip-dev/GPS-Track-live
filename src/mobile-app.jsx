@@ -55,7 +55,7 @@ function saveScreen(screen) {
 // syncProfileToCloud/pullProfileFromCloud below) so the same account sees
 // the same profile everywhere, with this local copy as the offline fallback.
 const LS_PROFILE_KEY = 'trt.mobile.profile';
-const PROFILE_FIELDS = ['nickname', 'gender', 'phone', 'emgName', 'emgPhone', 'bloodType', 'medical', 'profileCompleted', 'avatarPhoto'];
+const PROFILE_FIELDS = ['nickname', 'gender', 'phone', 'emgName', 'emgPhone', 'emgName2', 'emgPhone2', 'bloodType', 'medical', 'profileCompleted', 'avatarPhoto'];
 function loadProfile() {
   try { return JSON.parse(localStorage.getItem(LS_PROFILE_KEY)) || null; } catch (_) { return null; }
 }
@@ -1836,10 +1836,10 @@ function cpCheckinLabel(cp) {
 // write promise might just hang) so the runner isn't left staring at a
 // spinner with no path forward.
 const SOS_SEND_TIMEOUT_MS = 8000;
-function SosScreen({ hotline, onCancel, onSent, onSend }) {
+function SosScreen({ hotlines, onCancel, onSent, onSend }) {
   const [reason, setReason] = uS(null);
   const [phase, setPhase] = uS('idle'); // idle | sending | sent | failed
-  const tel = (hotline || '').replace(/[^\d+]/g, '');
+  const nums = (hotlines || []).filter(Boolean);
 
   async function submit() {
     setPhase('sending');
@@ -1867,8 +1867,12 @@ function SosScreen({ hotline, onCancel, onSent, onSend }) {
         <div style={{ fontSize: 40 }}>🆘</div>
         <div style={{ fontSize: 19, fontWeight: 800, color: '#9b1c10' }}>ส่งสัญญาณขอความช่วยเหลือแล้ว</div>
         <div style={{ fontSize: 13, color: C.text }}>ทีมงานเห็นตำแหน่งล่าสุดของคุณใน Live Monitor แล้ว</div>
-        {tel
-          ? <Btn variant="danger" onClick={() => window.location.href = `tel:${tel}`} style={{ marginTop: 10 }}>📞 โทรสายด่วนทีมกู้ภัย {hotline}</Btn>
+        {nums.length
+          ? <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%', marginTop: 10 }}>
+              {nums.map((n, i) => (
+                <Btn key={i} variant="danger" onClick={() => window.location.href = `tel:${n.replace(/[^\d+]/g, '')}`}>📞 โทรสายด่วนทีมกู้ภัย {nums.length > 1 ? `#${i + 1} ` : ''}{n}</Btn>
+              ))}
+            </div>
           : <div style={{ fontFamily: C.mono, fontSize: 11, color: C.muted, marginTop: 10 }}>งานนี้ยังไม่ได้ตั้งเบอร์สายด่วนไว้ในระบบ</div>}
         <Btn variant="ghost" onClick={onSent}>กลับสู่หน้าติดตาม</Btn>
       </div>
@@ -1880,7 +1884,13 @@ function SosScreen({ hotline, onCancel, onSent, onSend }) {
         <div style={{ fontSize: 40 }}>⚠️</div>
         <div style={{ fontSize: 19, fontWeight: 800, color: '#9b1c10' }}>ไม่แน่ใจว่าสัญญาณส่งถึงทีมงานหรือไม่</div>
         <div style={{ fontSize: 13, color: C.text }}>สัญญาณมือถืออาจขาดหาย · โปรดโทรสายด่วนโดยตรงทันที</div>
-        {tel && <Btn variant="danger" onClick={() => window.location.href = `tel:${tel}`} style={{ marginTop: 10 }}>📞 โทรสายด่วนทีมกู้ภัย {hotline}</Btn>}
+        {nums.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%', marginTop: 10 }}>
+            {nums.map((n, i) => (
+              <Btn key={i} variant="danger" onClick={() => window.location.href = `tel:${n.replace(/[^\d+]/g, '')}`}>📞 โทรสายด่วนทีมกู้ภัย {nums.length > 1 ? `#${i + 1} ` : ''}{n}</Btn>
+            ))}
+          </div>
+        )}
         <Btn variant="white" onClick={submit}>↻ ลองส่งสัญญาณอีกครั้ง</Btn>
         <Btn variant="ghost" onClick={onSent}>กลับสู่หน้าติดตาม</Btn>
       </div>
@@ -1952,6 +1962,12 @@ function ProfileScreen({ user, onLogout, onClose, onSave, onboard }) {
   const [email, setEmail] = uS(user.email || '');
   const [emgName, setEmgName] = uS(user.emgName || '');
   const [emgPhone, setEmgPhone] = uS(user.emgPhone || '');
+  // Second contact is optional — the first is the only one required, same
+  // as before. A single unreachable emergency contact was a real gap for
+  // something this safety-critical, so a backup is worth having but
+  // shouldn't block onboarding if the runner only has one to give.
+  const [emgName2, setEmgName2] = uS(user.emgName2 || '');
+  const [emgPhone2, setEmgPhone2] = uS(user.emgPhone2 || '');
   const [bloodType, setBloodType] = uS(user.bloodType || '');
   const [medical, setMedical] = uS(user.medical || '');
   const [avatarPhoto, setAvatarPhoto] = uS(user.avatarPhoto || '');
@@ -1959,7 +1975,7 @@ function ProfileScreen({ user, onLogout, onClose, onSave, onboard }) {
   const canSubmit = !onboard || (nickname.trim() && phone.trim() && emgName.trim() && emgPhone.trim());
 
   function save() {
-    onSave({ ...user, nickname, gender, phone, email, emgName, emgPhone, bloodType, medical, avatarPhoto });
+    onSave({ ...user, nickname, gender, phone, email, emgName, emgPhone, emgName2, emgPhone2, bloodType, medical, avatarPhoto });
     if (onboard) return;
     setSaved(true);
     setTimeout(() => setSaved(false), 1800);
@@ -2005,6 +2021,8 @@ function ProfileScreen({ user, onLogout, onClose, onSave, onboard }) {
         <Field label="อีเมล"><input value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" style={{ ...fieldStyle(), fontFamily: C.mono }}/></Field>
         <Field label="ผู้ติดต่อฉุกเฉิน · ชื่อ" required={onboard}><input value={emgName} onChange={e => setEmgName(e.target.value)} placeholder="ชื่อคนใกล้ตัว" style={fieldStyle()}/></Field>
         <Field label="ผู้ติดต่อฉุกเฉิน · เบอร์" required={onboard}><input value={emgPhone} onChange={e => setEmgPhone(e.target.value)} placeholder="08X-XXX-XXXX" style={{ ...fieldStyle(), fontFamily: C.mono }}/></Field>
+        <Field label="ผู้ติดต่อฉุกเฉิน คนที่ 2 · ชื่อ (ถ้ามี)"><input value={emgName2} onChange={e => setEmgName2(e.target.value)} placeholder="เผื่อคนแรกติดต่อไม่ได้" style={fieldStyle()}/></Field>
+        <Field label="ผู้ติดต่อฉุกเฉิน คนที่ 2 · เบอร์ (ถ้ามี)"><input value={emgPhone2} onChange={e => setEmgPhone2(e.target.value)} placeholder="08X-XXX-XXXX" style={{ ...fieldStyle(), fontFamily: C.mono }}/></Field>
         <Field label="กรุ๊ปเลือด">
           <select value={bloodType} onChange={e => setBloodType(e.target.value)} style={fieldStyle()}>
             <option value="">— ไม่ระบุ —</option>
@@ -2389,6 +2407,7 @@ function MobileApp() {
         const rosterEntry = window.runnerStore.registerRunner(pendingEvent, {
           distance: data.dist, nickname: data.nick, phone: data.phone, gender: data.gender,
           emgName: session.user.emgName || '', emgPhone: data.emg || session.user.emgPhone || '',
+          emgName2: session.user.emgName2 || '', emgPhone2: session.user.emgPhone2 || '',
           bloodType: session.user.bloodType || '', medical: session.user.medical || '',
           email: session.user.email || '', uid: session.user.uid,
         });
@@ -2485,7 +2504,11 @@ function MobileApp() {
         onSave={updateUser}
         onLogout={() => { if (window.fb) window.fb.signOutUser().catch(() => {}); clearSession(); setSession(null); setModal(null); setScreen('login'); }}/></Overlay>}
       {modal === 'sos' && <Overlay><SosScreen
-        hotline={session.runner && (getEvents().find(e => e.id === session.runner.eventId) || {}).hotline}
+        hotlines={(() => {
+          const ev = session.runner && getEvents().find(e => e.id === session.runner.eventId);
+          if (!ev) return [];
+          return (ev.hotlines && ev.hotlines.length) ? ev.hotlines : (ev.hotline ? [ev.hotline] : []);
+        })()}
         onCancel={() => setModal(null)} onSent={() => setModal(null)}
         onSend={(reason) => {
           if (session.runner && session.runner.rosterId && window.runnerStore) {

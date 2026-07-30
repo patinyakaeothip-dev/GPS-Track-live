@@ -70,6 +70,8 @@
       gender: data.gender || '',
       emgName: data.emgName || '',
       emgPhone: data.emgPhone || '',
+      emgName2: data.emgName2 || '',
+      emgPhone2: data.emgPhone2 || '',
       bloodType: data.bloodType || '',
       email: data.email || '',
       medical: data.medical || '',

@@ -121,8 +121,8 @@ function RunnerManagerApp({ adminEmail, onLogout }) {
     editRunner(r, { dnf: !r.dnf });
   }
   function exportCsv() {
-    const rows = [['bib', 'ชื่อ', 'เบอร์โทร', 'อีเมล', 'เพศ', 'ระยะ', 'เช็คอิน', 'DNF', 'ผู้ติดต่อฉุกเฉิน', 'เบอร์ฉุกเฉิน', 'กรุ๊ปเลือด', 'โรคประจำตัว']];
-    filtered.forEach(r => rows.push([r.bib, r.nickname, r.phone, r.email || '', r.gender === 'm' ? 'ชาย' : r.gender === 'f' ? 'หญิง' : '', r.distance, (r.checkins || []).length, r.dnf ? 'DNF' : '', r.emgName || '', r.emgPhone || '', r.bloodType || '', r.medical || '']));
+    const rows = [['bib', 'ชื่อ', 'เบอร์โทร', 'อีเมล', 'เพศ', 'ระยะ', 'เช็คอิน', 'DNF', 'ผู้ติดต่อฉุกเฉิน', 'เบอร์ฉุกเฉิน', 'ผู้ติดต่อฉุกเฉิน 2', 'เบอร์ฉุกเฉิน 2', 'กรุ๊ปเลือด', 'โรคประจำตัว']];
+    filtered.forEach(r => rows.push([r.bib, r.nickname, r.phone, r.email || '', r.gender === 'm' ? 'ชาย' : r.gender === 'f' ? 'หญิง' : '', r.distance, (r.checkins || []).length, r.dnf ? 'DNF' : '', r.emgName || '', r.emgPhone || '', r.emgName2 || '', r.emgPhone2 || '', r.bloodType || '', r.medical || '']));
     downloadCsv(`runners-${selectedEvent ? selectedEvent.id : 'export'}.csv`, rows);
   }
   function renumberAll() {
@@ -252,6 +252,15 @@ function RunnerManagerApp({ adminEmail, onLogout }) {
                   <div style={{ fontFamily: R_MONO, fontSize: 9.5, color: '#9b1c10', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 }}>ผู้ติดต่อฉุกเฉิน · เบอร์</div>
                   <input value={r.emgPhone || ''} onChange={e => editRunner(r, { emgPhone: e.target.value })} placeholder="08X-XXX-XXXX" style={{ ...inputStyle, fontFamily: R_MONO }}/>
                   {r.emgPhone && <a href={`tel:${r.emgPhone.replace(/[^\d+]/g, '')}`} style={{ display: 'block', marginTop: 3, color: '#9b1c10', fontFamily: R_MONO, fontSize: 10.5, fontWeight: 700 }}>📞 โทรออก</a>}
+                </div>
+                <div style={{ width: 160 }}>
+                  <div style={{ fontFamily: R_MONO, fontSize: 9.5, color: '#9b1c10', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 }}>ผู้ติดต่อฉุกเฉิน คนที่ 2 · ชื่อ</div>
+                  <input value={r.emgName2 || ''} onChange={e => editRunner(r, { emgName2: e.target.value })} placeholder="ชื่อ (ถ้ามี)" style={inputStyle}/>
+                </div>
+                <div style={{ width: 140 }}>
+                  <div style={{ fontFamily: R_MONO, fontSize: 9.5, color: '#9b1c10', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 }}>ผู้ติดต่อฉุกเฉิน คนที่ 2 · เบอร์</div>
+                  <input value={r.emgPhone2 || ''} onChange={e => editRunner(r, { emgPhone2: e.target.value })} placeholder="08X-XXX-XXXX (ถ้ามี)" style={{ ...inputStyle, fontFamily: R_MONO }}/>
+                  {r.emgPhone2 && <a href={`tel:${r.emgPhone2.replace(/[^\d+]/g, '')}`} style={{ display: 'block', marginTop: 3, color: '#9b1c10', fontFamily: R_MONO, fontSize: 10.5, fontWeight: 700 }}>📞 โทรออก</a>}
                 </div>
                 <div style={{ width: 90 }}>
                   <div style={{ fontFamily: R_MONO, fontSize: 9.5, color: '#9b1c10', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 }}>กรุ๊ปเลือด</div>
