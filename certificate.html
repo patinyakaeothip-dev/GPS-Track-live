@@ -197,6 +197,15 @@
     <a href="/admin/">🔧 Admin</a>
   </nav>
   <script>if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) document.currentScript.previousElementSibling.style.display = "none";</script>
+  <!-- Loaded so a certificate can be opened via ?event=<id>&bib=<bib> (e.g.
+       linked from the Results page) and built from the synced roster —
+       not just from this device's own localStorage, which only ever had
+       data for whoever actually finished on this exact browser/app. -->
+  <script src="/src/firebase-config.js"></script>
+  <script type="module" src="/src/firebase.js"></script>
+  <script src="/src/event-status.js"></script>
+  <script src="/src/event-store.js"></script>
+  <script src="/src/runner-store.js"></script>
   <div class="toolbar no-print">
     <span>📜 ใบประกาศ · กด Print เพื่อ Save as PDF</span>
     <button onclick="window.print()">🖨 Print / Save as PDF</button>
@@ -315,10 +324,59 @@
       }
     }
 
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      render(raw ? JSON.parse(raw) : null);
-    } catch (e) { console.error('[trt] cert load error', e); }
+    // Opened with ?event=<id>&bib=<bib> (e.g. from a "🏅 ใบประกาศ" link on
+    // the Results page) — build the certificate straight from the synced
+    // roster instead of this device's own localStorage, so it works from
+    // any device, not just whichever one the runner actually finished on.
+    // Rank/time follow the same "gun time, arrival order" convention
+    // Results itself uses (see results/index.html).
+    function buildDataFromRoster(eventId, bib) {
+      if (!window.eventStore || !window.runnerStore || !window.eventStatus) return null;
+      const ev = (window.eventStore.loadEvents() || []).find(e => e.id === eventId);
+      const runners = window.runnerStore.listRunners(eventId) || [];
+      const r = runners.find(x => x.bib === bib);
+      if (!ev || !r) return null;
+      const combine = window.eventStatus.combineDateTime;
+      function checkinMs(hhmm) { const d = combine(ev.raceDateISO, hhmm); return d ? d.getTime() : null; }
+      const finishCk = (r.checkins || []).find(c => c.cp === 'finish');
+      if (!finishCk) return null;
+      const finishMs = checkinMs(finishCk.t);
+      const distDef = (ev.distances || []).find(d => d.label === r.distance);
+      const gunMs = distDef && distDef.cpTimes ? checkinMs(distDef.cpTimes.start) : null;
+      const totalMs = (gunMs != null && finishMs != null) ? finishMs - gunMs : null;
+      const finishers = runners
+        .filter(x => x.distance === r.distance && !x.dnf && (x.checkins || []).some(c => c.cp === 'finish'))
+        .map(x => ({ bib: x.bib, finishMs: checkinMs((x.checkins.find(c => c.cp === 'finish') || {}).t) }))
+        .sort((a, b) => (a.finishMs || 0) - (b.finishMs || 0));
+      const rankIdx = finishers.findIndex(x => x.bib === bib);
+      return {
+        runner: { name: r.nickname, distance_current: r.distance, distance_original: r.distance },
+        total_time_ms: totalMs,
+        rank: rankIdx >= 0 ? rankIdx + 1 : null,
+        finish_at: finishMs,
+        distance_km: parseInt(r.distance, 10) || 0,
+      };
+    }
+
+    const qs = new URLSearchParams(window.location.search);
+    const qEventId = qs.get('event');
+    const qBib = qs.get('bib');
+
+    function loadAndRender() {
+      try {
+        if (qEventId && qBib) {
+          const fromRoster = buildDataFromRoster(qEventId, qBib);
+          if (fromRoster) { render(fromRoster); return; }
+        }
+        const raw = localStorage.getItem(STORAGE_KEY);
+        render(raw ? JSON.parse(raw) : null);
+      } catch (e) { console.error('[trt] cert load error', e); }
+    }
+    loadAndRender();
+    // Roster sync from Firestore is asynchronous — a fresh device/browser
+    // that's never seen this event's runners before won't have anything to
+    // build from on the first attempt. Re-render once real data lands.
+    if (qEventId && qBib) window.addEventListener('trt:runners-updated', loadAndRender);
 
     // Optional runner photo (e.g. a finish-line selfie) to show instead of
     // the default mountain silhouette background — stored as a data URL in

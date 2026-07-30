@@ -398,7 +398,7 @@
                 color: MUTED }}>ไม่พบนักวิ่งตามฟิลเตอร์นี้</div>
             )}
             {filtered.map((it, i) => (
-              <ResultRow key={it.id || i} it={it} index={i} now={now}/>
+              <ResultRow key={it.id || i} it={it} index={i} now={now} eventId={eventId}/>
             ))}
           </div>
 
@@ -439,7 +439,7 @@
       );
     }
 
-    function ResultRow({ it, index, now }) {
+    function ResultRow({ it, index, now, eventId }) {
       const isFin = it.status === 'finished';
       const isDnf = it.status === 'dnf';
       const isNotStarted = it.status === 'not_started';
@@ -536,6 +536,13 @@
                 {paceStr && <div style={{ fontFamily: MONO, fontSize: 10, color: MUTED }}>
                   {paceStr}
                 </div>}
+                {it.bib && (
+                  <a href={`/certificate.html?event=${encodeURIComponent(eventId)}&bib=${encodeURIComponent(it.bib)}`}
+                    style={{ display: 'inline-block', marginTop: 4, fontFamily: MONO, fontSize: 9.5, fontWeight: 700,
+                      color: BRAND_DK, textDecoration: 'none', border: `1px solid ${BRAND_DK}`, borderRadius: 999, padding: '2px 8px' }}>
+                    🏅 ใบประกาศ
+                  </a>
+                )}
               </>
             ) : !isNotStarted && !isDns && it.start_at ? (
               <>
