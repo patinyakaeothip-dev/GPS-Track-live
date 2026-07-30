@@ -22,7 +22,21 @@ const BackgroundGeolocation = registerPlugin('BackgroundGeolocation');
 let watcherId = null;
 let onPing = null;
 let retryTimerId = null;
+let heartbeatTimerId = null;
+let lastFix = null; // { lat, lon, accuracy, speed } — most recent fix regardless of whether it was far enough to trigger a ping
+let lastPingAt = 0;
+let heartbeatEventId = null;
+let heartbeatBib = null;
 
+// The background-geolocation plugin only ever fires on ~50m of movement
+// (distanceFilter) — it has no time-based option of its own. That's fine
+// while running, but leaves the map dot sitting motionless for a long
+// stretch whenever a runner walks slowly, rests at a checkpoint, or is
+// stuck in a queue — indistinguishable on Live Monitor from GPS having
+// actually died. A heartbeat re-sends the last known fix on a timer so
+// there's always a recent ping to show/measure staleness against, even
+// with zero movement.
+const HEARTBEAT_MS = 30000;
 function isNative() {
   return Capacitor.isNativePlatform();
 }
@@ -65,6 +79,10 @@ async function flushPending() {
 // Spectators only ever need the *latest* position, so this stays a single
 // cheap doc per runner regardless of race duration.
 async function pushPing(eventId, bib, lat, lon, extra) {
+  lastFix = { lat, lon, ...extra };
+  lastPingAt = Date.now();
+  heartbeatEventId = eventId;
+  heartbeatBib = bib;
   const ping = { eventId, bib, lat, lon, at: Date.now(), ...extra };
   if (onPing) onPing(ping);
   if (window.fb) {
@@ -102,6 +120,10 @@ async function start(eventId, bib, onPingCb) {
   if (watcherId != null) return;
   retryTimerId = setInterval(flushPending, 15000);
   window.addEventListener('online', flushPending);
+  heartbeatTimerId = setInterval(() => {
+    if (!lastFix || Date.now() - lastPingAt < HEARTBEAT_MS) return;
+    pushPing(heartbeatEventId, heartbeatBib, lastFix.lat, lastFix.lon, { accuracy: lastFix.accuracy, speed: lastFix.speed });
+  }, HEARTBEAT_MS);
 
   if (isNative()) {
     watcherId = await BackgroundGeolocation.addWatcher(
@@ -132,7 +154,10 @@ async function start(eventId, bib, onPingCb) {
 
 async function stop() {
   if (retryTimerId) { clearInterval(retryTimerId); retryTimerId = null; }
+  if (heartbeatTimerId) { clearInterval(heartbeatTimerId); heartbeatTimerId = null; }
   window.removeEventListener('online', flushPending);
+  lastFix = null;
+  lastPingAt = 0;
   if (watcherId == null) return;
   if (isNative()) await BackgroundGeolocation.removeWatcher({ id: watcherId });
   else navigator.geolocation.clearWatch(watcherId);
