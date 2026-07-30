@@ -639,7 +639,7 @@ function LiveMonitorApp() {
         ele: p.ele, ago: lastAtMs != null ? fmtAgo((Date.now() - lastAtMs) / 1000) : '—',
         elapsedMs, endMs, checkinTimes,
         sos: !!r.sos, sosReason: r.sosReason || '',
-        emgName: r.emgName || '', emgPhone: r.emgPhone || '', bloodType: r.bloodType || '', medical: r.medical || '',
+        emgName: r.emgName || '', emgPhone: r.emgPhone || '', emgName2: r.emgName2 || '', emgPhone2: r.emgPhone2 || '', bloodType: r.bloodType || '', medical: r.medical || '',
         status, statusLabel: meta.label, statusBg: meta.bg, statusFg: meta.fg, physKm };
     });
   }, [ready, runners, coursePaths, overviewLabel, viewLabel, distColor, selectedEvent, livePosByBib, offRouteTick]);
@@ -957,6 +957,9 @@ function LiveMonitorApp() {
                       <div style={{ padding: '9px 12px', borderRadius: 10, background: '#fafaf8', border: '1px solid #ece7da', marginBottom: 10, fontSize: 12 }}>
                         <div style={{ fontFamily: M_MONO, fontSize: 9.5, color: '#5d6b59', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>ข้อมูลฉุกเฉิน</div>
                         <div>ผู้ติดต่อ: {selected.emgName || '—'}{selected.emgPhone && <> · <a href={`tel:${selected.emgPhone.replace(/[^\d+]/g, '')}`} style={{ color: M_BRAND, fontFamily: M_MONO, fontWeight: 700 }}>📞 {selected.emgPhone}</a></>}</div>
+                        {(selected.emgName2 || selected.emgPhone2) && (
+                          <div style={{ marginTop: 2 }}>ผู้ติดต่อ (คนที่ 2): {selected.emgName2 || '—'}{selected.emgPhone2 && <> · <a href={`tel:${selected.emgPhone2.replace(/[^\d+]/g, '')}`} style={{ color: M_BRAND, fontFamily: M_MONO, fontWeight: 700 }}>📞 {selected.emgPhone2}</a></>}</div>
+                        )}
                         <div style={{ marginTop: 2 }}>กรุ๊ปเลือด: <span style={{ fontFamily: M_MONO, fontWeight: 700 }}>{selected.bloodType || 'ไม่ได้ระบุไว้'}</span></div>
                         <div style={{ marginTop: 2 }}>โรคประจำตัว: {selected.medical || 'ไม่ได้ระบุไว้'}</div>
                       </div>

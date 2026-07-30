@@ -266,7 +266,7 @@ function blankEvent() {
   const checkpoints = DEFAULT_CHECKPOINTS.map(cp => ({ ...cp }));
   return {
     id: window.eventStore.newEventId(),
-    name: '', date: '', raceDateISO: '', regClose: '', regCloseISO: '', status: 'upcoming', closed: false, hotline: '',
+    name: '', date: '', raceDateISO: '', regClose: '', regCloseISO: '', status: 'upcoming', closed: false, hotlines: [''],
     gpxFiles: {},
     checkpoints,
     distances: [
@@ -292,11 +292,19 @@ function EventForm({ initial, onCancel, onSave, onSaveInPlace, onDelete }) {
       // were linked, or edited independently).
       return { capacity: '', registered: '0', ...d, id: d.id || `d${i}-${d.label}`, cpTimes: { ...cpTimes, finish: addMinutesToTime(cpTimes.start, d.cutoff) || cpTimes.finish } };
     });
-    return { ...blankEvent(), ...initial, checkpoints, distances };
+    // Older events stored a single `hotline` string — migrate it into the
+    // new `hotlines` array (one runner not getting through on the only
+    // number saved was a real gap) so existing data keeps working instead
+    // of silently reverting to a blank list.
+    const hotlines = (initial.hotlines && initial.hotlines.length) ? initial.hotlines : (initial.hotline ? [initial.hotline] : ['']);
+    return { ...blankEvent(), ...initial, checkpoints, distances, hotlines };
   });
   const [toast, setToast] = aS(null);
 
   function set(patch) { setEv(e => ({ ...e, ...patch })); }
+  function updateHotline(i, val) { setEv(e => ({ ...e, hotlines: e.hotlines.map((h, idx) => idx === i ? val : h) })); }
+  function addHotline() { setEv(e => ({ ...e, hotlines: [...e.hotlines, ''] })); }
+  function removeHotline(i) { setEv(e => ({ ...e, hotlines: e.hotlines.filter((_, idx) => idx !== i) })); }
   function updateDist(id, patch) { setEv(e => ({ ...e, distances: e.distances.map(d => d.id === id ? { ...d, ...patch } : d) })); }
   function updateDistCp(id, key, val) { setEv(e => ({ ...e, distances: e.distances.map(d => d.id === id ? { ...d, cpTimes: { ...d.cpTimes, [key]: val } } : d) })); }
   // Finish cutoff (clock time) is derived from start + cut-off (minutes) —
@@ -381,7 +389,7 @@ function EventForm({ initial, onCancel, onSave, onSaveInPlace, onDelete }) {
   }
   function save() {
     if (!ev.name.trim()) { setToast('⚠ กรอกชื่องานแข่งก่อน'); setTimeout(() => setToast(null), 2000); return; }
-    const result = onSave({ ...ev, status: computeStatus(ev), closed: computeClosed(ev) });
+    const result = onSave({ ...ev, status: computeStatus(ev), closed: computeClosed(ev), hotlines: ev.hotlines.filter(h => h.trim()) });
     if (result && !result.localOk) saveFailedToast();
   }
   // Saves everything immediately without leaving the form — lets admin
@@ -390,7 +398,7 @@ function EventForm({ initial, onCancel, onSave, onSaveInPlace, onDelete }) {
   // all-or-nothing save at the very bottom of the page.
   function saveDistance(label) {
     if (!ev.name.trim()) { setToast('⚠ กรอกชื่องานแข่งก่อน'); setTimeout(() => setToast(null), 2000); return; }
-    const result = onSaveInPlace({ ...ev, status: computeStatus(ev), closed: computeClosed(ev) });
+    const result = onSaveInPlace({ ...ev, status: computeStatus(ev), closed: computeClosed(ev), hotlines: ev.hotlines.filter(h => h.trim()) });
     if (result && !result.localOk) { saveFailedToast(); return; }
     setToast(`✓ บันทึกระยะ ${label} แล้ว`);
     setTimeout(() => setToast(null), 1600);
@@ -477,8 +485,18 @@ function EventForm({ initial, onCancel, onSave, onSaveInPlace, onDelete }) {
         </div>
 
         <div style={{ marginBottom: 18 }}>
-          <Field label="เบอร์สายด่วนทีมกู้ภัย (ใช้ในปุ่ม SOS ของนักวิ่ง)">
-            <input value={ev.hotline} onChange={e => set({ hotline: e.target.value })} placeholder="เช่น 081-234-5678" style={inputStyle({ width: 280, fontFamily: A_MONO })}/>
+          <Field label="เบอร์สายด่วนทีมกู้ภัย (ใช้ในปุ่ม SOS ของนักวิ่ง) — ใส่ได้หลายเบอร์ เผื่อเบอร์แรกไม่รับ">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {ev.hotlines.map((h, i) => (
+                <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <input value={h} onChange={e => updateHotline(i, e.target.value)} placeholder="เช่น 081-234-5678" style={inputStyle({ width: 280, fontFamily: A_MONO })}/>
+                  {ev.hotlines.length > 1 && (
+                    <button onClick={() => removeHotline(i)} style={{ background: 'none', border: 'none', color: '#b91c1c', fontSize: 16, cursor: 'pointer', padding: '2px 4px' }}>×</button>
+                  )}
+                </div>
+              ))}
+              <button onClick={addHotline} style={{ alignSelf: 'flex-start', padding: '6px 12px', background: 'transparent', border: '1px dashed #bdb6a4', borderRadius: 8, fontFamily: A_MONO, fontSize: 10.5, fontWeight: 600, color: '#1f2a1c', cursor: 'pointer' }}>+ เพิ่มเบอร์</button>
+            </div>
           </Field>
         </div>
 
