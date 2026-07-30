@@ -637,26 +637,34 @@ function LiveMonitorApp() {
       seen.add(d.bib);
       const dimmed = focusBib != null && focusBib !== d.bib;
       let m = markersRef.current.get(d.bib);
+      // Overlapping dots (several runners near the same physical point)
+      // used to bury whichever one happened to render first — clicking a
+      // name/bib to select a runner now also pins their label open and
+      // raises their dot above the others at that spot, same way focus
+      // mode already dims the rest.
+      const isSelected = d.bib === selectedBib;
+      const permanent = showLabels || isSelected;
       if (!m) {
         m = L.circleMarker([d.lat, d.lon], { radius: 7, color: '#fff', weight: 2, fillColor: d.color, fillOpacity: dimmed ? 0.15 : 1, opacity: dimmed ? 0.15 : 1 }).addTo(map);
-        m.bindTooltip(`#${d.bib} ${d.name}`, { direction: 'top', offset: [0, -8], permanent: showLabels });
+        m.bindTooltip(`#${d.bib} ${d.name}`, { direction: 'top', offset: [0, -8], permanent });
         m.on('click', () => { setSelectedBib(d.bib); setFocusBib(null); });
         markersRef.current.set(d.bib, m);
       } else {
         m.setLatLng([d.lat, d.lon]);
         m.setStyle({ fillColor: d.color, fillOpacity: dimmed ? 0.15 : 1, opacity: dimmed ? 0.15 : 1 });
         // Leaflet tooltips can't flip permanent/hover mode in place —
-        // rebind whenever the "show all labels" toggle changes so every
-        // dot's name stays pinned open (or goes back to hover-only)
-        // together, not just newly-created markers.
+        // rebind whenever the "show all labels"/selected state changes so
+        // the label stays pinned open (or goes back to hover-only)
+        // instead of just newly-created markers.
         m.unbindTooltip();
-        m.bindTooltip(`#${d.bib} ${d.name}`, { direction: 'top', offset: [0, -8], permanent: showLabels });
+        m.bindTooltip(`#${d.bib} ${d.name}`, { direction: 'top', offset: [0, -8], permanent });
       }
+      if (isSelected) m.bringToFront();
     });
     markersRef.current.forEach((m, bib) => {
       if (!seen.has(bib)) { map.removeLayer(m); markersRef.current.delete(bib); }
     });
-  }, [mapDisplays, focusBib, showLabels]);
+  }, [mapDisplays, focusBib, showLabels, selectedBib]);
 
   const byBib = mM(() => Object.fromEntries(displays.map(d => [d.bib, d])), [displays]);
   const selected = selectedBib ? byBib[selectedBib] : null;
