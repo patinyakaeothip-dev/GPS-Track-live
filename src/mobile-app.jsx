@@ -1562,32 +1562,32 @@ function RankingTab({ snap, eventId, event }) {
   // Finished runners must be ranked by actual race time, not by progressKm
   // — every finisher sits at the same progressKm (the full distance), so
   // sorting on that alone left finish order essentially arbitrary (roster
-  // order) instead of who was actually fastest. Elapsed time uses the same
-  // gun-time-clamped chip time as everywhere else results are computed
-  // (see effectiveStartMs in src/live-monitor.jsx / results/index.html) so
-  // an early start scan can't outrank someone who started on time.
+  // order) instead of who was actually fastest. Placement is by arrival
+  // order (finishMs) and the displayed time is measured against the
+  // official gun time — same policy Results uses (see results/index.html,
+  // and the RD's explicit call that arrival order decides placement, not
+  // each runner's own chip time). This used to rank by gun-clamped chip
+  // elapsed time instead, which could disagree with Results' order.
   const rows = uM(() => {
     const combine = window.eventStatus && window.eventStatus.combineDateTime;
     const distDef = (event && event.distances || []).find(d => d.label === dist);
     const gunMs = distDef && distDef.cpTimes && combine ? combine(event.raceDateISO, distDef.cpTimes.start) : null;
-    function elapsedMsFor(r) {
-      const startCk = (r.checkins || []).find(c => c.cp === 'start');
+    function raceTimesFor(r) {
       const finishCk = (r.checkins || []).find(c => c.cp === 'finish');
-      if (!startCk || !finishCk || !combine || !event) return Infinity;
-      const rawStartMs = combine(event.raceDateISO, startCk.t);
+      if (!finishCk || !combine || !event) return { finishMs: null, gunElapsedMs: null };
       const finishMs = combine(event.raceDateISO, finishCk.t);
-      if (rawStartMs == null || finishMs == null) return Infinity;
-      const startMs = (gunMs != null && rawStartMs < gunMs) ? gunMs : rawStartMs;
-      return finishMs - startMs;
+      const gunElapsedMs = (gunMs != null && finishMs != null) ? finishMs - gunMs : null;
+      return { finishMs, gunElapsedMs };
     }
     if (realRunners) {
       return realRunners
         .filter(r => r.distance === dist && !r.dnf && (gender === 'all' || r.gender === gender))
         .map(r => {
           const finished = (r.checkins || []).some(c => c.cp === 'finish');
-          return { bib: r.bib, name: r.nickname, progressKm: r.progressKm, finished, elapsedMs: finished ? elapsedMsFor(r) : null };
+          const { finishMs, gunElapsedMs } = finished ? raceTimesFor(r) : { finishMs: null, gunElapsedMs: null };
+          return { bib: r.bib, name: r.nickname, progressKm: r.progressKm, finished, finishMs, elapsedMs: gunElapsedMs };
         })
-        .sort((a, b) => (a.finished === b.finished ? 0 : a.finished ? -1 : 1) || (a.finished ? a.elapsedMs - b.elapsedMs : b.progressKm - a.progressKm))
+        .sort((a, b) => (a.finished === b.finished ? 0 : a.finished ? -1 : 1) || (a.finished ? (a.finishMs || 0) - (b.finishMs || 0) : b.progressKm - a.progressKm))
         .slice(0, 30);
     }
     if (!snap) return [];
