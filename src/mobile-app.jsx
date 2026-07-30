@@ -1535,7 +1535,12 @@ function RankingTab({ snap, eventId, event }) {
             {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`}
           </span>
           <span style={{ flex: 1, fontSize: 13.5 }}>{r.name}</span>
-          <span style={{ fontFamily: C.mono, fontSize: 11, color: C.muted }}>{r.finished ? fmtElapsed(r.elapsedMs) : `${r.progressKm.toFixed(1)}K`}</span>
+          {r.finished
+            ? <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                <span style={{ fontFamily: C.mono, fontSize: 11, color: C.text, fontWeight: 700 }}>{fmtElapsed(r.elapsedMs)}</span>
+                <span style={{ fontFamily: C.mono, fontSize: 9.5, color: C.muted }}>{r.progressKm.toFixed(1)}K</span>
+              </span>
+            : <span style={{ fontFamily: C.mono, fontSize: 11, color: C.muted }}>{r.progressKm.toFixed(1)}K</span>}
         </div>
       ))}
     </div>
