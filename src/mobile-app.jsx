@@ -55,12 +55,32 @@ function saveScreen(screen) {
 // syncProfileToCloud/pullProfileFromCloud below) so the same account sees
 // the same profile everywhere, with this local copy as the offline fallback.
 const LS_PROFILE_KEY = 'trt.mobile.profile';
-const PROFILE_FIELDS = ['nickname', 'gender', 'phone', 'emgName', 'emgPhone', 'bloodType', 'medical', 'profileCompleted'];
+const PROFILE_FIELDS = ['nickname', 'gender', 'phone', 'emgName', 'emgPhone', 'bloodType', 'medical', 'profileCompleted', 'avatarPhoto'];
 function loadProfile() {
   try { return JSON.parse(localStorage.getItem(LS_PROFILE_KEY)) || null; } catch (_) { return null; }
 }
 function saveProfile(p) {
   try { localStorage.setItem(LS_PROFILE_KEY, JSON.stringify(p)); } catch (_) {}
+}
+// Downscale + compress to a small square JPEG before it ever touches
+// state/localStorage/Firestore — a raw phone-camera photo can be several
+// MB, well past Firestore's 1MiB document limit on its own, and there's no
+// reason a profile avatar needs to be more than a couple hundred pixels.
+function resizeImageFile(file, maxSize, cb) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    const img = new Image();
+    img.onload = () => {
+      const side = Math.min(img.width, img.height);
+      const canvas = document.createElement('canvas');
+      canvas.width = maxSize; canvas.height = maxSize;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, maxSize, maxSize);
+      cb(canvas.toDataURL('image/jpeg', 0.8));
+    };
+    img.src = reader.result;
+  };
+  reader.readAsDataURL(file);
 }
 function syncProfileToCloud(uid, p) {
   if (!window.fb || !uid) return;
@@ -470,7 +490,7 @@ function EventPickerScreen({ user, session, onOpenApp, onFollow, onProfile }) {
           <Kicker>GPS Trail Tracker</Kicker>
           <div style={{ fontSize: 21, fontWeight: 800, marginTop: 4, color: C.text }}>เลือกงานแข่งของคุณ</div>
         </div>
-        <PersonIcon size={38} onClick={onProfile}/>
+        <PersonIcon size={38} onClick={onProfile} photo={user.avatarPhoto}/>
       </div>
       <div style={{ display: 'flex', gap: 6, background: '#f4f1e8', borderRadius: 12, margin: '0 18px', padding: 4 }}>
         {[['past', 'ผ่านมาแล้ว'], ['live', 'กำลังแข่ง'], ['upcoming', 'กำลังจะมาถึง']].map(([k, l]) => (
@@ -717,8 +737,16 @@ function AppleLogo({ size = 18 }) {
     </svg>
   );
 }
-function PersonIcon({ size = 38, onClick }) {
+function PersonIcon({ size = 38, onClick, photo }) {
   const iconSize = Math.round(size * 0.52);
+  if (photo) {
+    return (
+      <div onClick={onClick} style={{ width: size, height: size, borderRadius: 999, overflow: 'hidden',
+        border: `1.8px solid ${C.text}`, flexShrink: 0, cursor: onClick ? 'pointer' : 'default' }}>
+        <img src={photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}/>
+      </div>
+    );
+  }
   return (
     <div onClick={onClick} style={{ width: size, height: size, borderRadius: 999, background: '#fff',
       border: `1.8px solid ${C.text}`, display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -1913,14 +1941,20 @@ function ProfileScreen({ user, onLogout, onClose, onSave, onboard }) {
   const [emgPhone, setEmgPhone] = uS(user.emgPhone || '');
   const [bloodType, setBloodType] = uS(user.bloodType || '');
   const [medical, setMedical] = uS(user.medical || '');
+  const [avatarPhoto, setAvatarPhoto] = uS(user.avatarPhoto || '');
   const [saved, setSaved] = uS(false);
   const canSubmit = !onboard || (nickname.trim() && phone.trim() && emgName.trim() && emgPhone.trim());
 
   function save() {
-    onSave({ ...user, nickname, gender, phone, email, emgName, emgPhone, bloodType, medical });
+    onSave({ ...user, nickname, gender, phone, email, emgName, emgPhone, bloodType, medical, avatarPhoto });
     if (onboard) return;
     setSaved(true);
     setTimeout(() => setSaved(false), 1800);
+  }
+  function pickPhoto(e) {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    resizeImageFile(file, 240, setAvatarPhoto);
   }
 
   return (
@@ -1933,7 +1967,11 @@ function ProfileScreen({ user, onLogout, onClose, onSave, onboard }) {
         {!onboard && <span onClick={onClose} style={{ cursor: 'pointer', fontSize: 20, color: C.muted }}>×</span>}
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 20, flexShrink: 0 }}>
-        <PersonIcon size={52}/>
+        <label style={{ position: 'relative', cursor: 'pointer', flexShrink: 0 }}>
+          <input type="file" accept="image/*" onChange={pickPhoto} style={{ display: 'none' }}/>
+          <PersonIcon size={52} photo={avatarPhoto}/>
+          <span style={{ position: 'absolute', bottom: -2, right: -2, width: 20, height: 20, borderRadius: 999, background: C.brand, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, border: '2px solid #fff' }}>📷</span>
+        </label>
         <div>
           <div style={{ fontSize: 16, fontWeight: 700 }}>{nickname || user.name}</div>
           <div style={{ fontFamily: C.mono, fontSize: 11, color: C.muted }}>{user.provider || 'google'} · เข้าสู่ระบบแล้ว</div>
@@ -2161,7 +2199,7 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: C.bg, fontFamily: C.font, overflow: 'hidden' }}>
       <div style={{ padding: '40px 18px 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <Brand/>
-        <PersonIcon size={30} onClick={onProfile}/>
+        <PersonIcon size={30} onClick={onProfile} photo={user.avatarPhoto}/>
       </div>
       <div key={tab} style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', animation: 'trtFadeIn 0.2s ease' }}>
         {!isSpectator && tab === 'track' && <TrackTab runner={{ ...session.runner,
