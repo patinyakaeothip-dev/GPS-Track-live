@@ -21,9 +21,41 @@ const BackgroundGeolocation = registerPlugin('BackgroundGeolocation');
 
 let watcherId = null;
 let onPing = null;
+let retryTimerId = null;
 
 function isNative() {
   return Capacitor.isNativePlatform();
+}
+
+// GPS itself needs no signal (satellites, not cell towers) — but writing a
+// ping to Firestore does need connectivity, and trail courses routinely run
+// through dead zones. A failed write used to just get logged and dropped,
+// so a runner's dot would sit stale on the map until their *next* ping
+// happened to land after signal came back — which, in a long dead zone,
+// might be a while. Only the most recent failed ping is worth keeping
+// (see the one-doc-per-runner note below — history was never kept anyway),
+// so on failure it's remembered here and retried until it lands, instead
+// of just being lost.
+const PENDING_KEY = 'trt.gps.pendingPing.v1';
+function loadPending() {
+  try { return JSON.parse(localStorage.getItem(PENDING_KEY)); } catch (_) { return null; }
+}
+function savePending(ping) {
+  try { localStorage.setItem(PENDING_KEY, JSON.stringify(ping)); } catch (_) {}
+}
+function clearPending() {
+  try { localStorage.removeItem(PENDING_KEY); } catch (_) {}
+}
+async function flushPending() {
+  const pending = loadPending();
+  if (!pending || !window.fb) return;
+  try {
+    await window.fb.setDocById('livePos', `${pending.eventId}_${pending.bib}`, pending);
+    clearPending();
+  } catch (err) {
+    // still offline/failing — leave it queued, the next timer tick or
+    // 'online' event will try again.
+  }
 }
 
 // One doc per runner, overwritten on every ping — NOT one doc per ping.
@@ -37,8 +69,16 @@ async function pushPing(eventId, bib, lat, lon, extra) {
   if (onPing) onPing(ping);
   if (window.fb) {
     const id = `${eventId}_${bib}`;
-    try { await window.fb.setDocById('livePos', id, ping); }
-    catch (err) { console.warn('[gps-tracker] Firestore ping write failed', err); }
+    try {
+      await window.fb.setDocById('livePos', id, ping);
+      // A successful write means connectivity is back — clear out
+      // whatever got stuck from an earlier dead zone so it doesn't
+      // overwrite this fresher position on the next retry tick.
+      clearPending();
+    } catch (err) {
+      console.warn('[gps-tracker] Firestore ping write failed — will retry', err);
+      savePending(ping);
+    }
   }
 }
 
@@ -47,6 +87,8 @@ async function pushPing(eventId, bib, lat, lon, extra) {
 // Firestore round-trip).
 async function start(eventId, bib, onPingCb) {
   onPing = onPingCb || null;
+  retryTimerId = setInterval(flushPending, 15000);
+  window.addEventListener('online', flushPending);
 
   if (isNative()) {
     watcherId = await BackgroundGeolocation.addWatcher(
@@ -76,6 +118,8 @@ async function start(eventId, bib, onPingCb) {
 }
 
 async function stop() {
+  if (retryTimerId) { clearInterval(retryTimerId); retryTimerId = null; }
+  window.removeEventListener('online', flushPending);
   if (watcherId == null) return;
   if (isNative()) await BackgroundGeolocation.removeWatcher({ id: watcherId });
   else navigator.geolocation.clearWatch(watcherId);
