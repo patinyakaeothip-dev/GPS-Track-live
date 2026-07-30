@@ -24,6 +24,28 @@ const STALE_MINUTES = 60;
 const OFF_ROUTE_KM = 0.1;
 const OFF_ROUTE_ALERT_MIN = 2;
 
+// Runner dots used to jump instantly to each new position, which reads as
+// choppy/laggy even when pings are actually arriving on time — sliding a
+// marker smoothly from its old spot to the new one over a beat makes the
+// whole map feel far more "live" without changing how often data actually
+// updates. Cancels any in-flight animation on the same marker before
+// starting a new one so a fast run of updates doesn't fight itself.
+function animateMarkerTo(marker, lat, lon, duration = 900) {
+  const from = marker.getLatLng();
+  if (marker._animFrame) { cancelAnimationFrame(marker._animFrame); marker._animFrame = null; }
+  if (!from) { marker.setLatLng([lat, lon]); return; }
+  if (from.lat === lat && from.lng === lon) return;
+  const fromLat = from.lat, fromLon = from.lng;
+  const start = performance.now();
+  function step(now) {
+    const t = Math.min(1, (now - start) / duration);
+    const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; // easeInOutQuad
+    marker.setLatLng([fromLat + (lat - fromLat) * ease, fromLon + (lon - fromLon) * ease]);
+    marker._animFrame = t < 1 ? requestAnimationFrame(step) : null;
+  }
+  marker._animFrame = requestAnimationFrame(step);
+}
+
 // Same Thailand-time fix as combineDateTime in admin-app.jsx: build the Date
 // with an explicit +07:00 offset instead of relying on the viewer's local
 // timezone, so "06:00" always means Bangkok 06:00 no matter whose device
@@ -215,7 +237,7 @@ function LiveElevationSvg({ geo, coursePaths, distance, checkpoints, displays, s
             <circle key={dd.bib} cx={x(dd.physKm)} cy={y(dd.ele)} r={selectedBib === dd.bib ? 8 : 4.5}
               fill={dd.color} stroke="#fff" strokeWidth={selectedBib === dd.bib ? 2.5 : 1} opacity={dimmed ? 0.2 : 1}
               onClick={() => onSelectBib(dd.bib)} onMouseEnter={() => setHoverBib(dd.bib)} onMouseLeave={() => setHoverBib(h => h === dd.bib ? null : h)}
-              style={{ cursor: 'pointer' }}/>
+              style={{ cursor: 'pointer', transition: 'cx 0.6s ease, cy 0.6s ease' }}/>
           );
         })}
       </svg>
@@ -650,7 +672,7 @@ function LiveMonitorApp() {
         m.on('click', () => { setSelectedBib(d.bib); setFocusBib(null); });
         markersRef.current.set(d.bib, m);
       } else {
-        m.setLatLng([d.lat, d.lon]);
+        animateMarkerTo(m, d.lat, d.lon);
         m.setStyle({ fillColor: d.color, fillOpacity: dimmed ? 0.15 : 1, opacity: dimmed ? 0.15 : 1 });
         // Leaflet tooltips can't flip permanent/hover mode in place —
         // rebind whenever the "show all labels"/selected state changes so
