@@ -1751,6 +1751,11 @@ function FriendMapSheet({ runner, eventId, event, onClose }) {
   }, [course, runner.progressKm, livePos && livePos.lat, livePos && livePos.lon, livePos && livePos.at]);
 
   const gpsFresh = livePos && livePos.at && (Date.now() - livePos.at) < 2 * 60 * 1000 && livePos.lat != null;
+  // Same GPS-preferred/checkpoint-fallback rule projected onto the 1-D km
+  // axis instead of raw lat/lon — feeds the elevation chart's "you are
+  // here" dot, same idea as RouteTab's elevationKm.
+  const gpsProjection = (gpsFresh && course) ? nearestKmForPoint(course.points, livePos.lat, livePos.lon, runner.progressKm) : null;
+  const elevationKm = (gpsProjection && gpsProjection.distKm < ON_COURSE_KM) ? gpsProjection.km : (runner.progressKm || 0);
 
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 10, background: '#fff', display: 'flex', flexDirection: 'column' }}>
@@ -1761,8 +1766,18 @@ function FriendMapSheet({ runner, eventId, event, onClose }) {
         </div>
         <div onClick={onClose} style={{ width: 30, height: 30, borderRadius: 10, border: `1.6px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 14, flexShrink: 0 }}>✕</div>
       </div>
-      {!course && <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.muted, fontSize: 12.5 }}>กำลังโหลดแผนที่...</div>}
-      <div ref={mapHostRef} style={{ flex: 1, display: course ? 'block' : 'none' }}/>
+      <div style={{ flex: 1, overflow: 'auto', overscrollBehavior: 'contain', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ position: 'relative', flex: 1, minHeight: 220 }}>
+          {!course && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.muted, fontSize: 12.5 }}>กำลังโหลดแผนที่...</div>}
+          <div ref={mapHostRef} style={{ position: 'absolute', inset: 0, background: '#eee', display: course ? 'block' : 'none' }}/>
+        </div>
+        {course && (
+          <div style={{ padding: '14px 18px 24px', background: '#fff', flexShrink: 0 }}>
+            <Kicker>Elevation</Kicker>
+            <ElevationSvg course={course} progressKm={elevationKm} checkpoints={(event && event.checkpoints) || []}/>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
