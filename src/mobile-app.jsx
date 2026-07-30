@@ -1112,6 +1112,15 @@ function TrackTab({ runner, event, onScan, onSos, onDnf, offRoute }) {
   const finishMs = finishCk && combine ? combine(event && event.raceDateISO, finishCk.t) : null;
   const totalMs = (startMs != null && finishMs != null) ? finishMs - startMs : null;
   const elapsedMs = startMs != null && !finished ? Date.now() - startMs : null;
+  // Gun time (from the official start, whether or not this runner's own
+  // scan landed before/after it) vs chip time (this runner's own actual
+  // scan-to-finish, never clamped) — shown side by side so it's clear
+  // which number is which, instead of a single figure that's secretly
+  // already gun-clamped.
+  const chipTotalMs = (rawStartMs != null && finishMs != null) ? finishMs - rawStartMs : null;
+  const chipElapsedMs = rawStartMs != null && !finished ? Date.now() - rawStartMs : null;
+  const gunTotalMs = (gunMs != null && finishMs != null) ? finishMs - gunMs : null;
+  const gunElapsedMs = gunMs != null && !finished ? Date.now() - gunMs : null;
   function fmtElapsed(ms) {
     if (ms == null) return '—';
     const s = Math.floor(ms / 1000);
@@ -1137,6 +1146,10 @@ function TrackTab({ runner, event, onScan, onSos, onDnf, offRoute }) {
           <Kicker>{finished ? 'เวลารวม' : 'เวลาที่วิ่งมาแล้ว'}</Kicker>
           <div style={{ fontFamily: C.mono, fontSize: 30, fontWeight: 800, color: C.text, marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>
             {fmtElapsed(finished ? totalMs : elapsedMs)}
+          </div>
+          <div style={{ display: 'flex', gap: 16, marginTop: 8 }}>
+            <div style={{ fontFamily: C.mono, fontSize: 11, color: C.muted }}>Gun time: <b style={{ color: C.text }}>{gunMs != null ? fmtElapsed(finished ? gunTotalMs : gunElapsedMs) : '—'}</b></div>
+            <div style={{ fontFamily: C.mono, fontSize: 11, color: C.muted }}>Chip time: <b style={{ color: C.text }}>{fmtElapsed(finished ? chipTotalMs : chipElapsedMs)}</b></div>
           </div>
         </div>
       )}
@@ -1175,7 +1188,8 @@ function TrackTab({ runner, event, onScan, onSos, onDnf, offRoute }) {
               <span style={{ width: 20, height: 20, borderRadius: 999, background: done ? C.brand : C.bg, color: done ? '#fff' : C.mute2,
                 display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, flexShrink: 0 }}>{done ? '✓' : i + 1}</span>
               <span style={{ flex: 1, fontSize: 13, color: done ? C.text : C.mute2 }}>{cpLabelFor(event, cp)}</span>
-              {done && <span style={{ fontFamily: C.mono, fontSize: 10, color: C.muted }}>{runner.checkins[i].t}</span>}
+              <span style={{ fontFamily: C.mono, fontSize: 10, color: C.muted }}>{cpKmFor(event, cp, runner.dist)}/{totalKm}K</span>
+              {done && <span style={{ fontFamily: C.mono, fontSize: 10, color: C.muted, marginLeft: 8 }}>{runner.checkins[i].t}</span>}
             </div>
           );
         })}
@@ -1911,7 +1925,8 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
   // Gradient reads the real course elevation at the runner's current km.
   const trackPace = uM(() => {
     if (isSpectator || !session.runner || !session.runner.checkins.length) return '—';
-    const gpsLive = livePos && livePos.at && (Date.now() - livePos.at) < 2 * 60 * 1000;
+    const finished = session.runner.checkins.some(c => c.cp === 'finish');
+    const gpsLive = !finished && livePos && livePos.at && (Date.now() - livePos.at) < 2 * 60 * 1000;
     if (gpsLive && livePos.speed > 0.3) {
       const min = 1000 / livePos.speed / 60;
       const mm = Math.floor(min), ss = Math.round((min - mm) * 60);
@@ -1919,10 +1934,19 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
     }
     const combine = window.eventStatus && window.eventStatus.combineDateTime;
     const startCk = session.runner.checkins.find(c => c.cp === 'start');
+    const finishCk = session.runner.checkins.find(c => c.cp === 'finish');
     const startMs = startCk && combine && currentEvent ? combine(currentEvent.raceDateISO, startCk.t) : null;
+    const finishMs = finishCk && combine && currentEvent ? combine(currentEvent.raceDateISO, finishCk.t) : null;
     const km = session.runner.progressKm;
     if (!startMs || !km) return gpsLive ? 'หยุดอยู่' : '—';
-    const min = (Date.now() - startMs) / 60000 / km;
+    // Once finished, average pace must be measured up to the actual finish
+    // scan — using Date.now() here kept dividing by an ever-growing
+    // "elapsed" time long after the race was over, producing absurd
+    // pace figures (e.g. 208'20"/km) for anyone who opened the app well
+    // after they'd already crossed the line.
+    const endMs = finished ? finishMs : Date.now();
+    if (endMs == null) return '—';
+    const min = (endMs - startMs) / 60000 / km;
     if (!isFinite(min) || min <= 0) return '—';
     const mm = Math.floor(min), ss = Math.round((min - mm) * 60);
     return `${mm}'${String(ss).padStart(2, '0')}"/กม.`;
