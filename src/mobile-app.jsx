@@ -1899,6 +1899,17 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
   // tracking) since GPS alone can't tell "did they finish this loop yet."
   const ownBib = !isSpectator && session.runner && session.runner.bib;
   const livePos = useLivePos(currentEventId, isSpectator ? session.followBib : ownBib);
+  // A runner's own dot shouldn't have to round-trip through Firestore to
+  // reach their own screen — gps-tracker.js already hands back every fix
+  // locally the instant it's read, before it even attempts the Firestore
+  // write (see pushPing's onPing callback), so wire that straight into
+  // state here instead of only ever reading it back via useLivePos. This
+  // is what makes the runner's own map dot/pace/off-route detection stay
+  // truly real-time even while offline, instead of freezing at whatever
+  // was last successfully synced — a spectator following someone *else*
+  // has no such local feed and still only ever sees the synced version.
+  const [localPos, setLocalPos] = uS(null);
+  const effectiveLivePos = (!isSpectator && localPos) ? localPos : livePos;
 
   // A runner's GPS watcher only ever got started at the exact moment they
   // scanned the start QR (see qr-start's onScanned / scanComplete below) —
@@ -1917,7 +1928,7 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
   uE(() => {
     if (!runnerStarted || runnerFinished || (session.runner && session.runner.dnf) || !window.trtGpsTracker) return;
     const bib = session.runner.bib || user.uid || user.name;
-    window.trtGpsTracker.start(session.runner.eventId, bib);
+    window.trtGpsTracker.start(session.runner.eventId, bib, setLocalPos);
   }, [runnerStarted, runnerFinished, session.runner && session.runner.dnf]);
 
   // Off-route alert: a single momentarily-noisy GPS fix shouldn't trigger
@@ -1939,9 +1950,9 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
       return;
     }
     function evaluate() {
-      const gpsLive = livePos && livePos.at && (Date.now() - livePos.at) < 2 * 60 * 1000 && livePos.lat != null;
+      const gpsLive = effectiveLivePos && effectiveLivePos.at && (Date.now() - effectiveLivePos.at) < 2 * 60 * 1000 && effectiveLivePos.lat != null;
       if (!gpsLive) { offRouteSinceRef.current = null; setIsOffRoute(false); return; }
-      const { distKm } = nearestKmForPoint(course.points, livePos.lat, livePos.lon);
+      const { distKm } = nearestKmForPoint(course.points, effectiveLivePos.lat, effectiveLivePos.lon);
       if (distKm > ON_COURSE_KM) {
         if (!offRouteSinceRef.current) offRouteSinceRef.current = Date.now();
         setIsOffRoute(Date.now() - offRouteSinceRef.current > OFF_ROUTE_ALERT_MS);
@@ -1953,7 +1964,7 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
     evaluate();
     const id = setInterval(evaluate, 20000);
     return () => clearInterval(id);
-  }, [isSpectator, session.runner, course, livePos]);
+  }, [isSpectator, session.runner, course, effectiveLivePos]);
 
   // Track tab's "เพซปัจจุบัน"/"ความชัน" used to be hardcoded demo strings
   // ("6'42\"/กม.", "+4.2%") shown for every runner regardless of how they
@@ -1964,9 +1975,9 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
   const trackPace = uM(() => {
     if (isSpectator || !session.runner || !session.runner.checkins.length) return '—';
     const finished = session.runner.checkins.some(c => c.cp === 'finish');
-    const gpsLive = !finished && livePos && livePos.at && (Date.now() - livePos.at) < 2 * 60 * 1000;
-    if (gpsLive && livePos.speed > 0.3) {
-      const min = 1000 / livePos.speed / 60;
+    const gpsLive = !finished && effectiveLivePos && effectiveLivePos.at && (Date.now() - effectiveLivePos.at) < 2 * 60 * 1000;
+    if (gpsLive && effectiveLivePos.speed > 0.3) {
+      const min = 1000 / effectiveLivePos.speed / 60;
       const mm = Math.floor(min), ss = Math.round((min - mm) * 60);
       return `${mm}'${String(ss).padStart(2, '0')}"/กม.`;
     }
@@ -1988,15 +1999,15 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
     if (!isFinite(min) || min <= 0) return '—';
     const mm = Math.floor(min), ss = Math.round((min - mm) * 60);
     return `${mm}'${String(ss).padStart(2, '0')}"/กม.`;
-  }, [isSpectator, session.runner, currentEvent, livePos]);
+  }, [isSpectator, session.runner, currentEvent, effectiveLivePos]);
   const trackGradient = uM(() => {
     if (isSpectator || !session.runner || !session.runner.checkins.length || !course || !course.points) return '—';
-    const gpsLive = livePos && livePos.at && (Date.now() - livePos.at) < 2 * 60 * 1000 && livePos.lat != null;
-    const projection = gpsLive ? nearestKmForPoint(course.points, livePos.lat, livePos.lon, session.runner.progressKm) : null;
+    const gpsLive = effectiveLivePos && effectiveLivePos.at && (Date.now() - effectiveLivePos.at) < 2 * 60 * 1000 && effectiveLivePos.lat != null;
+    const projection = gpsLive ? nearestKmForPoint(course.points, effectiveLivePos.lat, effectiveLivePos.lon, session.runner.progressKm) : null;
     const km = (projection && projection.distKm < ON_COURSE_KM) ? projection.km : session.runner.progressKm;
     const gain = gainAtKmForPoints(course.points, km);
     return `+${gain} ม.`;
-  }, [isSpectator, session.runner, course, livePos]);
+  }, [isSpectator, session.runner, course, effectiveLivePos]);
 
   function toggleFavorite(bib) {
     setFavBibs(list => {
@@ -2024,7 +2035,7 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
     if (window.trtGpsTracker) {
       if (nextCp === 'start') {
         const bib = session.runner.bib || session.user.uid || session.user.name;
-        window.trtGpsTracker.start(session.runner.eventId, bib);
+        window.trtGpsTracker.start(session.runner.eventId, bib, setLocalPos);
       } else if (nextCp === 'finish') {
         window.trtGpsTracker.stop();
       }
@@ -2054,7 +2065,7 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
           pace: trackPace, gradient: trackGradient }} event={currentEvent} onScan={doScan} onSos={onSos} onDnf={onDnf} offRoute={isOffRoute}/>}
         {tab === 'route' && <RouteTab course={course} event={currentEvent}
           runner={isSpectator ? (followedRunner ? { dist: followedRunner.distance, progressKm: followedRunner.progressKm } : { dist: '22K', progressKm: 0 }) : session.runner}
-          spectatorRunner={isSpectator ? followedRunner : null} livePos={livePos}/>}
+          spectatorRunner={isSpectator ? followedRunner : null} livePos={effectiveLivePos}/>}
         {tab === 'ranking' && <RankingTab snap={snap} eventId={!isSpectator ? session.runner.eventId : null} event={currentEvent}/>}
         {tab === 'friends' && <FriendsTab eventId={currentEventId} followedBib={isSpectator ? session.followBib : (session.runner && session.runner.bib)} favBibs={favBibs} onAddFavorite={() => setPickingFav(true)} onRemoveFavorite={toggleFavorite}/>}
       </div>
