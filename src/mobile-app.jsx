@@ -1260,14 +1260,23 @@ function RouteTab({ course, runner, event, spectatorRunner, livePos }) {
   // or back to the checkpoint-interpolated point along the route otherwise.
   uE(() => {
     if (!mapObj.current || !runnerMarkerRef.current || !course) return;
-    if (livePos && livePos.lat != null && livePos.lon != null) {
+    // A GPS fix with lat/lon present isn't necessarily *current* — once a
+    // runner finishes, tracking stops (see scanComplete's
+    // trtGpsTracker.stop()) so livePos is permanently whatever their last
+    // ping happened to be, which could be minutes or a whole checkpoint
+    // away from the finish. Only trust it while it's actually fresh;
+    // otherwise fall back to the checkpoint-interpolated position, which
+    // correctly reflects the finish once progressKm has been updated to
+    // the full distance.
+    const gpsFresh = livePos && livePos.lat != null && livePos.lon != null && livePos.at && (Date.now() - livePos.at) < 2 * 60 * 1000;
+    if (gpsFresh) {
       runnerMarkerRef.current.setLatLng([livePos.lat, livePos.lon]);
     } else {
       const idx = Math.min(course.points.length - 1, Math.round((runner.progressKm / course.totalKm) * course.points.length));
       const pos = course.points[idx];
       runnerMarkerRef.current.setLatLng([pos[0], pos[1]]);
     }
-  }, [course, runner.progressKm, livePos && livePos.lat, livePos && livePos.lon]);
+  }, [course, runner.progressKm, livePos && livePos.lat, livePos && livePos.lon, livePos && livePos.at]);
   // Elevation profile's "you are here" marker used to only ever move on a
   // checkpoint scan (progressKm) even after the map dot above switched to
   // live GPS — same GPS-preferred/checkpoint-fallback rule, just projected
