@@ -637,7 +637,7 @@ function LiveMonitorApp() {
         gradStr: started ? `+${gain} m` : '—',
         gradColor: started ? gainColor(gain) : '#5d6b59',
         ele: p.ele, ago: lastAtMs != null ? fmtAgo((Date.now() - lastAtMs) / 1000) : '—',
-        elapsedMs, checkinTimes,
+        elapsedMs, endMs, checkinTimes,
         sos: !!r.sos, sosReason: r.sosReason || '',
         emgName: r.emgName || '', emgPhone: r.emgPhone || '', bloodType: r.bloodType || '', medical: r.medical || '',
         status, statusLabel: meta.label, statusBg: meta.bg, statusFg: meta.fg, physKm };
@@ -722,8 +722,17 @@ function LiveMonitorApp() {
     const byDist = {};
     filtered.forEach(d => (byDist[d.distance] ||= []).push(d));
     const medal = n => n === 1 ? '🥇' : n === 2 ? '🥈' : n === 3 ? '🥉' : '';
+    // Finished runners all sit at pct 100 — sorting on that alone left
+    // their order among each other arbitrary (array order) instead of who
+    // actually finished first. Placement for finishers is by arrival order
+    // (endMs, their finish check-in time), same policy Results uses (see
+    // results/index.html) — still finished-first, then progress for
+    // everyone still out on course.
     return distLabels.filter(ds => byDist[ds]).flatMap(ds =>
-      byDist[ds].slice().sort((a, b) => b.pct - a.pct).map((d, i) => ({ ...d, rank: i + 1, medal: medal(i + 1), firstInGroup: i === 0, groupLabel: ds })));
+      byDist[ds].slice().sort((a, b) => (a.status === 'finished') === (b.status === 'finished')
+        ? (a.status === 'finished' ? (a.endMs || 0) - (b.endMs || 0) : b.pct - a.pct)
+        : (a.status === 'finished' ? -1 : 1)
+      ).map((d, i) => ({ ...d, rank: i + 1, medal: medal(i + 1), firstInGroup: i === 0, groupLabel: ds })));
   }, [displays, distFilter, rankGender, search, distLabels]);
 
   return (
