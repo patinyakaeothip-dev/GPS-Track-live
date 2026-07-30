@@ -221,8 +221,18 @@
         // whichever event happens to be live (or first in the list).
         const requestedId = new URLSearchParams(window.location.search).get('event');
         if (requestedId && list.some(e => e.id === requestedId)) return requestedId;
-        const live = list.find(e => window.eventStatus.computeStatus(e) === 'live');
-        return (live || list[0] || {}).id || null;
+        // No specific event requested — prefer live, then the soonest
+        // upcoming event, and only fall back to the most recent past event
+        // if there's nothing else. Same reasoning as Live Monitor's default
+        // (src/live-monitor.jsx): landing on some arbitrary old test event
+        // (previously just list[0], i.e. creation order) isn't useful.
+        const withStatus = list.map(ev => ({ ev, status: window.eventStatus.computeStatus(ev) }));
+        const byDateAsc = (a, b) => (a.ev.raceDateISO || '').localeCompare(b.ev.raceDateISO || '');
+        const live = withStatus.find(x => x.status === 'live');
+        const upcoming = withStatus.filter(x => x.status === 'upcoming').sort(byDateAsc)[0];
+        const past = withStatus.filter(x => x.status === 'past').sort((a, b) => -byDateAsc(a, b))[0];
+        const pick = live || upcoming || past || withStatus[0];
+        return (pick && pick.ev && pick.ev.id) || null;
       });
       const selectedEvent = events.find(e => e.id === eventId) || null;
 
