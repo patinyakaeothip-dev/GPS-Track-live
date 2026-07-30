@@ -1169,7 +1169,16 @@ function TrackTab({ runner, event, onScan, onSos, onDnf, offRoute }) {
       </div>
 
       {finished ? (
-        <Btn variant="primary" onClick={() => window.open('certificate.html', '_blank')}>🏅 บันทึกใบประกาศ</Btn>
+        // window.open(..., '_blank') used to open certificate.html in a
+        // separate browser context (iOS presents it with its own back-
+        // arrow/title toolbar) — that context doesn't share localStorage
+        // with the app's own WebView, so the finish result
+        // saveCertificateResult() just wrote was invisible there, and
+        // native bridge features (e.g. saving/sharing the image) don't
+        // work outside the app's WebView either. Navigating in place
+        // keeps everything in the same context; certificate.html has its
+        // own "App" link to get back.
+        <Btn variant="primary" onClick={() => { window.location.href = 'certificate.html'; }}>🏅 บันทึกใบประกาศ</Btn>
       ) : !runner.dnf ? (
         <div style={{ display: 'flex', gap: 10 }}>
           <Btn variant="primary" onClick={onScan} style={{ flex: 1 }}>
