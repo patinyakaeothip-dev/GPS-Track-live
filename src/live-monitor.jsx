@@ -244,6 +244,7 @@ function LiveMonitorApp() {
   const [selectedBib, setSelectedBib] = mS(null);
   const [dashView, setDashView] = mS('map'); // 'map' | 'ranking'
   const [distFilter, setDistFilter] = mS(null);
+  const [showLabels, setShowLabels] = mS(false);
   const [events, setEvents] = mS(() => (window.eventStore ? window.eventStore.loadEvents() : []));
   mE(() => {
     const refresh = () => setEvents(window.eventStore.loadEvents());
@@ -625,18 +626,24 @@ function LiveMonitorApp() {
       let m = markersRef.current.get(d.bib);
       if (!m) {
         m = L.circleMarker([d.lat, d.lon], { radius: 7, color: '#fff', weight: 2, fillColor: d.color, fillOpacity: dimmed ? 0.15 : 1, opacity: dimmed ? 0.15 : 1 }).addTo(map);
-        m.bindTooltip(`#${d.bib} ${d.name}`, { direction: 'top', offset: [0, -8] });
+        m.bindTooltip(`#${d.bib} ${d.name}`, { direction: 'top', offset: [0, -8], permanent: showLabels });
         m.on('click', () => { setSelectedBib(d.bib); setFocusBib(null); });
         markersRef.current.set(d.bib, m);
       } else {
         m.setLatLng([d.lat, d.lon]);
         m.setStyle({ fillColor: d.color, fillOpacity: dimmed ? 0.15 : 1, opacity: dimmed ? 0.15 : 1 });
+        // Leaflet tooltips can't flip permanent/hover mode in place —
+        // rebind whenever the "show all labels" toggle changes so every
+        // dot's name stays pinned open (or goes back to hover-only)
+        // together, not just newly-created markers.
+        m.unbindTooltip();
+        m.bindTooltip(`#${d.bib} ${d.name}`, { direction: 'top', offset: [0, -8], permanent: showLabels });
       }
     });
     markersRef.current.forEach((m, bib) => {
       if (!seen.has(bib)) { map.removeLayer(m); markersRef.current.delete(bib); }
     });
-  }, [mapDisplays, focusBib]);
+  }, [mapDisplays, focusBib, showLabels]);
 
   const byBib = mM(() => Object.fromEntries(displays.map(d => [d.bib, d])), [displays]);
   const selected = selectedBib ? byBib[selectedBib] : null;
@@ -809,7 +816,13 @@ function LiveMonitorApp() {
                 </div>
                 {!ready && <div style={{ width: '100%', height: 560, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#5d6b59', fontFamily: M_MONO, fontSize: 12 }}>กำลังโหลดแผนที่ GPX…</div>}
                 <div ref={mapHostRef} style={{ width: '100%', height: 560, display: ready ? 'block' : 'none' }}/>
-                {ready && <button onClick={recenter} style={{ position: 'absolute', zIndex: 1000, bottom: 16, right: 16, width: 38, height: 38, borderRadius: 999, background: '#fff', border: '1px solid #d8d2c2', boxShadow: '0 2px 8px rgba(0,0,0,0.15)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17 }}>🎯</button>}
+                {ready && (
+                  <div style={{ position: 'absolute', zIndex: 1000, bottom: 16, right: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <button onClick={() => setShowLabels(v => !v)} title="แสดงชื่อนักวิ่งทั้งหมด"
+                      style={{ width: 38, height: 38, borderRadius: 999, background: showLabels ? '#1f4d39' : '#fff', border: '1px solid #d8d2c2', boxShadow: '0 2px 8px rgba(0,0,0,0.15)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15 }}>🏷</button>
+                    <button onClick={recenter} style={{ width: 38, height: 38, borderRadius: 999, background: '#fff', border: '1px solid #d8d2c2', boxShadow: '0 2px 8px rgba(0,0,0,0.15)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17 }}>🎯</button>
+                  </div>
+                )}
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}>
