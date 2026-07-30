@@ -165,8 +165,12 @@
         (byDist[key] = byDist[key] || []).push(it);
       });
       Object.values(byDist).forEach(arr => {
+        // Rank by elapsed (chip) time, not raw finish clock time — with
+        // staggered/individual start scans, whoever crosses the line later
+        // on the clock isn't necessarily slower, so sorting on finish_at
+        // alone could rank a shorter total_ms behind a longer one.
         arr.filter(x => x.status === 'finished')
-          .sort((a,b) => (a.finish_at||0) - (b.finish_at||0))
+          .sort((a,b) => (a.total_ms ?? Infinity) - (b.total_ms ?? Infinity))
           .forEach((x, i) => { x.rank = i + 1; });
       });
       const totalFinPerDist = {};
