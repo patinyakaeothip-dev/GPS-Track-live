@@ -200,10 +200,10 @@
   <div class="toolbar no-print">
     <span>📜 ใบประกาศ · กด Print เพื่อ Save as PDF</span>
     <button onclick="window.print()">🖨 Print / Save as PDF</button>
+    <input type="file" accept="image/*" id="photo-input" style="display:none;">
+    <button id="photo-btn" onclick="document.getElementById('photo-input').click()">📷 แนบรูป</button>
+    <button class="alt" id="photo-remove-btn" onclick="removePhoto()" style="display:none;">✕ ลบรูป</button>
     <button class="alt" onclick="window.history.back()">← กลับ</button>
-    <span style="margin-left:auto;opacity:.7;font-family:monospace;font-size:11px;">
-      เปลี่ยนรูป: ทับไฟล์ <code style="color:#fff;">assets/certificate-bg.jpg</code>
-    </span>
   </div>
 
   <div class="stage">
@@ -220,6 +220,7 @@
 
       <!-- Center: square photo with overlaid info -->
       <div class="photo-wrap">
+        <img id="user-photo" alt="" style="display:none;position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;">
         <div class="photo-pill" id="badge">FINISHER</div>
         <div class="overlay-info">
           <div class="kicker">ใบประกาศ · Certificate of Finisher</div>
@@ -318,6 +319,43 @@
       const raw = localStorage.getItem(STORAGE_KEY);
       render(raw ? JSON.parse(raw) : null);
     } catch (e) { console.error('[trt] cert load error', e); }
+
+    // Optional runner photo (e.g. a finish-line selfie) to show instead of
+    // the default mountain silhouette background — stored as a data URL in
+    // localStorage so it survives reopening this page, same pattern as the
+    // finish result itself.
+    const PHOTO_KEY = 'trt.cert.photo';
+    const photoImg = document.getElementById('user-photo');
+    const photoBtn = document.getElementById('photo-btn');
+    const removeBtn = document.getElementById('photo-remove-btn');
+    function applyPhoto(dataUrl) {
+      if (dataUrl) {
+        photoImg.src = dataUrl;
+        photoImg.style.display = 'block';
+        photoBtn.textContent = '🔄 เปลี่ยนรูป';
+        removeBtn.style.display = '';
+      } else {
+        photoImg.style.display = 'none';
+        photoImg.removeAttribute('src');
+        photoBtn.textContent = '📷 แนบรูป';
+        removeBtn.style.display = 'none';
+      }
+    }
+    function removePhoto() {
+      try { localStorage.removeItem(PHOTO_KEY); } catch (e) {}
+      applyPhoto(null);
+    }
+    document.getElementById('photo-input').addEventListener('change', (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        try { localStorage.setItem(PHOTO_KEY, reader.result); } catch (err) { console.warn('[trt] photo save failed', err); }
+        applyPhoto(reader.result);
+      };
+      reader.readAsDataURL(file);
+    });
+    try { applyPhoto(localStorage.getItem(PHOTO_KEY)); } catch (e) {}
   </script>
 </body>
 </html>
