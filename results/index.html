@@ -120,8 +120,14 @@
         // HH:MM") — chipStartMs is only used for the actual time/pace math.
         const chipStartMs = (startMs != null && gunMs != null && startMs < gunMs) ? gunMs : startMs;
         const totalMs = (chipStartMs != null && finishMs != null) ? finishMs - chipStartMs : null;
+        // Public-facing result: everyone's time measured against the same
+        // official gun time, not each runner's own chip start — that's the
+        // number people expect on a results board ("who got in fastest from
+        // the gun"), with chip time kept around only for the runner's own
+        // personal record (see the mobile app's Track tab), not shown here.
+        const gunTotalMs = (gunMs != null && finishMs != null) ? finishMs - gunMs : totalMs;
         const distKm = parseInt(r.distance, 10) || 0;
-        const paceMinPerKm = (totalMs && distKm) ? (totalMs / 60000) / distKm : null;
+        const paceMinPerKm = (gunTotalMs && distKm) ? (gunTotalMs / 60000) / distKm : null;
         // A runner who started but never scanned finish used to show as
         // "active" (and their elapsed clock kept ticking off the live
         // clock) forever — even hours/days after the race's own cutoff had
@@ -148,10 +154,12 @@
           status,
           start_at: startMs,
           chip_start_at: chipStartMs,
+          gun_at: gunMs,
           finish_at: finishMs,
           last_cp: last ? last.cp : null,
           last_at: last ? checkinMs(last.t) : null,
           total_ms: totalMs,
+          gun_total_ms: gunTotalMs,
           pace_min_per_km: paceMinPerKm,
           checkin_count: cks.length,
           cutoff_at: cutoffMs || null,
@@ -165,12 +173,12 @@
         (byDist[key] = byDist[key] || []).push(it);
       });
       Object.values(byDist).forEach(arr => {
-        // Rank by elapsed (chip) time, not raw finish clock time — with
-        // staggered/individual start scans, whoever crosses the line later
-        // on the clock isn't necessarily slower, so sorting on finish_at
-        // alone could rank a shorter total_ms behind a longer one.
+        // Overall placement is by arrival order — whoever physically
+        // crosses the finish line first is #1, per race director's call —
+        // not by each runner's own elapsed chip time (which is still
+        // computed and used for their personal record, just not for rank).
         arr.filter(x => x.status === 'finished')
-          .sort((a,b) => (a.total_ms ?? Infinity) - (b.total_ms ?? Infinity))
+          .sort((a,b) => (a.finish_at||0) - (b.finish_at||0))
           .forEach((x, i) => { x.rank = i + 1; });
       });
       const totalFinPerDist = {};
@@ -507,7 +515,7 @@
               <>
                 <div style={{ fontFamily: MONO, fontSize: 14, fontWeight: 700, color: TEXT,
                   fontVariantNumeric: 'tabular-nums' }}>
-                  {fmtElapsed(it.total_ms)}
+                  {fmtElapsed(it.gun_total_ms)}
                 </div>
                 {paceStr && <div style={{ fontFamily: MONO, fontSize: 10, color: MUTED }}>
                   {paceStr}
@@ -517,7 +525,7 @@
               <>
                 <div style={{ fontFamily: MONO, fontSize: 14, fontWeight: 700, color: isDnf ? '#b91c1c' : '#b45309',
                   fontVariantNumeric: 'tabular-nums' }}>
-                  {fmtElapsed((it.status === 'active' ? now : (it.last_at || it.chip_start_at)) - it.chip_start_at)}
+                  {fmtElapsed((it.status === 'active' ? now : (it.last_at || it.gun_at || it.chip_start_at)) - (it.gun_at || it.chip_start_at))}
                 </div>
                 <div style={{ fontFamily: MONO, fontSize: 10, color: MUTED }}>
                   ออกตัว {fmtClockOfDay(it.start_at)}
