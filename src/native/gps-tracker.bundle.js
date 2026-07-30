@@ -525,8 +525,38 @@
   var BackgroundGeolocation = registerPlugin("BackgroundGeolocation");
   var watcherId = null;
   var onPing = null;
+  var retryTimerId = null;
   function isNative() {
     return Capacitor.isNativePlatform();
+  }
+  var PENDING_KEY = "trt.gps.pendingPing.v1";
+  function loadPending() {
+    try {
+      return JSON.parse(localStorage.getItem(PENDING_KEY));
+    } catch (_) {
+      return null;
+    }
+  }
+  function savePending(ping) {
+    try {
+      localStorage.setItem(PENDING_KEY, JSON.stringify(ping));
+    } catch (_) {
+    }
+  }
+  function clearPending() {
+    try {
+      localStorage.removeItem(PENDING_KEY);
+    } catch (_) {
+    }
+  }
+  async function flushPending() {
+    const pending = loadPending();
+    if (!pending || !window.fb) return;
+    try {
+      await window.fb.setDocById("livePos", `${pending.eventId}_${pending.bib}`, pending);
+      clearPending();
+    } catch (err) {
+    }
   }
   async function pushPing(eventId, bib, lat, lon, extra) {
     const ping = { eventId, bib, lat, lon, at: Date.now(), ...extra };
@@ -535,13 +565,17 @@
       const id = `${eventId}_${bib}`;
       try {
         await window.fb.setDocById("livePos", id, ping);
+        clearPending();
       } catch (err) {
-        console.warn("[gps-tracker] Firestore ping write failed", err);
+        console.warn("[gps-tracker] Firestore ping write failed \u2014 will retry", err);
+        savePending(ping);
       }
     }
   }
   async function start(eventId, bib, onPingCb) {
     onPing = onPingCb || null;
+    retryTimerId = setInterval(flushPending, 15e3);
+    window.addEventListener("online", flushPending);
     if (isNative()) {
       watcherId = await BackgroundGeolocation.addWatcher(
         {
@@ -571,6 +605,11 @@
     }
   }
   async function stop() {
+    if (retryTimerId) {
+      clearInterval(retryTimerId);
+      retryTimerId = null;
+    }
+    window.removeEventListener("online", flushPending);
     if (watcherId == null) return;
     if (isNative()) await BackgroundGeolocation.removeWatcher({ id: watcherId });
     else navigator.geolocation.clearWatch(watcherId);
