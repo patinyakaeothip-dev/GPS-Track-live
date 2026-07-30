@@ -526,6 +526,12 @@
   var watcherId = null;
   var onPing = null;
   var retryTimerId = null;
+  var heartbeatTimerId = null;
+  var lastFix = null;
+  var lastPingAt = 0;
+  var heartbeatEventId = null;
+  var heartbeatBib = null;
+  var HEARTBEAT_MS = 3e4;
   function isNative() {
     return Capacitor.isNativePlatform();
   }
@@ -559,6 +565,10 @@
     }
   }
   async function pushPing(eventId, bib, lat, lon, extra) {
+    lastFix = { lat, lon, ...extra };
+    lastPingAt = Date.now();
+    heartbeatEventId = eventId;
+    heartbeatBib = bib;
     const ping = { eventId, bib, lat, lon, at: Date.now(), ...extra };
     if (onPing) onPing(ping);
     if (window.fb) {
@@ -577,6 +587,10 @@
     if (watcherId != null) return;
     retryTimerId = setInterval(flushPending, 15e3);
     window.addEventListener("online", flushPending);
+    heartbeatTimerId = setInterval(() => {
+      if (!lastFix || Date.now() - lastPingAt < HEARTBEAT_MS) return;
+      pushPing(heartbeatEventId, heartbeatBib, lastFix.lat, lastFix.lon, { accuracy: lastFix.accuracy, speed: lastFix.speed });
+    }, HEARTBEAT_MS);
     if (isNative()) {
       watcherId = await BackgroundGeolocation.addWatcher(
         {
@@ -610,7 +624,13 @@
       clearInterval(retryTimerId);
       retryTimerId = null;
     }
+    if (heartbeatTimerId) {
+      clearInterval(heartbeatTimerId);
+      heartbeatTimerId = null;
+    }
     window.removeEventListener("online", flushPending);
+    lastFix = null;
+    lastPingAt = 0;
     if (watcherId == null) return;
     if (isNative()) await BackgroundGeolocation.removeWatcher({ id: watcherId });
     else navigator.geolocation.clearWatch(watcherId);
