@@ -982,13 +982,21 @@ function cpKmFor(event, cpId, distLabel) {
 // testing from an office kilometers away. distKm (rough — 1° latitude is
 // ~111km, plenty precise for a same-ballpark "are they even near the
 // course" check) lets callers ignore the projection past a threshold.
-function nearestKmForPoint(points, lat, lon) {
-  let best = points[0], bestD = Infinity;
+function nearestKmForPoint(points, lat, lon, anchorKm) {
+  let best = points[0], bestScore = Infinity, bestGeoDistKm = Infinity;
   for (const p of points) {
-    const d = (p[0] - lat) ** 2 + (p[1] - lon) ** 2;
-    if (d < bestD) { bestD = d; best = p; }
+    const geoDistKm = Math.sqrt((p[0] - lat) ** 2 + (p[1] - lon) ** 2) * 111;
+    // On a loop course, two entirely different km ranges (e.g. the outbound
+    // and return legs) can pass within meters of each other — picking
+    // purely by geographic distance then snaps the "you are here" marker
+    // across to the wrong leg whenever the runner is near one of those
+    // crossings. Nudging the score toward whichever candidate's km is
+    // closest to the runner's last known progress keeps it on the leg it
+    // was already on unless the geography genuinely says otherwise.
+    const score = geoDistKm + (anchorKm != null ? Math.abs(p[3] - anchorKm) * 0.05 : 0);
+    if (score < bestScore) { bestScore = score; best = p; bestGeoDistKm = geoDistKm; }
   }
-  return { km: best[3], distKm: Math.sqrt(bestD) * 111 };
+  return { km: best[3], distKm: bestGeoDistKm };
 }
 // How far off the recorded course a GPS fix can be before it's treated as
 // "not actually near this course" for elevation/gradient purposes, rather
@@ -1251,7 +1259,7 @@ function RouteTab({ course, runner, event, spectatorRunner, livePos }) {
   // live GPS — same GPS-preferred/checkpoint-fallback rule, just projected
   // onto the 1-D km axis instead of plotted as raw lat/lon.
   const gpsLiveForElevation = livePos && livePos.at && (Date.now() - livePos.at) < 2 * 60 * 1000 && livePos.lat != null;
-  const gpsProjection = (gpsLiveForElevation && course) ? nearestKmForPoint(course.points, livePos.lat, livePos.lon) : null;
+  const gpsProjection = (gpsLiveForElevation && course) ? nearestKmForPoint(course.points, livePos.lat, livePos.lon, runner.progressKm) : null;
   const elevationKm = (gpsProjection && gpsProjection.distKm < ON_COURSE_KM) ? gpsProjection.km : runner.progressKm;
   function recenterToMe() {
     const map = mapObj.current, marker = runnerMarkerRef.current;
@@ -1412,7 +1420,10 @@ function ElevationSvg({ course, progressKm, checkpoints }) {
   function resetZoom() { setZoom(1); setPanKm(0); }
 
   const path = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(p[3]).toFixed(1)},${y(p[2]).toFixed(1)}`).join(' ');
-  const markX = x(Math.min(progressKm, course.totalKm));
+  const markKm = Math.min(progressKm, course.totalKm);
+  const markX = x(markKm);
+  const markEle = pts.reduce((best, p) => (Math.abs(p[3] - markKm) < Math.abs(best[3] - markKm) ? p : best), pts[0])[2];
+  const markY = y(markEle);
   const marks = [[0, 'START'], ...(checkpoints || []).map(cp => [parseFloat(cp.km) || 0, cp.label]), [course.totalKm, 'FINISH']];
   return (
     <div style={{ position: 'relative' }}>
@@ -1425,7 +1436,7 @@ function ElevationSvg({ course, progressKm, checkpoints }) {
           </g>
         ))}
         <path d={path} fill="none" stroke={C.brand} strokeWidth="2"/>
-        <line x1={markX} y1="0" x2={markX} y2={h - padBottom} stroke={C.orange} strokeWidth="1.5" strokeDasharray="3 3"/>
+        <circle cx={markX} cy={markY} r="5.5" fill={C.orange} stroke="#fff" strokeWidth="2"/>
         {marks.map(([km, label], i) => (
           <g key={i}>
             <line x1={x(km)} y1="0" x2={x(km)} y2={h - padBottom} stroke={C.brand} strokeWidth="1" strokeDasharray="2 3" opacity="0.35"/>
@@ -1885,7 +1896,7 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
   const trackGradient = uM(() => {
     if (isSpectator || !session.runner || !session.runner.checkins.length || !course || !course.points) return '—';
     const gpsLive = livePos && livePos.at && (Date.now() - livePos.at) < 2 * 60 * 1000 && livePos.lat != null;
-    const projection = gpsLive ? nearestKmForPoint(course.points, livePos.lat, livePos.lon) : null;
+    const projection = gpsLive ? nearestKmForPoint(course.points, livePos.lat, livePos.lon, session.runner.progressKm) : null;
     const km = (projection && projection.distKm < ON_COURSE_KM) ? projection.km : session.runner.progressKm;
     const gain = gainAtKmForPoints(course.points, km);
     return `+${gain} ม.`;
