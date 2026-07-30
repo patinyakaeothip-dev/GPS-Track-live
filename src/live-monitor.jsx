@@ -575,7 +575,6 @@ function LiveMonitorApp() {
         : (baseStatus === 'active' && staleMin != null && staleMin > STALE_MINUTES) ? 'stale'
         : baseStatus;
       const meta = statusMeta(status);
-      const physKm = geo.nearestKmOnTrack(coursePaths[viewLabel] || coursePaths[overviewLabel], p.lat, p.lon);
       // Before the start checkpoint is scanned, position is stuck at km 0 —
       // the "gradient" there is just the course's starting slope, not
       // anything about the runner, so show — same as pace instead of a
@@ -588,6 +587,12 @@ function LiveMonitorApp() {
       const gpsLive = !!(live && live.at && (Date.now() - live.at) < 2 * 60 * 1000);
       const mapLat = gpsLive ? live.lat : p.lat;
       const mapLon = gpsLive ? live.lon : p.lon;
+      // The elevation chart's dot used to always project the checkpoint-
+      // interpolated point (p.lat/p.lon) onto the course, ignoring a live
+      // GPS fix entirely — so it sat frozen at the last checkpoint's km
+      // while the map above it correctly tracked GPS. Project from the same
+      // GPS-preferred position the map uses instead.
+      const physKm = geo.nearestKmOnTrack(coursePaths[viewLabel] || coursePaths[overviewLabel], mapLat, mapLon);
       return { bib: r.bib, id: r.id, name: r.nickname, distance: r.distance, gender: r.gender,
         color: colorFor({ status, distance: r.distance }, distColor),
         initial: (r.nickname || '?').slice(0, 1), lat: mapLat, lon: mapLon, gpsLive, km, totalKm,
