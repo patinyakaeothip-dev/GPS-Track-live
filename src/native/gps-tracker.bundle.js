@@ -573,8 +573,8 @@
     }
   }
   async function start(eventId, bib, onPingCb) {
+    if (onPingCb) onPing = onPingCb;
     if (watcherId != null) return;
-    onPing = onPingCb || null;
     retryTimerId = setInterval(flushPending, 15e3);
     window.addEventListener("online", flushPending);
     if (isNative()) {
