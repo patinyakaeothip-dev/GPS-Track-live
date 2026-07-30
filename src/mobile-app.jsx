@@ -46,13 +46,41 @@ function saveScreen(screen) {
 }
 
 // Profile persists across logout/login on this device — so the mandatory
-// onboarding form only ever shows once per device, not on every login.
+// onboarding form only ever shows once per device, not on every login. This
+// local cache is what makes onboarding offline-safe and instant, but it's
+// scoped to *this browser/app context* — Safari, Chrome, and the native
+// app's own WebView each have entirely separate localStorage, so the same
+// account looked empty depending on which one you filled it in from.
+// PROFILE_FIELDS also get synced to Firestore keyed by uid (see
+// syncProfileToCloud/pullProfileFromCloud below) so the same account sees
+// the same profile everywhere, with this local copy as the offline fallback.
 const LS_PROFILE_KEY = 'trt.mobile.profile';
+const PROFILE_FIELDS = ['nickname', 'gender', 'phone', 'emgName', 'emgPhone', 'bloodType', 'medical', 'profileCompleted'];
 function loadProfile() {
   try { return JSON.parse(localStorage.getItem(LS_PROFILE_KEY)) || null; } catch (_) { return null; }
 }
 function saveProfile(p) {
   try { localStorage.setItem(LS_PROFILE_KEY, JSON.stringify(p)); } catch (_) {}
+}
+function syncProfileToCloud(uid, p) {
+  if (!window.fb || !uid) return;
+  const data = {};
+  PROFILE_FIELDS.forEach(k => { data[k] = p[k] ?? ''; });
+  window.fb.setDocById('profiles', uid, data).catch(err => console.warn('[trt] profile sync failed', err));
+}
+// One-shot pull (unsubscribes after the first snapshot) — login only needs
+// "whatever's there right now", not a live subscription that keeps firing
+// while the runner is off doing other things in the app.
+function pullProfileFromCloud(uid, cb) {
+  if (!window.fb || !uid) return;
+  let done = false;
+  let unsub = null;
+  unsub = window.fb.watchDocById('profiles', uid, (remote) => {
+    if (done) return;
+    done = true;
+    if (unsub) unsub();
+    cb(remote);
+  });
 }
 
 // Favourite runners (❤ picked from the registered-runner list) shown in the
@@ -1589,7 +1617,7 @@ function runnerStatusLabel(r) {
   return 'ยังไม่เริ่ม';
 }
 
-function FriendsTab({ eventId, followedBib, favBibs, onAddFavorite, onRemoveFavorite }) {
+function FriendsTab({ eventId, event, followedBib, favBibs, onAddFavorite, onRemoveFavorite }) {
   const [runners, setRunners] = uS(() => (eventId && window.runnerStore ? window.runnerStore.listRunners(eventId) : []));
   const [detailBib, setDetailBib] = uS(null);
   uE(() => {
@@ -1641,7 +1669,7 @@ function FriendsTab({ eventId, followedBib, favBibs, onAddFavorite, onRemoveFavo
         )}
       </div>
 
-      {detail && <FriendDetailSheet runner={detail} onClose={() => setDetailBib(null)}/>}
+      {detail && <FriendDetailSheet runner={detail} eventId={eventId} event={event} onClose={() => setDetailBib(null)}/>}
     </div>
   );
 }
@@ -1651,9 +1679,10 @@ function FriendsTab({ eventId, followedBib, favBibs, onAddFavorite, onRemoveFavo
 // runner's session can only ever be a runner or a spectator, not both, so
 // following a friend from inside your own Track tab needs its own lighter
 // view rather than reusing the full follow-a-race flow.
-function FriendDetailSheet({ runner: r, onClose }) {
+function FriendDetailSheet({ runner: r, eventId, event, onClose }) {
   const cks = r.checkins || [];
   const last = cks[cks.length - 1];
+  const [showMap, setShowMap] = uS(false);
   return (
     <Overlay>
       <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)' }}/>
@@ -1672,10 +1701,69 @@ function FriendDetailSheet({ runner: r, onClose }) {
         </div>
         <div style={{ fontFamily: C.mono, fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted, marginBottom: 6 }}>เช็คอินล่าสุด</div>
         {last
-          ? <div style={{ fontSize: 13.5 }}>{cpCheckinLabel(last.cp)} · <span style={{ fontFamily: C.mono, color: C.muted }}>{last.t} น.</span></div>
-          : <div style={{ fontSize: 13, color: C.muted }}>ยังไม่มีการเช็คอิน</div>}
+          ? <div style={{ fontSize: 13.5, marginBottom: 14 }}>{cpCheckinLabel(last.cp)} · <span style={{ fontFamily: C.mono, color: C.muted }}>{last.t} น.</span></div>
+          : <div style={{ fontSize: 13, color: C.muted, marginBottom: 14 }}>ยังไม่มีการเช็คอิน</div>}
+        <Btn variant="ghost" onClick={() => setShowMap(true)}>📍 ดูตำแหน่ง GPS บนแผนที่</Btn>
       </div>
+      {showMap && <FriendMapSheet runner={r} eventId={eventId} event={event} onClose={() => setShowMap(false)}/>}
     </Overlay>
+  );
+}
+// A friend's live position on the course — separate from FriendDetailSheet
+// (checkpoint stats only) because loading a Leaflet map + live GPS listener
+// for every favourite isn't free; only do it for the one friend actually
+// being looked at, on demand.
+function FriendMapSheet({ runner, eventId, event, onClose }) {
+  const course = useCourse(event, runner.distance);
+  const livePos = useLivePos(eventId, runner.bib);
+  const mapHostRef = uR(null);
+  const mapObjRef = uR(null);
+  const markerRef = uR(null);
+
+  uE(() => {
+    if (!course || !window.L || !mapHostRef.current || mapObjRef.current) return;
+    const L = window.L;
+    const pts = course.points.map(p => [p[0], p[1]]);
+    const map = L.map(mapHostRef.current, { zoomControl: false, attributionControl: false }).fitBounds(pts);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+    L.polyline(pts, { color: C.brand, weight: 4 }).addTo(map);
+    const idx = Math.min(course.points.length - 1, Math.round(((runner.progressKm || 0) / course.totalKm) * course.points.length));
+    const pos = course.points[idx];
+    markerRef.current = L.circleMarker([pos[0], pos[1]], { radius: 8, color: '#fff', weight: 2, fillColor: C.orange, fillOpacity: 1 }).addTo(map);
+    mapObjRef.current = map;
+    setTimeout(() => map.invalidateSize(), 60);
+  }, [course]);
+
+  // Same GPS-fresh/checkpoint-fallback rule as the runner's own Route tab
+  // (see RouteTab) — livePos here only ever comes from Firestore (this is
+  // someone else's device), so it's only ever as fresh as their last
+  // successful sync.
+  uE(() => {
+    if (!mapObjRef.current || !markerRef.current || !course) return;
+    const gpsFresh = livePos && livePos.lat != null && livePos.lon != null && livePos.at && (Date.now() - livePos.at) < 2 * 60 * 1000;
+    if (gpsFresh) {
+      markerRef.current.setLatLng([livePos.lat, livePos.lon]);
+    } else {
+      const idx = Math.min(course.points.length - 1, Math.round(((runner.progressKm || 0) / course.totalKm) * course.points.length));
+      const pos = course.points[idx];
+      markerRef.current.setLatLng([pos[0], pos[1]]);
+    }
+  }, [course, runner.progressKm, livePos && livePos.lat, livePos && livePos.lon, livePos && livePos.at]);
+
+  const gpsFresh = livePos && livePos.at && (Date.now() - livePos.at) < 2 * 60 * 1000 && livePos.lat != null;
+
+  return (
+    <div style={{ position: 'absolute', inset: 0, zIndex: 10, background: '#fff', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '16px 18px', borderBottom: `1px solid ${C.border}` }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 15, fontWeight: 700 }}>{runner.nickname}</div>
+          <div style={{ fontFamily: C.mono, fontSize: 10.5, color: gpsFresh ? C.brand : C.muted }}>{gpsFresh ? '🟢 GPS สด' : '⚪ ไม่มี GPS สด · แสดงตำแหน่งจากเช็คพอยท์ล่าสุด'}</div>
+        </div>
+        <div onClick={onClose} style={{ width: 30, height: 30, borderRadius: 10, border: `1.6px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 14, flexShrink: 0 }}>✕</div>
+      </div>
+      {!course && <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.muted, fontSize: 12.5 }}>กำลังโหลดแผนที่...</div>}
+      <div ref={mapHostRef} style={{ flex: 1, display: course ? 'block' : 'none' }}/>
+    </div>
   );
 }
 function cpCheckinLabel(cp) {
@@ -2067,7 +2155,7 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
           runner={isSpectator ? (followedRunner ? { dist: followedRunner.distance, progressKm: followedRunner.progressKm } : { dist: '22K', progressKm: 0 }) : session.runner}
           spectatorRunner={isSpectator ? followedRunner : null} livePos={effectiveLivePos}/>}
         {tab === 'ranking' && <RankingTab snap={snap} eventId={!isSpectator ? session.runner.eventId : null} event={currentEvent}/>}
-        {tab === 'friends' && <FriendsTab eventId={currentEventId} followedBib={isSpectator ? session.followBib : (session.runner && session.runner.bib)} favBibs={favBibs} onAddFavorite={() => setPickingFav(true)} onRemoveFavorite={toggleFavorite}/>}
+        {tab === 'friends' && <FriendsTab eventId={currentEventId} event={currentEvent} followedBib={isSpectator ? session.followBib : (session.runner && session.runner.bib)} favBibs={favBibs} onAddFavorite={() => setPickingFav(true)} onRemoveFavorite={toggleFavorite}/>}
       </div>
       <div style={{ flexShrink: 0, display: 'flex', borderTop: `1px solid #d8d2c2`, background: '#fff', padding: '6px 4px 20px' }}>
         {TABS.map(([k, Icon, label]) => (
@@ -2166,12 +2254,29 @@ function MobileApp() {
     // supplementary fields the runner filled in by hand (nickname, phone,
     // emergency contact, blood type, medical notes) should carry over.
     const { email: _e, name: _n, uid: _u, photo: _p, provider: _pr, ...savedPrefs } = profile || {};
-    persist({ user: { ...savedPrefs, ...authedUser }, runner: null });
+    const localUser = { ...savedPrefs, ...authedUser };
+    persist({ user: localUser, runner: null });
     setScreen(profile && profile.profileCompleted ? 'events' : 'onboard');
+
+    // The local cache above is per-browser/app-context (Safari, Chrome, the
+    // native app's own WebView each have separate localStorage) — the same
+    // account filling in their phone/emergency contact from one context
+    // wouldn't show up in another. Firestore is the account-wide (uid)
+    // source of truth for these fields; pull it down and let it win over
+    // whatever's cached locally, then cache the merged result too so it's
+    // available next time even offline.
+    pullProfileFromCloud(authedUser.uid, (remote) => {
+      if (!remote) return;
+      const merged = { ...localUser, ...remote };
+      saveProfile(merged);
+      persist({ user: merged, runner: null });
+      if (merged.profileCompleted) setScreen('events');
+    });
   }
   function finishOnboard(nextUser) {
     const completed = { ...nextUser, profileCompleted: true };
     saveProfile(completed);
+    syncProfileToCloud(completed.uid, completed);
     persist({ ...session, user: completed });
     setScreen('events');
   }
@@ -2253,6 +2358,7 @@ function MobileApp() {
   function updateUser(nextUser) {
     const withCompleted = { ...nextUser, profileCompleted: true };
     saveProfile(withCompleted);
+    syncProfileToCloud(withCompleted.uid, withCompleted);
     persist({ ...session, user: withCompleted });
   }
 
