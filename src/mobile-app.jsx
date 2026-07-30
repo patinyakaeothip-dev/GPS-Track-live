@@ -1900,6 +1900,26 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
   const ownBib = !isSpectator && session.runner && session.runner.bib;
   const livePos = useLivePos(currentEventId, isSpectator ? session.followBib : ownBib);
 
+  // A runner's GPS watcher only ever got started at the exact moment they
+  // scanned the start QR (see qr-start's onScanned / scanComplete below) —
+  // it doesn't survive a full page reload (closing the browser tab, or a
+  // native WebView process getting killed and relaunched by the OS). A
+  // runner who registered via the plain web — more prone to full reloads
+  // than the native app, where the process tends to just background — who
+  // then reopened the app mid-race would sit at their last known position
+  // forever, tripping Live Monitor's "no movement" alert with no way to
+  // recover short of scanning another checkpoint. Resume tracking
+  // automatically whenever the app loads with a runner who has started
+  // but not finished/DNF'd; start() itself is idempotent (see
+  // gps-tracker.js) so this is safe even when tracking is already running.
+  const runnerStarted = !isSpectator && session.runner && (session.runner.checkins || []).some(c => c.cp === 'start');
+  const runnerFinished = !isSpectator && session.runner && (session.runner.checkins || []).some(c => c.cp === 'finish');
+  uE(() => {
+    if (!runnerStarted || runnerFinished || (session.runner && session.runner.dnf) || !window.trtGpsTracker) return;
+    const bib = session.runner.bib || user.uid || user.name;
+    window.trtGpsTracker.start(session.runner.eventId, bib);
+  }, [runnerStarted, runnerFinished, session.runner && session.runner.dnf]);
+
   // Off-route alert: a single momentarily-noisy GPS fix shouldn't trigger
   // this, so it only fires once the runner has been consistently >100m
   // from the course for a while — tracked as a timestamp in a ref (not

@@ -86,6 +86,13 @@ async function pushPing(eventId, bib, lat, lon, extra) {
 // callback (e.g. to update the Track tab's UI immediately, before the
 // Firestore round-trip).
 async function start(eventId, bib, onPingCb) {
+  // Idempotent — the app calls this both at the exact moment a runner
+  // scans start, and (separately, see mobile-app.jsx's AppShell) on every
+  // app load to resume tracking for someone already mid-race after a
+  // reload/relaunch. Those two calls often land back to back for the same
+  // runner; without this guard the second call would leak the first
+  // watcher (never removed) while starting a redundant second one.
+  if (watcherId != null) return;
   onPing = onPingCb || null;
   retryTimerId = setInterval(flushPending, 15000);
   window.addEventListener('online', flushPending);
