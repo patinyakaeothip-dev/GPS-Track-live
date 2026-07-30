@@ -1143,7 +1143,7 @@ function saveCertificateResult(session, event, checkins) {
   } catch (err) { console.warn('[trt] certificate save failed', err); }
 }
 
-function TrackTab({ runner, event, onScan, onSos, onDnf, offRoute }) {
+function TrackTab({ runner, event, onScan, onSos, onDnf, offRoute, onCancelSos }) {
   const seq = cpSeqFor(event);
   const nextIdx = runner.checkins.length;
   const totalKm = parseFloat(runner.dist) || 29;
@@ -1190,6 +1190,19 @@ function TrackTab({ runner, event, onScan, onSos, onDnf, offRoute }) {
         <div style={{ padding: 14, background: '#fef2f2', border: '1px solid #f0c9c4', borderRadius: 12, fontSize: 12.5, color: '#9b1c10', lineHeight: 1.6, display: 'flex', alignItems: 'center', gap: 10 }}>
           <FlagIcon size={18}/>
           <div><b>ถอนตัวแล้ว (DNF)</b><br/>ทีมงานรับทราบตำแหน่งล่าสุดของคุณแล้ว · ระบบหยุดติดตาม GPS แล้ว</div>
+        </div>
+      )}
+      {runner.sos && (
+        <div style={{ padding: 14, background: '#fef2f2', border: '1px solid #f5b0a8', borderRadius: 12, fontSize: 12.5, color: '#9b1c10', lineHeight: 1.6 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 18 }}>🆘</span>
+            <div><b>ส่งสัญญาณ SOS แล้ว</b><br/>ทีมงานเห็นตำแหน่งของคุณแล้ว · รอการติดต่อกลับ{runner.sosReason ? ` · เหตุ: ${runner.sosReason}` : ''}</div>
+          </div>
+          {onCancelSos && (
+            <button onClick={onCancelSos} style={{ marginTop: 10, width: '100%', padding: 9, background: '#fff', color: '#9b1c10', border: '1px solid #9b1c10', borderRadius: 10, fontFamily: C.mono, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+              ✓ ปลอดภัยแล้ว · ยกเลิก SOS
+            </button>
+          )}
         </div>
       )}
       {offRoute && (
@@ -2010,7 +2023,7 @@ function ProfileScreen({ user, onLogout, onClose, onSave, onboard }) {
 }
 
 // ── App shell with bottom tabs ────────────────────────────────────────────
-function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome }) {
+function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome, onCancelSos }) {
   const isSpectator = !!session.spectator;
   const [tab, setTab] = uS(isSpectator ? 'friends' : 'track');
   const [scanning, setScanning] = uS(false);
@@ -2203,7 +2216,7 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
       </div>
       <div key={tab} style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', animation: 'trtFadeIn 0.2s ease' }}>
         {!isSpectator && tab === 'track' && <TrackTab runner={{ ...session.runner,
-          pace: trackPace, gradient: trackGradient }} event={currentEvent} onScan={doScan} onSos={onSos} onDnf={onDnf} offRoute={isOffRoute}/>}
+          pace: trackPace, gradient: trackGradient }} event={currentEvent} onScan={doScan} onSos={onSos} onDnf={onDnf} offRoute={isOffRoute} onCancelSos={onCancelSos}/>}
         {tab === 'route' && <RouteTab course={course} event={currentEvent}
           runner={isSpectator ? (followedRunner ? { dist: followedRunner.distance, progressKm: followedRunner.progressKm } : { dist: '22K', progressKm: 0 }) : session.runner}
           spectatorRunner={isSpectator ? followedRunner : null} livePos={effectiveLivePos}/>}
@@ -2457,7 +2470,13 @@ function MobileApp() {
     setScreen('app');
   }}/>;
   else if (screen === 'app') body = <AppShell user={session.user} session={session} updateRunner={updateRunner}
-    onSos={() => setModal('sos')} onDnf={() => setModal('dnf')} onProfile={() => setModal('profile')} onHome={() => setScreen('events')}/>;
+    onSos={() => setModal('sos')} onDnf={() => setModal('dnf')} onProfile={() => setModal('profile')} onHome={() => setScreen('events')}
+    onCancelSos={() => {
+      if (session.runner && session.runner.rosterId && window.runnerStore) {
+        window.runnerStore.updateRunnerProgress(session.runner.rosterId, { sos: false, sosReason: '' });
+      }
+      persist({ ...session, runner: { ...session.runner, sos: false, sosReason: '' } });
+    }}/>;
 
   return (
     <div style={{ height: '100%', position: 'relative' }}>
@@ -2470,6 +2489,11 @@ function MobileApp() {
         onCancel={() => setModal(null)} onSent={() => setModal(null)}
         onSend={(reason) => {
           if (session.runner && session.runner.rosterId && window.runnerStore) {
+            // Patch this device's own session too, not just the roster —
+            // otherwise the runner has no way to tell (from their own Track
+            // tab) that their SOS actually went out, same gap DNF used to
+            // have before it started doing this.
+            persist({ ...session, runner: { ...session.runner, sos: true, sosReason: reason } });
             return window.runnerStore.updateRunnerProgress(session.runner.rosterId, { sos: true, sosReason: reason, sosAt: Date.now() }).synced;
           }
           return Promise.resolve(false);
