@@ -1471,12 +1471,35 @@ function RankingTab({ snap, eventId, event }) {
     return () => window.removeEventListener('trt:runners-updated', refresh);
   }, [eventId]);
 
+  // Finished runners must be ranked by actual race time, not by progressKm
+  // — every finisher sits at the same progressKm (the full distance), so
+  // sorting on that alone left finish order essentially arbitrary (roster
+  // order) instead of who was actually fastest. Elapsed time uses the same
+  // gun-time-clamped chip time as everywhere else results are computed
+  // (see effectiveStartMs in src/live-monitor.jsx / results/index.html) so
+  // an early start scan can't outrank someone who started on time.
   const rows = uM(() => {
+    const combine = window.eventStatus && window.eventStatus.combineDateTime;
+    const distDef = (event && event.distances || []).find(d => d.label === dist);
+    const gunMs = distDef && distDef.cpTimes && combine ? combine(event.raceDateISO, distDef.cpTimes.start) : null;
+    function elapsedMsFor(r) {
+      const startCk = (r.checkins || []).find(c => c.cp === 'start');
+      const finishCk = (r.checkins || []).find(c => c.cp === 'finish');
+      if (!startCk || !finishCk || !combine || !event) return Infinity;
+      const rawStartMs = combine(event.raceDateISO, startCk.t);
+      const finishMs = combine(event.raceDateISO, finishCk.t);
+      if (rawStartMs == null || finishMs == null) return Infinity;
+      const startMs = (gunMs != null && rawStartMs < gunMs) ? gunMs : rawStartMs;
+      return finishMs - startMs;
+    }
     if (realRunners) {
       return realRunners
         .filter(r => r.distance === dist && !r.dnf && (gender === 'all' || r.gender === gender))
-        .map(r => ({ bib: r.bib, name: r.nickname, progressKm: r.progressKm, finished: (r.checkins || []).some(c => c.cp === 'finish') }))
-        .sort((a, b) => (a.finished === b.finished ? 0 : a.finished ? -1 : 1) || b.progressKm - a.progressKm)
+        .map(r => {
+          const finished = (r.checkins || []).some(c => c.cp === 'finish');
+          return { bib: r.bib, name: r.nickname, progressKm: r.progressKm, finished, elapsedMs: finished ? elapsedMsFor(r) : null };
+        })
+        .sort((a, b) => (a.finished === b.finished ? 0 : a.finished ? -1 : 1) || (a.finished ? a.elapsedMs - b.elapsedMs : b.progressKm - a.progressKm))
         .slice(0, 30);
     }
     if (!snap) return [];
@@ -1484,7 +1507,13 @@ function RankingTab({ snap, eventId, event }) {
       .sort((a, b) => (a.status === 'finished' ? 0 : 1) - (b.status === 'finished' ? 0 : 1) || b.progressKm - a.progressKm)
       .slice(0, 30)
       .map(r => ({ bib: r.bib, name: `${r.firstName} ${r.lastName}`, progressKm: r.progressKm }));
-  }, [realRunners, snap, dist, gender]);
+  }, [realRunners, snap, dist, gender, event]);
+  function fmtElapsed(ms) {
+    if (ms == null || !isFinite(ms)) return '';
+    const s = Math.floor(ms / 1000);
+    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), r = s % 60;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}`;
+  }
   return (
     <div style={{ flex: 1, overflow: 'auto', padding: '14px 18px 90px' }}>
       <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
@@ -1506,7 +1535,7 @@ function RankingTab({ snap, eventId, event }) {
             {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`}
           </span>
           <span style={{ flex: 1, fontSize: 13.5 }}>{r.name}</span>
-          <span style={{ fontFamily: C.mono, fontSize: 11, color: C.muted }}>{r.progressKm.toFixed(1)}K</span>
+          <span style={{ fontFamily: C.mono, fontSize: 11, color: C.muted }}>{r.finished ? fmtElapsed(r.elapsedMs) : `${r.progressKm.toFixed(1)}K`}</span>
         </div>
       ))}
     </div>
