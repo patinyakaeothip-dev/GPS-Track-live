@@ -777,7 +777,7 @@ function LiveMonitorApp() {
               "{selectedEvent.name}" · {selectedEvent.date}<br/>
               Live Monitor มีไว้ดูระหว่างแข่งเท่านั้น — ดูผลอย่างเป็นทางการที่หน้า Results แทน
             </div>
-            <a href="results/" style={{ display: 'inline-block', marginTop: 16, padding: '10px 18px', background: M_BRAND, color: '#fff', textDecoration: 'none', borderRadius: 8, fontFamily: M_MONO, fontSize: 12, fontWeight: 700 }}>📊 ไปหน้า Results →</a>
+            <a href={`results/?event=${encodeURIComponent(selectedEvent.id)}`} style={{ display: 'inline-block', marginTop: 16, padding: '10px 18px', background: M_BRAND, color: '#fff', textDecoration: 'none', borderRadius: 8, fontFamily: M_MONO, fontSize: 12, fontWeight: 700 }}>📊 ไปหน้า Results →</a>
           </div>
         )}
 
