@@ -245,6 +245,19 @@ function LiveMonitorApp() {
   const [dashView, setDashView] = mS('map'); // 'map' | 'ranking'
   const [distFilter, setDistFilter] = mS(null);
   const [showLabels, setShowLabels] = mS(false);
+  // Everything below was laid out for a wide RD desktop/tablet screen — a
+  // fixed-width sidebar next to the map, a 4-across stats row, an
+  // absolutely-positioned legend overlay — none of which fit a phone
+  // viewport. Rather than retrofit CSS media queries onto an inline-style
+  // codebase, track viewport width directly and swap layout values in JS,
+  // same pattern as everywhere else in this file.
+  const [isMobile, setIsMobile] = mS(() => window.innerWidth < 780);
+  const [legendOpen, setLegendOpen] = mS(false);
+  mE(() => {
+    const onResize = () => setIsMobile(window.innerWidth < 780);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
   const [events, setEvents] = mS(() => (window.eventStore ? window.eventStore.loadEvents() : []));
   mE(() => {
     const refresh = () => setEvents(window.eventStore.loadEvents());
@@ -684,22 +697,23 @@ function LiveMonitorApp() {
   }, [displays, distFilter, rankGender, search, distLabels]);
 
   return (
-    <div style={{ maxWidth: 1440, margin: '0 auto', padding: '24px 20px 60px', fontFamily: "'Plus Jakarta Sans','Noto Sans Thai',ui-sans-serif,system-ui,sans-serif", color: '#1f2a1c' }}>
-      <div style={{ fontFamily: M_MONO, fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#1f2a1c', fontWeight: 600, marginBottom: 14 }}>🖥 Race Director · Live Map Dashboard</div>
+    <div style={{ maxWidth: 1440, margin: '0 auto', padding: isMobile ? '14px 8px 40px' : '24px 20px 60px', fontFamily: "'Plus Jakarta Sans','Noto Sans Thai',ui-sans-serif,system-ui,sans-serif", color: '#1f2a1c' }}>
+      <div style={{ fontFamily: M_MONO, fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#1f2a1c', fontWeight: 600, marginBottom: 14, padding: isMobile ? '0 6px' : 0 }}>🖥 Race Director · Live Map Dashboard</div>
 
-      <div style={{ background: '#fff', border: '1px solid #e5e0d3', borderRadius: 14, boxShadow: '0 2px 16px rgba(0,0,0,0.05)', overflow: 'hidden' }}>
-        <header style={{ display: 'flex', alignItems: 'center', padding: '14px 22px', borderBottom: '1px solid #d8d2c2', gap: 16 }}>
-          <div style={{ width: 54, height: 54, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+      <div style={{ background: '#fff', border: '1px solid #e5e0d3', borderRadius: isMobile ? 0 : 14, boxShadow: '0 2px 16px rgba(0,0,0,0.05)', overflow: 'hidden' }}>
+        <header style={{ display: 'flex', alignItems: 'center', flexWrap: isMobile ? 'wrap' : 'nowrap', padding: isMobile ? '12px 14px' : '14px 22px', borderBottom: '1px solid #d8d2c2', gap: isMobile ? 10 : 16 }}>
+          <div style={{ width: isMobile ? 40 : 54, height: isMobile ? 40 : 54, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
             <img src="assets/rayong-trail-icon.png" alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }}/>
           </div>
-          <div>
-            <div style={{ fontFamily: M_MONO, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#5d6b59' }}>{selectedEvent ? selectedEvent.name : 'Rayong Trail'}</div>
-            <div style={{ fontFamily: 'Georgia,serif', fontStyle: 'italic', fontSize: 17, fontWeight: 600, color: '#1f4d39' }}>Live GPS Monitor</div>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontFamily: M_MONO, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#5d6b59', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{selectedEvent ? selectedEvent.name : 'Rayong Trail'}</div>
+            <div style={{ fontFamily: 'Georgia,serif', fontStyle: 'italic', fontSize: isMobile ? 14.5 : 17, fontWeight: 600, color: '#1f4d39' }}>Live GPS Monitor</div>
           </div>
           {events.length > 0 && (
             <select value={eventId || ''} onChange={e => { setEventId(e.target.value); setPreviewOpen(false); }} style={{
               padding: '6px 10px', border: '1px solid #e5e0d3', borderRadius: 6, background: '#fff',
-              fontFamily: M_MONO, fontSize: 11, color: '#1f2a1c', maxWidth: 260 }}>
+              fontFamily: M_MONO, fontSize: 11, color: '#1f2a1c', maxWidth: isMobile ? '100%' : 260,
+              width: isMobile ? '100%' : 'auto', order: isMobile ? 4 : 0 }}>
               {eventGroups.active.length > 0 && (
                 <optgroup label="🔴 กำลังแข่ง / จะมาถึง">
                   {eventGroups.active.map(ev => (
@@ -716,9 +730,9 @@ function LiveMonitorApp() {
               )}
             </select>
           )}
-          <div style={{ flex: 1 }}/>
+          {!isMobile && <div style={{ flex: 1 }}/>}
           {viewGunMs && selectedStatus !== 'past' && (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', padding: '4px 12px', borderRight: '1px solid #e5e0d3' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', padding: isMobile ? '4px 0' : '4px 12px', borderRight: isMobile ? 'none' : '1px solid #e5e0d3' }}>
               <span style={{ fontFamily: M_MONO, fontSize: 8.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#5d6b59' }}>Gun time · {viewLabel}</span>
               <span style={{ fontFamily: M_MONO, fontSize: 14, fontWeight: 700, color: clockNow >= viewGunMs ? '#1f4d39' : '#7c4a03', fontVariantNumeric: 'tabular-nums' }}>
                 {clockNow >= viewGunMs ? `+${fmtElapsed(clockNow - viewGunMs)}` : `-${fmtElapsed(viewGunMs - clockNow)}`}
@@ -775,18 +789,18 @@ function LiveMonitorApp() {
             <button onClick={() => setPreviewOpen(false)} style={{ padding: '5px 10px', background: 'transparent', border: '1px solid #d8ae5c', borderRadius: 6, fontFamily: M_MONO, fontSize: 10, fontWeight: 700, color: '#7c4a03', cursor: 'pointer' }}>ปิดพรีวิว</button>
           </div>
         )}
-        <div style={{ display: 'flex', borderBottom: '1px solid #d8d2c2' }}>
+        <div style={{ display: isMobile ? 'grid' : 'flex', gridTemplateColumns: isMobile ? '1fr 1fr' : undefined, borderBottom: '1px solid #d8d2c2' }}>
           {[['ทั้งหมด', counts.total, '#1f2a1c'], ['กำลังวิ่ง', counts.on, '#1f2a1c'], ['เข้าเส้นชัย', counts.finished, M_BRAND], ['Alerts', counts.alert, counts.alert ? M_ALERT : '#1f2a1c']].map(([label, value, color], i) => (
-            <div key={i} style={{ flex: 1, padding: '12px 18px', borderRight: '1px solid #d8d2c2' }}>
+            <div key={i} style={{ flex: isMobile ? undefined : 1, padding: isMobile ? '10px 14px' : '12px 18px', borderRight: isMobile ? (i % 2 === 0 ? '1px solid #d8d2c2' : 'none') : '1px solid #d8d2c2', borderBottom: isMobile && i < 2 ? '1px solid #d8d2c2' : 'none' }}>
               <div style={{ fontFamily: M_MONO, fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#5d6b59', marginBottom: 5 }}>{label}</div>
-              <div style={{ fontSize: 24, fontWeight: 500, letterSpacing: '-0.02em', color }}>{value}</div>
+              <div style={{ fontSize: isMobile ? 20 : 24, fontWeight: 500, letterSpacing: '-0.02em', color }}>{value}</div>
             </div>
           ))}
         </div>
 
-        <div style={{ display: 'flex', gap: 6, padding: '10px 18px', borderBottom: '1px solid #d8d2c2', background: '#faf8f2' }}>
+        <div style={{ display: 'flex', gap: 6, padding: isMobile ? '10px 10px' : '10px 18px', borderBottom: '1px solid #d8d2c2', background: '#faf8f2', overflowX: isMobile ? 'auto' : 'visible' }}>
           {[null, ...distLabels].map(d => (
-            <div key={d || 'all'} onClick={() => setDistFilter(d)} style={{ padding: '7px 14px', borderRadius: 8,
+            <div key={d || 'all'} onClick={() => setDistFilter(d)} style={{ padding: '7px 14px', borderRadius: 8, flexShrink: 0,
               background: distFilter === d ? '#fff' : 'transparent', boxShadow: distFilter === d ? '0 1px 3px rgba(31,42,28,0.08)' : 'none',
               fontFamily: M_MONO, fontSize: 11, fontWeight: distFilter === d ? 700 : 600, color: distFilter === d ? '#1f4d39' : '#5d6b59', cursor: 'pointer' }}>{d || 'ทุกระยะ'}</div>
           ))}
@@ -804,18 +818,34 @@ function LiveMonitorApp() {
             (its effect bails out whenever mapRef.current is already
             truthy) and the map never came back without a full refresh. */}
         <div style={{ display: dashView === 'map' ? 'flex' : 'none', flexDirection: 'column' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', minHeight: 560 }}>
-              <div style={{ position: 'relative', borderRight: '1px solid #d8d2c2' }}>
-                <div style={{ position: 'absolute', top: 12, left: 16, zIndex: 400, display: 'flex', gap: 16, background: 'rgba(255,255,255,0.92)', padding: '6px 12px', borderRadius: 10, boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
-                  {[...distLabels.map(l => [l, distColor[l]]), ['ออกนอกเส้นทาง', M_WARN], ['ขาดการติดต่อ', M_ALERT]].map(([label, color]) => (
-                    <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                      <span style={{ width: 8, height: 8, borderRadius: 99, background: color }}/>
-                      <span style={{ fontFamily: M_MONO, fontSize: 10, color: '#5d6b59' }}>{label}</span>
-                    </div>
-                  ))}
-                </div>
-                {!ready && <div style={{ width: '100%', height: 560, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#5d6b59', fontFamily: M_MONO, fontSize: 12 }}>กำลังโหลดแผนที่ GPX…</div>}
-                <div ref={mapHostRef} style={{ width: '100%', height: 560, display: ready ? 'block' : 'none' }}/>
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 340px', minHeight: isMobile ? 'auto' : 560 }}>
+              <div style={{ position: 'relative', borderRight: isMobile ? 'none' : '1px solid #d8d2c2', borderBottom: isMobile ? '1px solid #d8d2c2' : 'none' }}>
+                {isMobile ? (
+                  <div style={{ position: 'absolute', top: 10, left: 10, zIndex: 400 }}>
+                    <button onClick={() => setLegendOpen(v => !v)} style={{ width: 32, height: 32, borderRadius: 999, background: 'rgba(255,255,255,0.95)', border: '1px solid #d8d2c2', boxShadow: '0 2px 8px rgba(0,0,0,0.1)', cursor: 'pointer', fontSize: 14 }}>🎨</button>
+                    {legendOpen && (
+                      <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 6, background: 'rgba(255,255,255,0.95)', padding: '8px 12px', borderRadius: 10, boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
+                        {[...distLabels.map(l => [l, distColor[l]]), ['ออกนอกเส้นทาง', M_WARN], ['ขาดการติดต่อ', M_ALERT]].map(([label, color]) => (
+                          <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                            <span style={{ width: 8, height: 8, borderRadius: 99, background: color, flexShrink: 0 }}/>
+                            <span style={{ fontFamily: M_MONO, fontSize: 10, color: '#5d6b59', whiteSpace: 'nowrap' }}>{label}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div style={{ position: 'absolute', top: 12, left: 16, zIndex: 400, display: 'flex', gap: 16, background: 'rgba(255,255,255,0.92)', padding: '6px 12px', borderRadius: 10, boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
+                    {[...distLabels.map(l => [l, distColor[l]]), ['ออกนอกเส้นทาง', M_WARN], ['ขาดการติดต่อ', M_ALERT]].map(([label, color]) => (
+                      <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                        <span style={{ width: 8, height: 8, borderRadius: 99, background: color }}/>
+                        <span style={{ fontFamily: M_MONO, fontSize: 10, color: '#5d6b59' }}>{label}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {!ready && <div style={{ width: '100%', height: isMobile ? 320 : 560, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#5d6b59', fontFamily: M_MONO, fontSize: 12 }}>กำลังโหลดแผนที่ GPX…</div>}
+                <div ref={mapHostRef} style={{ width: '100%', height: isMobile ? 320 : 560, display: ready ? 'block' : 'none' }}/>
                 {ready && (
                   <div style={{ position: 'absolute', zIndex: 1000, bottom: 16, right: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
                     <button onClick={() => setShowLabels(v => !v)} title="แสดงชื่อนักวิ่งทั้งหมด"
@@ -905,7 +935,7 @@ function LiveMonitorApp() {
               </div>
             </div>
 
-            <div style={{ padding: '16px 20px 20px', borderTop: '1px solid #d8d2c2' }}>
+            <div style={{ padding: isMobile ? '14px 12px 16px' : '16px 20px 20px', borderTop: '1px solid #d8d2c2' }}>
               <div style={{ fontFamily: M_MONO, fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#5d6b59', marginBottom: 8 }}>
                 Elevation profile · เส้นทาง {viewLabel}{!distFilter ? ' (ภาพรวม)' : ''} · {mapDisplays.length} นักวิ่ง
               </div>
@@ -918,8 +948,8 @@ function LiveMonitorApp() {
         </div>
 
         {dashView === 'ranking' && (
-          <div style={{ display: 'flex', flexDirection: 'column', minHeight: 560 }}>
-            <div style={{ display: 'flex', gap: 8, padding: '16px 20px 12px', flexWrap: 'wrap', alignItems: 'center', borderBottom: '1px solid #d8d2c2' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', minHeight: isMobile ? 'auto' : 560 }}>
+            <div style={{ display: 'flex', gap: 8, padding: isMobile ? '12px 12px 10px' : '16px 20px 12px', flexWrap: 'wrap', alignItems: 'center', borderBottom: '1px solid #d8d2c2' }}>
               <span style={{ fontFamily: M_MONO, fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 600, marginRight: 6 }}>นักวิ่งทั้งหมด · {counts.total}</span>
               {[null, ...distLabels].map(d => (
                 <button key={d || 'all'} onClick={() => setDistFilter(d)} style={{ padding: '6px 12px', borderRadius: 999, border: `1px solid ${distFilter === d ? M_BRAND : '#d8d2c2'}`, background: distFilter === d ? M_BRAND : '#fff', color: distFilter === d ? '#fff' : '#1f2a1c', fontFamily: M_MONO, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>{d || 'ทั้งหมด'}</button>
@@ -928,10 +958,10 @@ function LiveMonitorApp() {
               {[[null, 'ทั้งหมด'], ['m', 'ชาย'], ['f', 'หญิง']].map(([v, label]) => (
                 <button key={label} onClick={() => setRankGender(v)} style={{ padding: '6px 12px', borderRadius: 999, border: `1px solid ${rankGender === v ? M_BRAND : '#d8d2c2'}`, background: rankGender === v ? M_BRAND : '#fff', color: rankGender === v ? '#fff' : '#1f2a1c', fontFamily: M_MONO, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>{label}</button>
               ))}
-              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="ค้นหาชื่อหรือเลข BIB" style={{ marginLeft: 'auto', padding: '7px 10px', border: '1px solid #e5e0d3', borderRadius: 10, boxShadow: '0 1px 3px rgba(31,42,28,0.08)', fontFamily: M_MONO, fontSize: 11.5, width: 200 }}/>
+              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="ค้นหาชื่อหรือเลข BIB" style={{ marginLeft: isMobile ? 0 : 'auto', padding: '7px 10px', border: '1px solid #e5e0d3', borderRadius: 10, boxShadow: '0 1px 3px rgba(31,42,28,0.08)', fontFamily: M_MONO, fontSize: 11.5, width: isMobile ? '100%' : 200 }}/>
             </div>
-            <div style={{ flex: 1, overflowY: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <div style={{ flex: 1, overflowY: 'auto', overflowX: isMobile ? 'auto' : 'visible' }}>
+              <table style={{ width: '100%', minWidth: isMobile ? 920 : 'auto', borderCollapse: 'collapse', fontSize: 13 }}>
                 <thead>
                   <tr style={{ position: 'sticky', top: 0, background: '#fff' }}>
                     {['อันดับ', 'นักวิ่ง', 'ระยะ', 'ความคืบหน้า', 'เวลาที่วิ่ง', 'เพศ', 'เพซ', 'ไต่ระดับสะสม', 'เช็คพอยท์ล่าสุด', 'สถานะ'].map((h, i) => (
