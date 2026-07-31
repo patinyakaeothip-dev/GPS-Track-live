@@ -1165,13 +1165,13 @@ var trtFirebaseAuthNative = (() => {
     return Capacitor.isNativePlatform();
   }
   async function signInWithGoogle() {
-    const result = await FirebaseAuthentication.signInWithGoogle();
+    const result = await FirebaseAuthentication.signInWithGoogle({ skipNativeAuth: true });
     const idToken = result && result.credential && result.credential.idToken;
     if (!idToken) throw new Error("[firebase-auth-native] no idToken returned from native Google sign-in");
     return idToken;
   }
   async function signInWithApple() {
-    const result = await FirebaseAuthentication.signInWithApple();
+    const result = await FirebaseAuthentication.signInWithApple({ skipNativeAuth: true });
     const idToken = result && result.credential && result.credential.idToken;
     const rawNonce = result && result.credential && result.credential.nonce;
     if (!idToken) throw new Error("[firebase-auth-native] no idToken returned from native Apple sign-in");

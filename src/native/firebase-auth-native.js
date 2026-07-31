@@ -23,8 +23,17 @@ function isNative() {
 
 // Resolves to a Google ID token, or throws — src/firebase.js turns that
 // into a Firebase credential and signs the web SDK's `auth` in with it.
+// skipNativeAuth: true on both calls below — by default this plugin also
+// signs the user into the *native* Firebase Auth SDK as a side effect of
+// driving the native sign-in sheet, using the very same nonce/credential
+// src/firebase.js's signInWithCredential is about to consume again on the
+// JS SDK side. For Apple that double-consumption is what actually threw
+// "auth/missing-or-invalid-nonce" — the native side had already spent the
+// nonce before the JS call ever got to it. Skipping the native sign-in
+// leaves the JS SDK's signInWithCredential as the one and only place the
+// credential actually gets used.
 async function signInWithGoogle() {
-  const result = await FirebaseAuthentication.signInWithGoogle();
+  const result = await FirebaseAuthentication.signInWithGoogle({ skipNativeAuth: true });
   const idToken = result && result.credential && result.credential.idToken;
   if (!idToken) throw new Error('[firebase-auth-native] no idToken returned from native Google sign-in');
   return idToken;
@@ -36,7 +45,7 @@ async function signInWithGoogle() {
 // back what it returned). Required by App Store review guideline 4.8
 // whenever a third-party login (Google, here) is offered.
 async function signInWithApple() {
-  const result = await FirebaseAuthentication.signInWithApple();
+  const result = await FirebaseAuthentication.signInWithApple({ skipNativeAuth: true });
   const idToken = result && result.credential && result.credential.idToken;
   const rawNonce = result && result.credential && result.credential.nonce;
   if (!idToken) throw new Error('[firebase-auth-native] no idToken returned from native Apple sign-in');
