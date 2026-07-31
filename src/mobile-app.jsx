@@ -1502,8 +1502,12 @@ function ElevationSvg({ course, progressKm, checkpoints }) {
   // labels (see marks.map below) have room to run diagonally without
   // colliding with their neighbors — a long name like "WS2 Green mountain"
   // printed flat at every checkpoint's own km position overlapped its
-  // neighbors whenever two sat within a few km of each other.
-  const w = 340, h = 130, pad = 6, padBottom = 46, padLeft = 28;
+  // neighbors whenever two sat within a few km of each other. Angling
+  // alone still wasn't enough when checkpoints sit only a couple km apart
+  // (common for water stations) — labels are also staggered onto two
+  // vertical rows below (see the `row` calc in marks.map) for exactly that
+  // case, so padBottom needs room for two rows' worth of diagonal text.
+  const w = 340, h = 150, pad = 6, padBottom = 66, padLeft = 28;
   const pts = course.points;
   const minE = course.minEle, maxE = course.maxEle;
   const totalKm = course.totalKm;
@@ -1587,6 +1591,18 @@ function ElevationSvg({ course, progressKm, checkpoints }) {
   const markEle = pts.reduce((best, p) => (Math.abs(p[3] - markKm) < Math.abs(best[3] - markKm) ? p : best), pts[0])[2];
   const markY = y(markEle);
   const marks = [[0, 'START'], ...(checkpoints || []).map(cp => [parseFloat(cp.km) || 0, cp.label]), [course.totalKm, 'FINISH']];
+  // Angling the label text scales to any name length, but two checkpoints
+  // close enough together still run into each other diagonally (e.g. two
+  // water stations a couple km apart) — drop every label that's too close
+  // to the previous one's own x position onto a second row underneath
+  // instead, alternating back to the first row once there's room again.
+  let prevX = -Infinity, prevRow = 0;
+  const markRows = marks.map(([km]) => {
+    const px = x(km);
+    const row = (px - prevX < 30) ? (prevRow === 0 ? 1 : 0) : 0;
+    prevX = px; prevRow = row;
+    return row;
+  });
   return (
     <div style={{ position: 'relative' }}>
       <svg viewBox={`0 0 ${w} ${h}`} style={{ width: '100%', height: h, marginTop: 6, touchAction: 'none', cursor: zoom > 1 ? 'grab' : 'default' }}
@@ -1606,6 +1622,7 @@ function ElevationSvg({ course, progressKm, checkpoints }) {
           // only ever grows into open space in the middle of the chart, so
           // it can't get clipped no matter where its checkpoint sits.
           const inward = x(km) > w / 2;
+          const labelY = h - padBottom + 19 + markRows[i] * 20;
           return (
             <g key={i}>
               <line x1={x(km)} y1="0" x2={x(km)} y2={h - padBottom} stroke={C.brand} strokeWidth="1" strokeDasharray="2 3" opacity="0.35"/>
@@ -1614,9 +1631,10 @@ function ElevationSvg({ course, progressKm, checkpoints }) {
                   apart (common with water stations) had their horizontal
                   labels overlap into an unreadable jumble; a diagonal run
                   scales to any name length without colliding with its
-                  neighbors. */}
-              <text x={x(km)} y={h - padBottom + 19} textAnchor={inward ? 'end' : 'start'} fontFamily={C.mono} fontSize="8" fill={C.muted}
-                transform={`rotate(${inward ? -40 : 40} ${x(km)} ${h - padBottom + 19})`}>{label}</text>
+                  neighbors, and markRows staggers labels that are still too
+                  close even angled onto a second row underneath. */}
+              <text x={x(km)} y={labelY} textAnchor={inward ? 'end' : 'start'} fontFamily={C.mono} fontSize="8" fill={C.muted}
+                transform={`rotate(${inward ? -40 : 40} ${x(km)} ${labelY})`}>{label}</text>
             </g>
           );
         })}
