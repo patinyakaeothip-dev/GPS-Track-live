@@ -648,6 +648,21 @@ function RegisterScreen({ event, profile, onDone, onBack }) {
   const [emg, setEmg] = uS((profile && profile.emgPhone) || '');
   const selectedDist = distances.find(d => d.label === dist);
   const canSubmit = nick.trim() && phone.trim() && selectedDist && selectedDist.open !== false;
+  const [submitting, setSubmitting] = uS(false);
+  // A ref, not just the `submitting` state — two taps landing in the same
+  // event-loop tick (a real double-tap, or a stray duplicate touch/click
+  // pair some devices fire) would both still read the pre-update `false`
+  // from state before either setSubmitting(true) commits, registering the
+  // same person twice under two different bibs. The ref updates
+  // synchronously, so the second tap is blocked immediately regardless of
+  // when React gets around to re-rendering.
+  const submittedRef = uR(false);
+  function submit() {
+    if (submittedRef.current) return;
+    submittedRef.current = true;
+    setSubmitting(true);
+    onDone({ nick, phone, dist, gender, emg });
+  }
   return (
     <div style={{ height: '100%', background: C.bg2, fontFamily: C.font, display: 'flex', flexDirection: 'column', position: 'relative' }}>
       <div style={{ padding: '40px 24px 18px', background: C.brand, color: '#fff' }}>
@@ -694,7 +709,7 @@ function RegisterScreen({ event, profile, onDone, onBack }) {
           <input type="checkbox" defaultChecked style={{ marginTop: 2 }}/>
           <span style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.5 }}>ยินยอมให้ระบบเก็บพิกัด GPS ระหว่างแข่งเพื่อความปลอดภัย · ลบทิ้งหลังจบงาน 7 วัน</span>
         </label>
-        <Btn style={{ marginTop: 8 }} disabled={!canSubmit} onClick={() => onDone({ nick, phone, dist, gender, emg })}>ยืนยันลงทะเบียน →</Btn>
+        <Btn style={{ marginTop: 8 }} disabled={!canSubmit || submitting} onClick={submit}>{submitting ? 'กำลังลงทะเบียน...' : 'ยืนยันลงทะเบียน →'}</Btn>
       </div>
     </div>
   );
