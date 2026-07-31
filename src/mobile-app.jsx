@@ -1966,7 +1966,6 @@ function ProfileScreen({ user, onLogout, onClose, onSave, onboard }) {
   const [nickname, setNickname] = uS(user.nickname || user.name || '');
   const [gender, setGender] = uS(user.gender || '');
   const [phone, setPhone] = uS(user.phone || '');
-  const [email, setEmail] = uS(user.email || '');
   const [emgName, setEmgName] = uS(user.emgName || '');
   const [emgPhone, setEmgPhone] = uS(user.emgPhone || '');
   // Second contact is optional — the first is the only one required, same
@@ -1982,7 +1981,7 @@ function ProfileScreen({ user, onLogout, onClose, onSave, onboard }) {
   const canSubmit = !onboard || (nickname.trim() && phone.trim() && emgName.trim() && emgPhone.trim());
 
   function save() {
-    onSave({ ...user, nickname, gender, phone, email, emgName, emgPhone, emgName2, emgPhone2, bloodType, medical, avatarPhoto });
+    onSave({ ...user, nickname, gender, phone, emgName, emgPhone, emgName2, emgPhone2, bloodType, medical, avatarPhoto });
     if (onboard) return;
     setSaved(true);
     setTimeout(() => setSaved(false), 1800);
@@ -2025,7 +2024,12 @@ function ProfileScreen({ user, onLogout, onClose, onSave, onboard }) {
           </div>
         </Field>
         <Field label="เบอร์โทร" required={onboard}><input value={phone} onChange={e => setPhone(e.target.value)} placeholder="08X-XXX-XXXX" style={{ ...fieldStyle(), fontFamily: C.mono }}/></Field>
-        <Field label="อีเมล"><input value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" style={{ ...fieldStyle(), fontFamily: C.mono }}/></Field>
+        {/* Read-only — this always reflects whichever account is actually
+            signed in. It used to be a free-text field that only initialized
+            from the account email but saved as plain text, so an old value
+            (or a typo) would silently stick around forever on that one
+            device instead of ever being corrected by the real login. */}
+        <Field label="อีเมล"><div style={{ ...fieldStyle(), fontFamily: C.mono, color: C.muted, background: '#f4f1e8' }}>{user.email || '—'}</div></Field>
         <Field label="ผู้ติดต่อฉุกเฉิน · ชื่อ" required={onboard}><input value={emgName} onChange={e => setEmgName(e.target.value)} placeholder="ชื่อคนใกล้ตัว" style={fieldStyle()}/></Field>
         <Field label="ผู้ติดต่อฉุกเฉิน · เบอร์" required={onboard}><input value={emgPhone} onChange={e => setEmgPhone(e.target.value)} placeholder="08X-XXX-XXXX" style={{ ...fieldStyle(), fontFamily: C.mono }}/></Field>
         <Field label="ผู้ติดต่อฉุกเฉิน คนที่ 2 · ชื่อ (ถ้ามี)"><input value={emgName2} onChange={e => setEmgName2(e.target.value)} placeholder="เผื่อคนแรกติดต่อไม่ได้" style={fieldStyle()}/></Field>
