@@ -2616,18 +2616,22 @@ function MobileApp() {
   }, [session && session.runner && session.runner.eventId, session && session.followEventId]);
 
   function handleLogin(authedUser) {
-    const profile = loadProfile();
-    // profile persists device-wide (not per-account) so onboarding only
-    // asks once — but that means its cached identity fields (email, name,
-    // uid, photo, provider) are stale the moment someone signs in with a
-    // *different* account/provider on the same device. Those must always
-    // come from whichever account just actually authenticated; only the
-    // supplementary fields the runner filled in by hand (nickname, phone,
-    // emergency contact, blood type, medical notes) should carry over.
-    const { email: _e, name: _n, uid: _u, photo: _p, provider: _pr, ...savedPrefs } = profile || {};
+    const cached = loadProfile();
+    // The local cache is scoped to this *device*, not this account — a
+    // second real person signing in with their own different account on
+    // the same phone (e.g. borrowing a friend's device to test their own
+    // login) used to inherit whoever signed in last's nickname, phone,
+    // emergency contact, and avatar photo, since only the identity fields
+    // (email/name/uid/photo/provider) were ever swapped out. Only reuse
+    // the cached supplementary fields when it's genuinely the same account
+    // signing back in; a different uid starts blank and waits on the
+    // Firestore pull below to fill in *that* account's own real data.
+    const sameAccount = cached && cached.uid === authedUser.uid;
+    const { email: _e, name: _n, uid: _u, photo: _p, provider: _pr, ...cachedPrefs } = cached || {};
+    const savedPrefs = sameAccount ? cachedPrefs : {};
     const localUser = { ...savedPrefs, ...authedUser };
     persist({ user: localUser, runner: null });
-    setScreen(profile && profile.profileCompleted ? 'events' : 'onboard');
+    setScreen(sameAccount && cached.profileCompleted ? 'events' : 'onboard');
 
     // The local cache above is per-browser/app-context (Safari, Chrome, the
     // native app's own WebView each have separate localStorage) — the same
