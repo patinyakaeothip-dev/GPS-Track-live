@@ -1616,25 +1616,43 @@ function ElevationSvg({ course, progressKm, checkpoints }) {
         <path d={path} fill="none" stroke={C.brand} strokeWidth="2"/>
         <circle cx={markX} cy={markY} r="5.5" fill={C.orange} stroke="#fff" strokeWidth="2"/>
         {marks.map(([km, label], i) => {
-          // Angling toward whichever edge is *nearer* ran text straight off
-          // the chart for anything close to either side (START, FINISH).
-          // Angling inward — toward the center — instead means the label
-          // only ever grows into open space in the middle of the chart, so
-          // it can't get clipped no matter where its checkpoint sits.
-          const inward = x(km) > w / 2;
+          const isEdge = label === 'START' || label === 'FINISH';
+          // Checkpoint labels are "WS1 เขามะกอก"-shaped — split into the
+          // short tag (pinned directly on the elevation line, at that
+          // point's actual height, so it's easy to spot which bump on the
+          // profile it is) and the full name (still down at the axis,
+          // angled since two water stations only a couple km apart don't
+          // leave room for it flat). START/FINISH aren't real checkpoints
+          // with a name to split, so they stay exactly as before.
+          const spaceIdx = label.indexOf(' ');
+          const tag = spaceIdx > 0 ? label.slice(0, spaceIdx) : label;
+          const name = spaceIdx > 0 ? label.slice(spaceIdx + 1) : '';
           const labelY = h - padBottom + 19 + markRows[i] * 20;
+          const pointEle = pts.reduce((best, p) => (Math.abs(p[3] - km) < Math.abs(best[3] - km) ? p : best), pts[0])[2];
+          const tagY = y(pointEle) - 9;
           return (
             <g key={i}>
               <line x1={x(km)} y1="0" x2={x(km)} y2={h - padBottom} stroke={C.brand} strokeWidth="1" strokeDasharray="2 3" opacity="0.35"/>
-              <text x={x(km)} y={h - padBottom + 9} textAnchor="middle" fontFamily={C.mono} fontSize="7.5" fill={C.muted} opacity="0.85">{km.toFixed(1)}K</text>
-              {/* Only the name is angled — two checkpoints only a few km
-                  apart (common with water stations) had their horizontal
-                  labels overlap into an unreadable jumble; a diagonal run
-                  scales to any name length without colliding with its
-                  neighbors, and markRows staggers labels that are still too
-                  close even angled onto a second row underneath. */}
-              <text x={x(km)} y={labelY} textAnchor={inward ? 'end' : 'start'} fontFamily={C.mono} fontSize="8" fill={C.muted}
-                transform={`rotate(${inward ? -40 : 40} ${x(km)} ${labelY})`}>{label}</text>
+              {isEdge ? (
+                <>
+                  <text x={x(km)} y={h - padBottom + 9} textAnchor="middle" fontFamily={C.mono} fontSize="7.5" fill={C.muted} opacity="0.85">{km.toFixed(1)}K</text>
+                  <text x={x(km)} y={h - padBottom + 19} textAnchor="middle" fontFamily={C.mono} fontSize="8" fill={C.muted}>{label}</text>
+                </>
+              ) : (
+                <>
+                  <g transform={`translate(${x(km)},${tagY})`}>
+                    <rect x={-13} y={-10} width={26} height={13} rx={6} fill={C.orange}/>
+                    <text x={0} y={0.5} textAnchor="middle" dominantBaseline="central" fontFamily={C.mono} fontSize="7.5" fontWeight="700" fill="#fff">{tag}</text>
+                  </g>
+                  <text x={x(km)} y={h - padBottom + 9} textAnchor="middle" fontFamily={C.mono} fontSize="7.5" fill={C.muted} opacity="0.85">{km.toFixed(1)}K</text>
+                  {/* Always the same angle (unlike the tag, which is
+                      pinned by its own point's height) — every name reads
+                      the same direction instead of some tilting one way
+                      and others another. */}
+                  <text x={x(km)} y={labelY} textAnchor="end" fontFamily={C.mono} fontSize="8" fill={C.muted}
+                    transform={`rotate(-40 ${x(km)} ${labelY})`}>{name}</text>
+                </>
+              )}
             </g>
           );
         })}
