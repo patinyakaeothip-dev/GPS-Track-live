@@ -261,7 +261,25 @@ function LiveElevationSvg({ geo, coursePaths, distance, checkpoints, displays, s
   );
 }
 
+// Live Monitor itself stays fully public (anyone with the link can watch
+// the race) — but "รับทราบ · ปิดสัญญาณ SOS" actually writes real state
+// (silencing a runner's active SOS) and had no gate on it at all: anyone
+// who opened this page, staff or not, could clear someone else's
+// emergency signal with one misclick. Only the actions that write
+// something get locked behind the same Admin allowlist admin-app.jsx
+// already uses — viewing stays open to everyone.
+const M_ADMIN_EMAILS = ['patinya.kaeothip@gmail.com'];
+function useIsAdmin() {
+  const [isAdmin, setIsAdmin] = mS(false);
+  mE(() => {
+    if (!window.fb) return;
+    return window.fb.onAuthChange(u => setIsAdmin(!!u && M_ADMIN_EMAILS.includes(u.email)));
+  }, []);
+  return isAdmin;
+}
+
 function LiveMonitorApp() {
+  const isAdmin = useIsAdmin();
   const [ready, setReady] = mS(false);
   const [selectedBib, setSelectedBib] = mS(null);
   const [dashView, setDashView] = mS('map'); // 'map' | 'ranking'
@@ -698,6 +716,12 @@ function LiveMonitorApp() {
       : d.status === 'off_route' ? `⚠ ออกนอกเส้นทางมากกว่า ${OFF_ROUTE_ALERT_MIN} นาที · ใกล้ ${d.km.toFixed(1)}K`
       : d.status === 'stale' ? `ไม่มีความเคลื่อนไหว · จุดล่าสุด ${d.km.toFixed(1)}K` : `ถอนตัว (DNF) · ${d.km.toFixed(1)}/${d.totalKm.toFixed(1)}K` }))
     .sort((a, b) => (a.status === 'sos' ? 0 : 1) - (b.status === 'sos' ? 0 : 1)), [displays]);
+  // Split out for the sidebar's own dedicated SOS banner — it used to just
+  // sit sorted first inside one shared alerts list, distinguished only by
+  // a slightly darker red tint, easy to miss glancing at a busy list next
+  // to off-route/no-signal noise. SOS is the one that can't wait.
+  const sosAlerts = mM(() => alerts.filter(a => a.status === 'sos'), [alerts]);
+  const otherAlerts = mM(() => alerts.filter(a => a.status !== 'sos'), [alerts]);
 
   const counts = mM(() => {
     const c = { total: displays.length, on: 0, finished: 0, alert: 0, sos: 0 };
@@ -909,21 +933,44 @@ function LiveMonitorApp() {
                     </div>
                   )}
                 </div>
+                {/* SOS gets its own unmistakable block instead of just
+                    sitting sorted-first inside the general alerts list —
+                    it's the one thing on this whole page that can't wait,
+                    and blending in with off-route/no-signal noise made it
+                    too easy to miss on a busy race day. */}
+                {sosAlerts.length > 0 && (
+                  <div style={{ background: '#dc2626' }}>
+                    <div style={{ padding: '10px 16px 6px', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ fontFamily: M_MONO, fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 800, color: '#fff' }}>🆘 SOS — ต้องการความช่วยเหลือ</span>
+                      <span style={{ fontFamily: M_MONO, fontSize: 10, color: '#dc2626', background: '#fff', padding: '1px 7px', borderRadius: 6, fontWeight: 800 }}>{sosAlerts.length}</span>
+                    </div>
+                    <div style={{ maxHeight: 160, overflowY: 'auto' }}>
+                      {sosAlerts.map(al => (
+                        <div key={al.bib} onClick={() => setSelectedBib(al.bib)} style={{ padding: '9px 16px', borderTop: '1px solid rgba(255,255,255,0.25)', cursor: 'pointer' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <span style={{ fontFamily: M_MONO, fontSize: 12, fontWeight: 700, color: '#fff' }}>#{al.bib} {al.name}</span>
+                            <span style={{ fontFamily: M_MONO, fontSize: 9.5, color: 'rgba(255,255,255,0.8)' }}>{al.ago}</span>
+                          </div>
+                          <div style={{ fontSize: 11.5, color: '#fff', marginTop: 2, fontWeight: 600 }}>{al.msg}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <div style={{ padding: '12px 16px 12px', borderBottom: '1px solid #d8d2c2', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ fontFamily: M_MONO, fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 600 }}>Alerts</span>
-                  <span style={{ fontFamily: M_MONO, fontSize: 10, color: '#fff', background: M_ALERT, padding: '1px 7px', borderRadius: 6, fontWeight: 600 }}>{alerts.length}</span>
+                  <span style={{ fontFamily: M_MONO, fontSize: 10, color: '#fff', background: M_ALERT, padding: '1px 7px', borderRadius: 6, fontWeight: 600 }}>{otherAlerts.length}</span>
                 </div>
                 <div style={{ maxHeight: 190, overflowY: 'auto', borderBottom: '1px solid #d8d2c2' }}>
-                  {alerts.length === 0 && <div style={{ padding: 20, textAlign: 'center', color: '#5d6b59', fontSize: 12 }}>ไม่มี alert</div>}
-                  {alerts.map(al => (
+                  {otherAlerts.length === 0 && <div style={{ padding: 20, textAlign: 'center', color: '#5d6b59', fontSize: 12 }}>ไม่มี alert</div>}
+                  {otherAlerts.map(al => (
                     <div key={al.bib} onClick={() => setSelectedBib(al.bib)} style={{ padding: '10px 16px', borderBottom: '1px solid #f4f3ef', cursor: 'pointer',
-                      background: al.status === 'sos' ? 'rgba(220,38,38,0.12)' : al.status === 'stale' ? 'rgba(220,38,38,0.05)' : al.status === 'off_route' ? 'rgba(180,83,9,0.06)' : 'transparent',
-                      borderLeft: al.status === 'sos' ? '3px solid #dc2626' : 'none' }}>
+                      background: al.status === 'stale' ? 'rgba(220,38,38,0.05)' : al.status === 'off_route' ? 'rgba(180,83,9,0.06)' : 'transparent' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                        <span style={{ fontFamily: M_MONO, fontSize: 12, fontWeight: 700 }}>{al.status === 'sos' && '🆘 '}#{al.bib} {al.name}</span>
+                        <span style={{ fontFamily: M_MONO, fontSize: 12, fontWeight: 700 }}>#{al.bib} {al.name}</span>
                         <span style={{ fontFamily: M_MONO, fontSize: 9.5, color: '#5d6b59' }}>{al.ago}</span>
                       </div>
-                      <div style={{ fontSize: 11.5, color: al.status === 'sos' || al.status === 'stale' ? M_ALERT : '#7c4a03', marginTop: 2, fontWeight: 500 }}>{al.msg}</div>
+                      <div style={{ fontSize: 11.5, color: al.status === 'stale' ? M_ALERT : '#7c4a03', marginTop: 2, fontWeight: 500 }}>{al.msg}</div>
                     </div>
                   ))}
                 </div>
@@ -963,11 +1010,15 @@ function LiveMonitorApp() {
                         <div style={{ marginTop: 2 }}>กรุ๊ปเลือด: <span style={{ fontFamily: M_MONO, fontWeight: 700 }}>{selected.bloodType || 'ไม่ได้ระบุไว้'}</span></div>
                         <div style={{ marginTop: 2 }}>โรคประจำตัว: {selected.medical || 'ไม่ได้ระบุไว้'}</div>
                       </div>
-                      {selected.sos && (
+                      {selected.sos && (isAdmin ? (
                         <button onClick={() => clearSos(selected.id)} style={{ width: '100%', padding: 10, marginBottom: 8, background: '#dc2626', color: '#fff', border: 'none', borderRadius: 10, fontFamily: M_MONO, fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', cursor: 'pointer' }}>
                           ✓ รับทราบ · ปิดสัญญาณ SOS
                         </button>
-                      )}
+                      ) : (
+                        <button onClick={() => window.fb && window.fb.signInWithGoogle().catch(() => {})} style={{ width: '100%', padding: 10, marginBottom: 8, background: '#fff', color: '#dc2626', border: '1px solid #f0c9c4', borderRadius: 10, fontFamily: M_MONO, fontSize: 10.5, fontWeight: 700, letterSpacing: '0.02em', cursor: 'pointer' }}>
+                          🔒 เข้าสู่ระบบเป็น Admin เพื่อรับทราบ SOS
+                        </button>
+                      ))}
                       <button onClick={toggleFocus} style={{ width: '100%', padding: 10, background: focusBib ? M_BRAND : '#fff', color: focusBib ? '#fff' : M_BRAND, border: '1px solid #2d6a4f', borderRadius: 10, fontFamily: M_MONO, fontSize: 11, fontWeight: 700, letterSpacing: '0.04em', cursor: 'pointer' }}>
                         {focusBib ? '✕ เลิกโฟกัส · ดูทุกคน' : '🔍 โฟกัสเฉพาะคนนี้บนแผนที่'}
                       </button>
