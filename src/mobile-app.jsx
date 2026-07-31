@@ -1291,18 +1291,16 @@ function TrackTab({ runner, event, onScan, onSos, onDnf, offRoute, onCancelSos }
         </div>
       ) : null}
 
-      {/* overflow:hidden removed — the debug pass proved the checkpoint
-          array itself was always complete (6/6), so a handful of rows
-          silently disappearing pointed at this card's own height getting
-          constrained somewhere and clipping its tail instead of the outer
-          scroll container growing to fit it. Rounded corners on the first/
-          last row are handled per-row instead below. */}
-      <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 14 }}>
+      {/* overflow:hidden on the old version of this card was clipping its
+          own tail once the debug line's long unbroken JSON string forced
+          the card wider than its column, throwing off its height
+          calculation — confirmed fixed with the debug line still in
+          place (all 6 rows rendered) before removing it here. overflowX
+          stays contained so a stray long string can't push the page into
+          horizontal scroll again; overflowY is left alone so nothing gets
+          silently cropped the way it did before. */}
+      <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 14, overflowX: 'hidden' }}>
         <div style={{ padding: '10px 14px', borderBottom: `1px solid ${C.border}`, fontFamily: C.mono, fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted, fontWeight: 600 }}>Checkpoints</div>
-        {/* TEMP DEBUG — remove once the missing-WS4/finish issue is confirmed fixed */}
-        <div style={{ padding: '4px 14px', fontFamily: C.mono, fontSize: 9, color: '#c0392b', background: '#fff8f0' }}>
-          debug: eventId={String(event && event.id)} · cpCount={String(event && event.checkpoints && event.checkpoints.length)} · seqLen={seq.length} · seq={JSON.stringify(seq)}
-        </div>
         {seq.map((cp, i) => {
           const done = i < runner.checkins.length;
           return (
