@@ -1005,6 +1005,9 @@ function LiveMonitorApp() {
                   )}
                   {selected && (
                     <>
+                      <div onClick={() => setSelectedBib(null)} style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 12, cursor: 'pointer', color: '#5d6b59', fontFamily: M_MONO, fontSize: 11, fontWeight: 600 }}>
+                        ← กลับไปดูรายชื่อ
+                      </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
                         <LmAvatar size={38} photo={selected.avatarPhoto} color={selected.color} initial={selected.initial}/>
                         <div>
