@@ -538,9 +538,14 @@ function LiveMonitorApp() {
         const overlapping = placed.filter(q => Math.abs(q.lat - p.lat) < 0.0005 && Math.abs(q.lon - p.lon) < 0.0005).length;
         placed.push({ lat: p.lat, lon: p.lon });
         const dx = overlapping * 50;
-        L.marker([p.lat, p.lon], { icon: L.divIcon({ className: '', html:
-          `<div style="transform:translate(calc(-50% + ${dx}px),-130%);padding:2px 7px;background:${color};color:#fff;border-radius:7px;font:600 10px 'JetBrains Mono',monospace;letter-spacing:0.04em;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,0.35);border:1.5px solid #fff;">${cpLbl}</div>`,
-          iconSize: [0, 0] }) }).addTo(group);
+        // iconSize:[0,0] (the old value) forces Leaflet to clip this
+        // marker's container to zero size, cutting off the colored pill
+        // background and leaving just unstyled text floating on the map —
+        // iconSize:null instead lets the div size itself to fit its own
+        // content, same as the working version of this exact pill on the
+        // mobile app's own course map (see addCpMarker in mobile-app.jsx).
+        L.marker([p.lat, p.lon], { icon: L.divIcon({ className: '', iconSize: null, html:
+          `<div style="transform:translate(calc(-50% + ${dx}px),-130%);padding:2px 7px;background:${color};color:#fff;border-radius:7px;font:600 10px 'JetBrains Mono',monospace;letter-spacing:0.04em;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,0.35);border:1.5px solid #fff;">${cpLbl}</div>` }) }).addTo(group);
       });
     courseLayerRef.current = group;
     map.flyToBounds(L.latLngBounds(latlngs), { padding: [24, 24], duration: 0.4 });
