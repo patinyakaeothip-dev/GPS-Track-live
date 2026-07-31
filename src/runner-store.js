@@ -76,6 +76,7 @@
       email: data.email || '',
       medical: data.medical || '',
       uid: data.uid || '',
+      avatarPhoto: data.avatarPhoto || '',
       checkins: [],
       progressKm: 0,
       dnf: false,
