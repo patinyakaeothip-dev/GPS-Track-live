@@ -2358,22 +2358,33 @@ function MobileApp() {
   // without needing a fresh logout/login.
   uE(() => {
     const uid = session && session.user && session.user.uid;
-    if (!uid || !window.fb) return;
-    const unsub = window.fb.watchDocById('profiles', uid, remote => {
-      if (!remote) return;
-      setSession(prev => {
-        if (!prev || !prev.user || prev.user.uid !== uid) return prev;
-        const patch = {};
-        PROFILE_FIELDS.forEach(k => { patch[k] = remote[k] ?? ''; });
-        const same = Object.keys(patch).every(k => JSON.stringify(patch[k]) === JSON.stringify(prev.user[k]));
-        if (same) return prev;
-        const next = { ...prev, user: { ...prev.user, ...patch } };
-        saveProfile(next.user);
-        saveSession(next);
-        return next;
+    if (!uid) return;
+    let unsub = null;
+    let cancelled = false;
+    function subscribe() {
+      if (cancelled || !window.fb) return;
+      unsub = window.fb.watchDocById('profiles', uid, remote => {
+        if (!remote) return;
+        setSession(prev => {
+          if (!prev || !prev.user || prev.user.uid !== uid) return prev;
+          const patch = {};
+          PROFILE_FIELDS.forEach(k => { patch[k] = remote[k] ?? ''; });
+          const same = Object.keys(patch).every(k => JSON.stringify(patch[k]) === JSON.stringify(prev.user[k]));
+          if (same) return prev;
+          const next = { ...prev, user: { ...prev.user, ...patch } };
+          saveProfile(next.user);
+          saveSession(next);
+          return next;
+        });
       });
-    });
-    return () => { if (unsub) unsub(); };
+    }
+    // firebase.js loads as an async module — on a cold launch that already
+    // has a logged-in session, this effect can run before window.fb exists.
+    // Without this fallback it would silently never subscribe for the rest
+    // of the session, since uid (the only dependency) doesn't change again.
+    if (window.fb) subscribe();
+    else window.addEventListener('trt:firebase-ready', subscribe, { once: true });
+    return () => { cancelled = true; window.removeEventListener('trt:firebase-ready', subscribe); if (unsub) unsub(); };
   }, [session && session.user && session.user.uid]);
 
   // A session can point at an event that no longer exists (Admin deleted
