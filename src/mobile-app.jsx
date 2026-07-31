@@ -1589,19 +1589,27 @@ function ElevationSvg({ course, progressKm, checkpoints }) {
         ))}
         <path d={path} fill="none" stroke={C.brand} strokeWidth="2"/>
         <circle cx={markX} cy={markY} r="5.5" fill={C.orange} stroke="#fff" strokeWidth="2"/>
-        {marks.map(([km, label], i) => (
-          <g key={i}>
-            <line x1={x(km)} y1="0" x2={x(km)} y2={h - padBottom} stroke={C.brand} strokeWidth="1" strokeDasharray="2 3" opacity="0.35"/>
-            {/* Angled instead of flat-centered — two checkpoints only a few
-                km apart (common with water stations) had their horizontal
-                labels overlap into an unreadable jumble. Anchored at the
-                tick and rotated so it reads bottom-to-top along the line
-                instead, which scales to any name length without colliding
-                with its neighbors. */}
-            <text x={x(km) + 3} y={h - padBottom + 6} textAnchor="start" fontFamily={C.mono} fontSize="8" fill={C.muted}
-              transform={`rotate(40 ${x(km) + 3} ${h - padBottom + 6})`}>{label} · {km.toFixed(1)}K</text>
-          </g>
-        ))}
+        {marks.map(([km, label], i) => {
+          // Angling toward whichever edge is *nearer* ran text straight off
+          // the chart for anything close to either side (START, FINISH).
+          // Angling inward — toward the center — instead means the label
+          // only ever grows into open space in the middle of the chart, so
+          // it can't get clipped no matter where its checkpoint sits.
+          const inward = x(km) > w / 2;
+          return (
+            <g key={i}>
+              <line x1={x(km)} y1="0" x2={x(km)} y2={h - padBottom} stroke={C.brand} strokeWidth="1" strokeDasharray="2 3" opacity="0.35"/>
+              <text x={x(km)} y={h - padBottom + 9} textAnchor="middle" fontFamily={C.mono} fontSize="7.5" fill={C.muted} opacity="0.85">{km.toFixed(1)}K</text>
+              {/* Only the name is angled — two checkpoints only a few km
+                  apart (common with water stations) had their horizontal
+                  labels overlap into an unreadable jumble; a diagonal run
+                  scales to any name length without colliding with its
+                  neighbors. */}
+              <text x={x(km)} y={h - padBottom + 19} textAnchor={inward ? 'end' : 'start'} fontFamily={C.mono} fontSize="8" fill={C.muted}
+                transform={`rotate(${inward ? -40 : 40} ${x(km)} ${h - padBottom + 19})`}>{label}</text>
+            </g>
+          );
+        })}
       </svg>
       {zoom > 1.02 && (
         <div onClick={resetZoom} style={{ position: 'absolute', top: 2, right: 2, padding: '3px 8px', background: '#fff', border: `1px solid ${C.border}`, borderRadius: 999, fontFamily: C.mono, fontSize: 9.5, color: C.muted, cursor: 'pointer', boxShadow: '0 1px 3px rgba(31,42,28,0.1)' }}>↺ รีเซ็ตซูม</div>
