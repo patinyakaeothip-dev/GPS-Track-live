@@ -2307,6 +2307,36 @@ function MobileApp() {
     return () => window.removeEventListener('trt:runners-updated', tryRecover);
   }, [session && session.user && session.user.uid]);
 
+  // Once a runner is registered, this device's session.runner is only ever
+  // patched by its own actions (a checkin scan, SOS, DNF) — an edit Admin
+  // makes directly on the roster record (correcting a mis-typed distance,
+  // fixing a name, marking DNF from the desk) has no path back into an
+  // already-open session, so the runner's own app would show the old value
+  // forever even after the corrected record has already synced down via
+  // runnerStore. Mirror the fields Admin can actually edit back onto the
+  // session whenever the roster changes.
+  uE(() => {
+    const rosterId = session && session.runner && session.runner.rosterId;
+    const eventId = session && session.runner && session.runner.eventId;
+    if (!rosterId || !eventId || !window.runnerStore) return;
+    function syncRunner() {
+      const rec = window.runnerStore.listRunners(eventId, { includeCancelled: true }).find(r => r.id === rosterId);
+      if (!rec) return;
+      setSession(prev => {
+        if (!prev || !prev.runner || prev.runner.rosterId !== rosterId) return prev;
+        const patch = { dist: rec.distance, name: rec.nickname, checkins: rec.checkins || [], progressKm: rec.progressKm || 0, bib: rec.bib, dnf: !!rec.dnf, sos: !!rec.sos, sosReason: rec.sosReason || '' };
+        const same = Object.keys(patch).every(k => JSON.stringify(patch[k]) === JSON.stringify(prev.runner[k]));
+        if (same) return prev;
+        const next = { ...prev, runner: { ...prev.runner, ...patch } };
+        saveSession(next);
+        return next;
+      });
+    }
+    syncRunner();
+    window.addEventListener('trt:runners-updated', syncRunner);
+    return () => window.removeEventListener('trt:runners-updated', syncRunner);
+  }, [session && session.runner && session.runner.rosterId, session && session.runner && session.runner.eventId]);
+
   // A session can point at an event that no longer exists (Admin deleted
   // it, or — before the loadEvents empty-array bug was fixed — deleting
   // every event reseeded a *different* demo event under the same-looking
