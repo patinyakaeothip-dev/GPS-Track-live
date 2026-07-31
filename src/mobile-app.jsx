@@ -1403,7 +1403,19 @@ function RouteTab({ course, runner, event, spectatorRunner, livePos }) {
   // onto the 1-D km axis instead of plotted as raw lat/lon.
   const gpsLiveForElevation = livePos && livePos.at && (Date.now() - livePos.at) < 2 * 60 * 1000 && livePos.lat != null;
   const gpsProjection = (gpsLiveForElevation && course) ? nearestKmForPoint(course.points, livePos.lat, livePos.lon, runner.progressKm) : null;
-  const elevationKm = (gpsProjection && gpsProjection.distKm < ON_COURSE_KM) ? gpsProjection.km : runner.progressKm;
+  // Falling all the way back to progressKm (only ever updated by a
+  // checkpoint scan) the moment someone strayed more than ON_COURSE_KM off
+  // the route made the dot leap *backward* to whichever checkpoint they
+  // last scanned — which could be several km behind where they actually
+  // wandered off, wrongly reading as "climbing/descending the wrong hill"
+  // for something that's supposed to show real-time up/down. Remember the
+  // last point GPS actually confirmed was on-course instead, so the dot
+  // holds there rather than snapping backward.
+  const lastOnCourseKmRef = uR(runner.progressKm);
+  uE(() => {
+    if (gpsProjection && gpsProjection.distKm < ON_COURSE_KM) lastOnCourseKmRef.current = gpsProjection.km;
+  }, [gpsProjection && gpsProjection.km, gpsProjection && gpsProjection.distKm]);
+  const elevationKm = (gpsProjection && gpsProjection.distKm < ON_COURSE_KM) ? gpsProjection.km : Math.max(lastOnCourseKmRef.current, runner.progressKm);
   function recenterToMe() {
     const map = mapObj.current, marker = runnerMarkerRef.current;
     if (!map || !marker) return;
@@ -1931,9 +1943,15 @@ function FriendMapSheet({ runner, eventId, event, onClose }) {
   const gpsFresh = livePos && livePos.at && (Date.now() - livePos.at) < 2 * 60 * 1000 && livePos.lat != null;
   // Same GPS-preferred/checkpoint-fallback rule projected onto the 1-D km
   // axis instead of raw lat/lon — feeds the elevation chart's "you are
-  // here" dot, same idea as RouteTab's elevationKm.
+  // here" dot, same idea as RouteTab's elevationKm (including remembering
+  // the last on-course fix instead of snapping backward to whichever
+  // checkpoint they last scanned once they're off-route).
   const gpsProjection = (gpsFresh && course) ? nearestKmForPoint(course.points, livePos.lat, livePos.lon, runner.progressKm) : null;
-  const elevationKm = (gpsProjection && gpsProjection.distKm < ON_COURSE_KM) ? gpsProjection.km : (runner.progressKm || 0);
+  const lastOnCourseKmRef = uR(runner.progressKm || 0);
+  uE(() => {
+    if (gpsProjection && gpsProjection.distKm < ON_COURSE_KM) lastOnCourseKmRef.current = gpsProjection.km;
+  }, [gpsProjection && gpsProjection.km, gpsProjection && gpsProjection.distKm]);
+  const elevationKm = (gpsProjection && gpsProjection.distKm < ON_COURSE_KM) ? gpsProjection.km : Math.max(lastOnCourseKmRef.current, runner.progressKm || 0);
 
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 10, background: '#fff', display: 'flex', flexDirection: 'column' }}>
