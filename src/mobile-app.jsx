@@ -562,7 +562,7 @@ function FollowPickerScreen({ eventId, onBack, onPick }) {
         {filtered.length === 0 && <div style={{ textAlign: 'center', color: C.muted, fontSize: 13, padding: 30 }}>{runners.length === 0 ? 'ยังไม่มีใครลงทะเบียนงานนี้' : 'ไม่พบนักวิ่งที่ค้นหา'}</div>}
         {filtered.map(r => (
           <div key={r.bib} onClick={() => onPick(r.bib)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 12, background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, boxShadow: '0 1px 3px rgba(31,42,28,0.08)', cursor: 'pointer' }}>
-            <div style={{ width: 36, height: 36, borderRadius: 999, background: C.orange, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 600, flexShrink: 0 }}>{r.nickname[0]}</div>
+            <AvatarCircle size={36} photo={r.avatarPhoto} initial={r.nickname[0]}/>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 14, fontWeight: 600 }}>{r.nickname}</div>
               <div style={{ fontFamily: C.mono, fontSize: 10.5, color: C.muted }}>bib {r.bib} · {r.distance}</div>
@@ -615,7 +615,7 @@ function FavoritePickerScreen({ eventId, onBack, favBibs, onToggle }) {
           const fav = favBibs.includes(r.bib);
           return (
             <div key={r.bib} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 12, background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, boxShadow: '0 1px 3px rgba(31,42,28,0.08)' }}>
-              <div style={{ width: 36, height: 36, borderRadius: 999, background: C.orange, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 600, flexShrink: 0 }}>{r.nickname[0]}</div>
+              <AvatarCircle size={36} photo={r.avatarPhoto} initial={r.nickname[0]}/>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 14, fontWeight: 600 }}>{r.nickname}</div>
                 <div style={{ fontFamily: C.mono, fontSize: 10.5, color: C.muted }}>bib {r.bib} · {r.distance}</div>
@@ -764,6 +764,18 @@ function PersonIcon({ size = 38, onClick, photo }) {
       </svg>
     </div>
   );
+}
+// Same initial-letter circle used across the friends/roster lists (add
+// friend, friends tab, friend detail) — shows the runner's own avatar photo
+// once they've set one instead of just a colored initial forever.
+function AvatarCircle({ size = 36, photo, initial, fontSize = 14 }) {
+  if (photo) {
+    return <div style={{ width: size, height: size, borderRadius: 999, overflow: 'hidden', flexShrink: 0 }}>
+      <img src={photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}/>
+    </div>;
+  }
+  return <div style={{ width: size, height: size, borderRadius: 999, background: C.orange, color: '#fff',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize, fontWeight: 600, flexShrink: 0 }}>{initial}</div>;
 }
 function HomeIcon({ size = 19, dark, active }) {
   const stroke = active ? '#fff' : (dark ? '#fff' : C.muted);
@@ -1686,7 +1698,7 @@ function FriendsTab({ eventId, event, followedBib, favBibs, onAddFavorite, onRem
         <div>
           <div style={{ fontFamily: C.mono, fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted, marginBottom: 6 }}>กำลังติดตามอยู่</div>
           <div onClick={() => setDetailBib(followed.bib)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 10, background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, boxShadow: '0 1px 3px rgba(31,42,28,0.08)', cursor: 'pointer' }}>
-            <div style={{ width: 36, height: 36, borderRadius: 999, background: C.orange, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 600 }}>{followed.nickname[0]}</div>
+            <AvatarCircle size={36} photo={followed.avatarPhoto} initial={followed.nickname[0]}/>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 14, fontWeight: 600 }}>{followed.nickname}</div>
               <div style={{ fontFamily: C.mono, fontSize: 10.5, color: C.muted }}>bib {followed.bib} · {followed.distance} · {runnerStatusLabel(followed)}</div>
@@ -1705,7 +1717,7 @@ function FriendsTab({ eventId, event, followedBib, favBibs, onAddFavorite, onRem
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {favs.map(r => (
               <div key={r.bib} onClick={() => setDetailBib(r.bib)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 10, background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, boxShadow: '0 1px 3px rgba(31,42,28,0.08)', cursor: 'pointer' }}>
-                <div style={{ width: 36, height: 36, borderRadius: 999, background: C.orange, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 600, flexShrink: 0 }}>{r.nickname[0]}</div>
+                <AvatarCircle size={36} photo={r.avatarPhoto} initial={r.nickname[0]}/>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 14, fontWeight: 600 }}>{r.nickname}</div>
                   <div style={{ fontFamily: C.mono, fontSize: 10.5, color: C.muted }}>bib {r.bib} · {r.distance} · {runnerStatusLabel(r)}</div>
@@ -1736,7 +1748,7 @@ function FriendDetailSheet({ runner: r, eventId, event, onClose }) {
       <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)' }}/>
       <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, background: '#fff', borderRadius: '18px 18px 0 0', padding: '20px 22px 32px', boxShadow: '0 -8px 30px rgba(0,0,0,0.2)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-          <div style={{ width: 44, height: 44, borderRadius: 999, background: C.orange, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, fontWeight: 600, flexShrink: 0 }}>{r.nickname[0]}</div>
+          <AvatarCircle size={44} fontSize={17} photo={r.avatarPhoto} initial={r.nickname[0]}/>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 17, fontWeight: 700 }}>{r.nickname}</div>
             <div style={{ fontFamily: C.mono, fontSize: 11, color: C.muted }}>bib {r.bib} · {r.distance}</div>
@@ -2490,6 +2502,7 @@ function MobileApp() {
           emgName2: session.user.emgName2 || '', emgPhone2: session.user.emgPhone2 || '',
           bloodType: session.user.bloodType || '', medical: session.user.medical || '',
           email: session.user.email || '', uid: session.user.uid,
+          avatarPhoto: session.user.avatarPhoto || '',
         });
         runner = { ...runner, bib: rosterEntry.bib, rosterId: rosterEntry.id };
       }
@@ -2524,6 +2537,13 @@ function MobileApp() {
     const withCompleted = { ...nextUser, profileCompleted: true };
     saveProfile(withCompleted);
     syncProfileToCloud(withCompleted.uid, withCompleted);
+    // The roster record (what friends/RD actually see — the avatar in the
+    // "add friend" list, live monitor, etc.) is a separate document written
+    // once at registration; a photo changed afterward in the profile screen
+    // needs its own explicit push to reach it.
+    if (session.runner && session.runner.rosterId && window.runnerStore) {
+      window.runnerStore.updateRunnerProgress(session.runner.rosterId, { avatarPhoto: withCompleted.avatarPhoto || '' });
+    }
     persist({ ...session, user: withCompleted });
   }
 
