@@ -1614,7 +1614,9 @@ function ElevationSvg({ course, progressKm, checkpoints }) {
           </g>
         ))}
         <path d={path} fill="none" stroke={C.brand} strokeWidth="2"/>
-        <circle cx={markX} cy={markY} r="5.5" fill={C.orange} stroke="#fff" strokeWidth="2"/>
+        {/* Same glide Live Monitor's own elevation chart already uses
+            instead of the dot jumping instantly to each new position. */}
+        <circle cx={markX} cy={markY} r="5.5" fill={C.orange} stroke="#fff" strokeWidth="2" style={{ transition: 'cx 0.6s ease, cy 0.6s ease' }}/>
         {marks.map(([km, label], i) => {
           const isEdge = label === 'START' || label === 'FINISH';
           // Checkpoint labels are "WS1 เขามะกอก"-shaped — split into the
