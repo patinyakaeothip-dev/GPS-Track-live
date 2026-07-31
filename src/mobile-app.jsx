@@ -2348,6 +2348,34 @@ function MobileApp() {
     return () => window.removeEventListener('trt:runners-updated', syncRunner);
   }, [session && session.runner && session.runner.rosterId, session && session.runner && session.runner.eventId]);
 
+  // pullProfileFromCloud (in handleLogin) only ever fetches "whatever's
+  // there right now" once, at the moment this device signs in — a profile
+  // edit made on a *different* device afterward (e.g. uploading a new
+  // avatar photo from the web while the phone app is still open from an
+  // earlier login) has no way back into an already-running session. Keep a
+  // live listener on this account's profile doc for as long as the session
+  // is open instead, so a change on one device shows up on the other
+  // without needing a fresh logout/login.
+  uE(() => {
+    const uid = session && session.user && session.user.uid;
+    if (!uid || !window.fb) return;
+    const unsub = window.fb.watchDocById('profiles', uid, remote => {
+      if (!remote) return;
+      setSession(prev => {
+        if (!prev || !prev.user || prev.user.uid !== uid) return prev;
+        const patch = {};
+        PROFILE_FIELDS.forEach(k => { patch[k] = remote[k] ?? ''; });
+        const same = Object.keys(patch).every(k => JSON.stringify(patch[k]) === JSON.stringify(prev.user[k]));
+        if (same) return prev;
+        const next = { ...prev, user: { ...prev.user, ...patch } };
+        saveProfile(next.user);
+        saveSession(next);
+        return next;
+      });
+    });
+    return () => { if (unsub) unsub(); };
+  }, [session && session.user && session.user.uid]);
+
   // A session can point at an event that no longer exists (Admin deleted
   // it, or — before the loadEvents empty-array bug was fixed — deleting
   // every event reseeded a *different* demo event under the same-looking
