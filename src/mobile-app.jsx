@@ -1556,7 +1556,17 @@ function ElevationSvg({ course, progressKm, checkpoints }) {
     if (pointers.current.size === 2 && pinchStart.current) {
       const [a, b] = [...pointers.current.values()];
       const dist = Math.abs(a - b) || 1;
-      zoomAround(pinchStart.current.zoom * (dist / pinchStart.current.dist), panKm + visibleKm / 2);
+      // Anchoring at the fixed center of whatever's currently visible
+      // (instead of wherever the fingers actually are) is what made a
+      // pinch feel like it "jumped" on release — the chart was always
+      // re-centering on its own viewport midpoint rather than staying
+      // under your fingers. Anchor at the real midpoint between the two
+      // touches instead, same idea as onWheel's cursor-anchored zoom.
+      const midClientX = (a + b) / 2;
+      const rect = e.currentTarget.getBoundingClientRect();
+      const svgX = ((midClientX - rect.left) / rect.width) * w;
+      const anchorKm = panKm + Math.max(0, (svgX - padLeft) / (w - padLeft - pad)) * visibleKm;
+      zoomAround(pinchStart.current.zoom * (dist / pinchStart.current.dist), anchorKm);
     } else if (pointers.current.size === 1 && dragStart.current) {
       const rect = e.currentTarget.getBoundingClientRect();
       const dxKm = ((e.clientX - dragStart.current.x) / rect.width) * w / (w - padLeft - pad) * visibleKm;
