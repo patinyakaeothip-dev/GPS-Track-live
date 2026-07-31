@@ -1219,7 +1219,7 @@ function TrackTab({ runner, event, onScan, onSos, onDnf, offRoute, onCancelSos }
   }
 
   return (
-    <div style={{ flex: 1, overflow: 'auto', padding: '16px 18px 90px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+    <div style={{ flex: 1, overflow: 'auto', padding: '16px 18px 20px', display: 'flex', flexDirection: 'column', gap: 14 }}>
       {runner.dnf && (
         <div style={{ padding: 14, background: '#fef2f2', border: '1px solid #f0c9c4', borderRadius: 12, fontSize: 12.5, color: '#9b1c10', lineHeight: 1.6, display: 'flex', alignItems: 'center', gap: 10 }}>
           <FlagIcon size={18}/>
@@ -1422,7 +1422,11 @@ function RouteTab({ course, runner, event, spectatorRunner, livePos }) {
         </div>
       </div>
       {spectatorRunner && <FollowedRunnerPanel runner={spectatorRunner} event={event} livePos={livePos}/>}
-      <div style={{ padding: '14px 18px 90px', background: '#fff' }}>
+      {/* The tab bar is a proper flexShrink:0 sibling in AppShell's own
+          column layout, not something floating on top of this content —
+          it already reserves its own space, so padding this deep to dodge
+          it just left a big blank gap under the chart. */}
+      <div style={{ padding: '14px 18px 20px', background: '#fff' }}>
         <Kicker>Elevation</Kicker>
         {course && <ElevationSvg course={course} progressKm={elevationKm} checkpoints={(event && event.checkpoints) || []}/>}
       </div>
@@ -1494,7 +1498,12 @@ function FollowedRunnerPanel({ runner, event, livePos }) {
 // visible km window is than the full course; `panKm` is that window's left
 // edge, always clamped so it can't scroll past either end.
 function ElevationSvg({ course, progressKm, checkpoints }) {
-  const w = 340, h = 112, pad = 6, padBottom = 28, padLeft = 28;
+  // padBottom is taller than the plot really needs so angled checkpoint
+  // labels (see marks.map below) have room to run diagonally without
+  // colliding with their neighbors — a long name like "WS2 Green mountain"
+  // printed flat at every checkpoint's own km position overlapped its
+  // neighbors whenever two sat within a few km of each other.
+  const w = 340, h = 130, pad = 6, padBottom = 46, padLeft = 28;
   const pts = course.points;
   const minE = course.minEle, maxE = course.maxEle;
   const totalKm = course.totalKm;
@@ -1583,8 +1592,14 @@ function ElevationSvg({ course, progressKm, checkpoints }) {
         {marks.map(([km, label], i) => (
           <g key={i}>
             <line x1={x(km)} y1="0" x2={x(km)} y2={h - padBottom} stroke={C.brand} strokeWidth="1" strokeDasharray="2 3" opacity="0.35"/>
-            <text x={x(km)} y={h - 16} textAnchor="middle" fontFamily={C.mono} fontSize="8" fill={C.muted}>{label}</text>
-            <text x={x(km)} y={h - 6} textAnchor="middle" fontFamily={C.mono} fontSize="7.5" fill={C.muted} opacity="0.8">{km.toFixed(1)}K</text>
+            {/* Angled instead of flat-centered — two checkpoints only a few
+                km apart (common with water stations) had their horizontal
+                labels overlap into an unreadable jumble. Anchored at the
+                tick and rotated so it reads bottom-to-top along the line
+                instead, which scales to any name length without colliding
+                with its neighbors. */}
+            <text x={x(km) + 3} y={h - padBottom + 6} textAnchor="start" fontFamily={C.mono} fontSize="8" fill={C.muted}
+              transform={`rotate(40 ${x(km) + 3} ${h - padBottom + 6})`}>{label} · {km.toFixed(1)}K</text>
           </g>
         ))}
       </svg>
@@ -2332,7 +2347,11 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: C.bg, fontFamily: C.font, overflow: 'hidden' }}>
-      <div style={{ padding: '40px 18px 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      {/* The outer #phone shell (index.html) already reserves
+          env(safe-area-inset-top) for the notch/Dynamic Island on real
+          devices — a flat 40px on top of that doubled up the gap. Fall
+          back to 40px only where there's no safe-area to speak of. */}
+      <div style={{ padding: '18px 18px 10px', paddingTop: 'max(18px, env(safe-area-inset-top))', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <Brand/>
         <PersonIcon size={30} onClick={onProfile} photo={user.avatarPhoto}/>
       </div>
