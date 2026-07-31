@@ -2001,7 +2001,17 @@ function ProfileScreen({ user, onLogout, onClose, onSave, onboard }) {
   function pickPhoto(e) {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
-    resizeImageFile(file, 240, setAvatarPhoto);
+    resizeImageFile(file, 240, (dataUrl) => {
+      setAvatarPhoto(dataUrl);
+      // Picking a new photo reads as a complete action on its own — making
+      // it also require a separate "บันทึกโปรไฟล์" tap afterward is easy to
+      // miss, and skipping that meant the new photo only ever lived in this
+      // screen's local state: it never actually reached the account, so it
+      // never synced anywhere else and even reverted back on next load.
+      // Not during onboarding — onSave there marks onboarding complete,
+      // which shouldn't happen before the required fields are filled in.
+      if (!onboard) onSave({ ...user, nickname, gender, phone, emgName, emgPhone, emgName2, emgPhone2, bloodType, medical, avatarPhoto: dataUrl });
+    });
   }
 
   return (
