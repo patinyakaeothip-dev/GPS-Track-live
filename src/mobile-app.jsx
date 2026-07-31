@@ -83,10 +83,10 @@ function resizeImageFile(file, maxSize, cb) {
   reader.readAsDataURL(file);
 }
 function syncProfileToCloud(uid, p) {
-  if (!window.fb || !uid) return;
+  if (!window.fb || !uid) return Promise.resolve(false);
   const data = {};
   PROFILE_FIELDS.forEach(k => { data[k] = p[k] ?? ''; });
-  window.fb.setDocById('profiles', uid, data).catch(err => console.warn('[trt] profile sync failed', err));
+  return window.fb.setDocById('profiles', uid, data).then(() => true).catch(err => { console.warn('[trt] profile sync failed', err); return false; });
 }
 // One-shot pull (unsubscribes after the first snapshot) — login only needs
 // "whatever's there right now", not a live subscription that keeps firing
@@ -1990,10 +1990,18 @@ function ProfileScreen({ user, onLogout, onClose, onSave, onboard }) {
   const [medical, setMedical] = uS(user.medical || '');
   const [avatarPhoto, setAvatarPhoto] = uS(user.avatarPhoto || '');
   const [saved, setSaved] = uS(false);
+  const [saveError, setSaveError] = uS(false);
   const canSubmit = !onboard || (nickname.trim() && phone.trim() && emgName.trim() && emgPhone.trim());
 
+  // onSave (updateUser) returns a promise that resolves false if the
+  // Firestore write failed — without checking it, a sync failure just
+  // vanishes into a console nobody's looking at on a phone, and the runner
+  // has no idea their edit never actually reached their account.
+  function reportOutcome(result) {
+    if (result && result.then) result.then(ok => setSaveError(ok === false));
+  }
   function save() {
-    onSave({ ...user, nickname, gender, phone, emgName, emgPhone, emgName2, emgPhone2, bloodType, medical, avatarPhoto });
+    reportOutcome(onSave({ ...user, nickname, gender, phone, emgName, emgPhone, emgName2, emgPhone2, bloodType, medical, avatarPhoto }));
     if (onboard) return;
     setSaved(true);
     setTimeout(() => setSaved(false), 1800);
@@ -2010,7 +2018,7 @@ function ProfileScreen({ user, onLogout, onClose, onSave, onboard }) {
       // never synced anywhere else and even reverted back on next load.
       // Not during onboarding — onSave there marks onboarding complete,
       // which shouldn't happen before the required fields are filled in.
-      if (!onboard) onSave({ ...user, nickname, gender, phone, emgName, emgPhone, emgName2, emgPhone2, bloodType, medical, avatarPhoto: dataUrl });
+      if (!onboard) reportOutcome(onSave({ ...user, nickname, gender, phone, emgName, emgPhone, emgName2, emgPhone2, bloodType, medical, avatarPhoto: dataUrl }));
     });
   }
 
@@ -2066,6 +2074,7 @@ function ProfileScreen({ user, onLogout, onClose, onSave, onboard }) {
       </div>
 
       <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
+        {saveError && <div style={{ fontSize: 11.5, color: '#9b1c10', textAlign: 'center' }}>⚠ บันทึกขึ้นบัญชีไม่สำเร็จ (อาจไม่มีอินเทอร์เน็ต) — บันทึกไว้ในเครื่องนี้แล้ว แต่จะไม่ sync ไปเครื่องอื่นจนกว่าจะลองใหม่</div>}
         <Btn disabled={!canSubmit} onClick={save}>{onboard ? 'เริ่มใช้งาน →' : (saved ? '✓ บันทึกแล้ว' : 'บันทึกโปรไฟล์')}</Btn>
         {!onboard && <Btn variant="ghost" onClick={onLogout}>ออกจากระบบ</Btn>}
       </div>
@@ -2382,9 +2391,10 @@ function MobileApp() {
     const uid = session && session.user && session.user.uid;
     if (!uid) return;
     let unsub = null;
+    let authUnsub = null;
     let cancelled = false;
     function subscribe() {
-      if (cancelled || !window.fb) return;
+      if (unsub) { unsub(); unsub = null; }
       unsub = window.fb.watchDocById('profiles', uid, remote => {
         if (!remote) return;
         setSession(prev => {
@@ -2400,13 +2410,26 @@ function MobileApp() {
         });
       });
     }
+    function start() {
+      if (cancelled || !window.fb) return;
+      // Firestore's own security rules require an authenticated request to
+      // read this account's profile doc (unlike the public `runners`
+      // roster) — on a cold native launch, `window.fb` can be ready before
+      // Firebase Auth has actually finished restoring the persisted native
+      // sign-in. Subscribing at that instant gets a permission-denied that
+      // the Firestore SDK never automatically retries, even once auth
+      // catches up a moment later — the listener just stays dead for the
+      // rest of the session. Re-subscribing fresh on every auth state
+      // change (including that first restore) recovers from exactly that.
+      authUnsub = window.fb.onAuthChange(u => { if (u && u.uid === uid) subscribe(); });
+    }
     // firebase.js loads as an async module — on a cold launch that already
     // has a logged-in session, this effect can run before window.fb exists.
     // Without this fallback it would silently never subscribe for the rest
     // of the session, since uid (the only dependency) doesn't change again.
-    if (window.fb) subscribe();
-    else window.addEventListener('trt:firebase-ready', subscribe, { once: true });
-    return () => { cancelled = true; window.removeEventListener('trt:firebase-ready', subscribe); if (unsub) unsub(); };
+    if (window.fb) start();
+    else window.addEventListener('trt:firebase-ready', start, { once: true });
+    return () => { cancelled = true; window.removeEventListener('trt:firebase-ready', start); if (unsub) unsub(); if (authUnsub) authUnsub(); };
   }, [session && session.user && session.user.uid]);
 
   // A session can point at an event that no longer exists (Admin deleted
@@ -2546,7 +2569,6 @@ function MobileApp() {
   function updateUser(nextUser) {
     const withCompleted = { ...nextUser, profileCompleted: true };
     saveProfile(withCompleted);
-    syncProfileToCloud(withCompleted.uid, withCompleted);
     // The roster record (what friends/RD actually see — the avatar in the
     // "add friend" list, live monitor, etc.) is a separate document written
     // once at registration; a photo changed afterward in the profile screen
@@ -2555,6 +2577,9 @@ function MobileApp() {
       window.runnerStore.updateRunnerProgress(session.runner.rosterId, { avatarPhoto: withCompleted.avatarPhoto || '' });
     }
     persist({ ...session, user: withCompleted });
+    // Returned so ProfileScreen can surface a real error instead of the
+    // failure just vanishing into a console nobody checks on a phone.
+    return syncProfileToCloud(withCompleted.uid, withCompleted);
   }
 
   uE(() => { const id = 'trt-mobile-style'; if (document.getElementById(id)) return;
