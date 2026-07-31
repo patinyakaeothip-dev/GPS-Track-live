@@ -518,20 +518,28 @@ function LiveMonitorApp() {
     if (courseLayerRef.current) { map.removeLayer(courseLayerRef.current); courseLayerRef.current = null; }
     const group = L.layerGroup().addTo(map);
     const latlngs = geo.coursePolylineLatLngs(course);
-    L.polyline(latlngs, { color: '#1f4d39', weight: 4, opacity: 0.8 }).addTo(group);
-    // START/FINISH and water-station pills were all the same dark green as
-    // the route line itself, which is also close to the forest polygons'
-    // fill color — a checkpoint pill sitting on green terrain nearly
-    // vanished into the background. Water stations get their own color
-    // (orange, matching the pill used everywhere else — mobile app's
-    // Route tab, elevation chart) so they actually stand out; START/FINISH
-    // keep their own distinct colors too instead of all three looking the
-    // same.
+    // Dark green used to be both the route line's color *and* whatever a
+    // single-distance event's runner dots got assigned (colorFor falls
+    // back to the same M_DIST palette) — a runner's own dot could
+    // literally be the same color as the path it's standing on. A neutral
+    // charcoal reads as "this is the route" without competing with
+    // whatever accent color runners/checkpoints are using.
+    L.polyline(latlngs, { color: '#4a4a4a', weight: 4, opacity: 0.75 }).addTo(group);
+    // On a loop course START and FINISH (and sometimes a checkpoint too)
+    // can sit at the exact same physical point — same fix already applied
+    // to the mobile app's own course map (see addCpMarker in
+    // mobile-app.jsx): nudge each pill sideways a bit more than the last
+    // when it lands within a few meters of one already placed, so they
+    // fan out instead of stacking unreadably on top of each other.
+    const placed = [];
     [[0, 'START', '#2d6a4f'], ...checkpoints.map(cp => [parseFloat(cp.km) || 0, cp.label, '#e07a3e']), [course[course.length - 1].km, 'FINISH', '#9b1c10']]
       .forEach(([km, cpLbl, color]) => {
         const p = geo.pointAtKm(course, km);
+        const overlapping = placed.filter(q => Math.abs(q.lat - p.lat) < 0.0005 && Math.abs(q.lon - p.lon) < 0.0005).length;
+        placed.push({ lat: p.lat, lon: p.lon });
+        const dx = overlapping * 50;
         L.marker([p.lat, p.lon], { icon: L.divIcon({ className: '', html:
-          `<div style="padding:2px 7px;background:${color};color:#fff;border-radius:7px;font:600 10px 'JetBrains Mono',monospace;letter-spacing:0.04em;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,0.35);border:1.5px solid #fff;transform:translate(-50%,-130%)">${cpLbl}</div>`,
+          `<div style="transform:translate(calc(-50% + ${dx}px),-130%);padding:2px 7px;background:${color};color:#fff;border-radius:7px;font:600 10px 'JetBrains Mono',monospace;letter-spacing:0.04em;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,0.35);border:1.5px solid #fff;">${cpLbl}</div>`,
           iconSize: [0, 0] }) }).addTo(group);
       });
     courseLayerRef.current = group;
