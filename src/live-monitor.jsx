@@ -658,6 +658,7 @@ function LiveMonitorApp() {
         elapsedMs, endMs, checkinTimes,
         sos: !!r.sos, sosReason: r.sosReason || '',
         emgName: r.emgName || '', emgPhone: r.emgPhone || '', emgName2: r.emgName2 || '', emgPhone2: r.emgPhone2 || '', bloodType: r.bloodType || '', medical: r.medical || '',
+        avatarPhoto: r.avatarPhoto || '',
         status, statusLabel: meta.label, statusBg: meta.bg, statusFg: meta.fg, physKm };
     });
   }, [ready, runners, coursePaths, overviewLabel, viewLabel, distColor, selectedEvent, livePosByBib, offRouteTick]);
@@ -925,7 +926,7 @@ function LiveMonitorApp() {
                     <div style={{ position: 'absolute', left: 16, right: 16, top: 44, zIndex: 50, background: '#fff', border: '1px solid #e5e0d3', borderRadius: 10, boxShadow: '0 6px 20px rgba(0,0,0,0.12)', maxHeight: 220, overflowY: 'auto' }}>
                       {searchResults.map(sr => (
                         <div key={sr.bib} onClick={() => { setSelectedBib(sr.bib); setSearch(''); }} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid #f4f3ef' }}>
-                          <div style={{ width: 22, height: 22, borderRadius: 999, background: sr.color, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 600, flexShrink: 0 }}>{sr.initial}</div>
+                          <LmAvatar size={22} photo={sr.avatarPhoto} color={sr.color} initial={sr.initial}/>
                           <span style={{ fontSize: 12.5, fontWeight: 600 }}>#{sr.bib} {sr.name}</span>
                           <span style={{ fontFamily: M_MONO, fontSize: 10, color: '#5d6b59', marginLeft: 'auto' }}>{sr.distance}</span>
                         </div>
@@ -980,7 +981,7 @@ function LiveMonitorApp() {
                   {selected && (
                     <>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-                        <div style={{ width: 38, height: 38, borderRadius: 999, background: selected.color, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 600 }}>{selected.initial}</div>
+                        <LmAvatar size={38} photo={selected.avatarPhoto} color={selected.color} initial={selected.initial}/>
                         <div>
                           <div style={{ fontSize: 15, fontWeight: 600 }}>{selected.name}</div>
                           <div style={{ fontFamily: M_MONO, fontSize: 10.5, color: '#5d6b59' }}>#{selected.bib} · {selected.distance}</div>
@@ -1070,7 +1071,7 @@ function LiveMonitorApp() {
                         <td style={{ padding: '10px 20px', fontFamily: M_MONO, fontWeight: 700, color: rk.rank <= 3 ? M_BRAND : '#5d6b59' }}>#{rk.rank} {rk.medal}</td>
                         <td style={{ padding: '10px 14px' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <div style={{ width: 26, height: 26, borderRadius: 999, background: rk.color, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 600, flexShrink: 0 }}>{rk.initial}</div>
+                            <LmAvatar size={26} photo={rk.avatarPhoto} color={rk.color} initial={rk.initial}/>
                             <div><div style={{ fontWeight: 600 }}>{rk.name}</div><div style={{ fontFamily: M_MONO, fontSize: 10, color: '#5d6b59' }}>bib {rk.bib}</div></div>
                           </div>
                         </td>
@@ -1097,6 +1098,19 @@ function LiveMonitorApp() {
       </div>
     </div>
   );
+}
+// Same initial-letter circle used across the search dropdown, detail
+// panel, and ranking table — shows the runner's own profile photo (see
+// src/mobile-app.jsx's ProfileScreen) once they've set one instead of just
+// a colored initial forever.
+function LmAvatar({ size, photo, color, initial }) {
+  if (photo) {
+    return <div style={{ width: size, height: size, borderRadius: 999, overflow: 'hidden', flexShrink: 0 }}>
+      <img src={photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}/>
+    </div>;
+  }
+  return <div style={{ width: size, height: size, borderRadius: 999, background: color, color: '#fff',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: size <= 26 ? 11 : 14, fontWeight: 600, flexShrink: 0 }}>{initial}</div>;
 }
 function MiniStat({ label, value, color }) {
   return (
