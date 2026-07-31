@@ -1787,6 +1787,30 @@ function FriendMapSheet({ runner, eventId, event, onClose }) {
     const map = L.map(mapHostRef.current, { zoomControl: false, attributionControl: false }).fitBounds(pts);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
     L.polyline(pts, { color: C.brand, weight: 4 }).addTo(map);
+    // Same START/checkpoint/FINISH pills as the runner's own Route tab (see
+    // RouteTab's addCpMarker) — this map only ever drew the course line and
+    // the friend's own position, with no water-station/checkpoint markers
+    // at all.
+    function nearestPoint(km) {
+      let best = course.points[0], bestDiff = Infinity;
+      for (const p of course.points) {
+        const diff = Math.abs(p[3] - km);
+        if (diff < bestDiff) { bestDiff = diff; best = p; }
+      }
+      return best;
+    }
+    const placed = [];
+    function addCpMarker(km, label, color) {
+      const p = nearestPoint(km);
+      const overlapping = placed.filter(q => Math.abs(q.lat - p[0]) < 0.0005 && Math.abs(q.lon - p[1]) < 0.0005).length;
+      placed.push({ lat: p[0], lon: p[1] });
+      const dx = overlapping * 46;
+      L.marker([p[0], p[1]], { icon: L.divIcon({ className: '', iconSize: null, html:
+        `<div style="transform:translate(calc(-50% + ${dx}px),-100%);background:${color};color:#fff;font:700 10px 'JetBrains Mono',monospace;padding:3px 7px;border-radius:999px;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.35);white-space:nowrap;">${label}</div>` }) }).addTo(map);
+    }
+    addCpMarker(0, 'START', C.brand);
+    ((event && event.checkpoints) || []).forEach(cp => addCpMarker(parseFloat(cp.km) || 0, cp.label, C.orange));
+    addCpMarker(course.totalKm, 'FINISH', '#9b1c10');
     const idx = Math.min(course.points.length - 1, Math.round(((runner.progressKm || 0) / course.totalKm) * course.points.length));
     const pos = course.points[idx];
     markerRef.current = L.circleMarker([pos[0], pos[1]], { radius: 8, color: '#fff', weight: 2, fillColor: C.orange, fillOpacity: 1 }).addTo(map);
