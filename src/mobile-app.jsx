@@ -310,7 +310,8 @@ function LoginScreen({ onLogin }) {
         onLogin({ uid: u.uid, name: u.displayName || 'นักวิ่ง', email: u.email, photo: u.photoURL, provider: 'google' });
       }
     } catch (e) {
-      setError('เข้าสู่ระบบไม่สำเร็จ ลองอีกครั้ง');
+      console.warn('[trt] Google sign-in failed', e);
+      setError(`เข้าสู่ระบบไม่สำเร็จ — ${(e && (e.code || e.message)) || 'ไม่ทราบสาเหตุ'}`);
       setBusy(false);
     }
   }
@@ -334,7 +335,13 @@ function LoginScreen({ onLogin }) {
         onLogin({ uid: u.uid, name, email: u.email, photo: u.photoURL, provider: 'apple' });
       }
     } catch (e) {
-      setError('เข้าสู่ระบบไม่สำเร็จ ลองอีกครั้ง');
+      // The generic message alone gave no way to tell "user cancelled the
+      // sheet" apart from "Apple sign-in isn't configured right" from a
+      // phone screenshot — surface the actual Firebase/native error code so
+      // a real misconfiguration can actually be diagnosed instead of
+      // guessed at.
+      console.warn('[trt] Apple sign-in failed', e);
+      setError(`เข้าสู่ระบบไม่สำเร็จ — ${(e && (e.code || e.message)) || 'ไม่ทราบสาเหตุ'}`);
       setBusy(false);
     }
   }
