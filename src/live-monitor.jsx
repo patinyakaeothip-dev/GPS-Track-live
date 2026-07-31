@@ -227,8 +227,8 @@ function LiveElevationSvg({ geo, coursePaths, distance, checkpoints, displays, s
         {marks.map(([km, label], i) => (
           <g key={i}>
             <line x1={x(km)} y1={8} x2={x(km)} y2={baseY} stroke="#2d6a4f" strokeWidth="1" strokeDasharray="2 3" opacity="0.5"/>
-            <text x={x(km)} y={h - 20} textAnchor="middle" fontFamily={M_MONO} fontSize="9" fill="#5d6b59">{label}</text>
-            <text x={x(km)} y={h - 6} textAnchor="middle" fontFamily={M_MONO} fontSize="8.5" fill="#5d6b59" opacity="0.75">{km.toFixed(1)}K</text>
+            <text x={x(km)} y={h - 20} textAnchor="middle" fontFamily={M_MONO} fontSize="9" fontWeight="700" fill="#1f2a1c">{label}</text>
+            <text x={x(km)} y={h - 6} textAnchor="middle" fontFamily={M_MONO} fontSize="8.5" fill="#5d6b59">{km.toFixed(1)}K</text>
           </g>
         ))}
         {displays.map(dd => {
