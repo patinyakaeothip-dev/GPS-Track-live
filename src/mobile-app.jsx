@@ -1293,6 +1293,10 @@ function TrackTab({ runner, event, onScan, onSos, onDnf, offRoute, onCancelSos }
 
       <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 14, overflow: 'hidden' }}>
         <div style={{ padding: '10px 14px', borderBottom: `1px solid ${C.border}`, fontFamily: C.mono, fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted, fontWeight: 600 }}>Checkpoints</div>
+        {/* TEMP DEBUG — remove once the missing-WS4/finish issue is diagnosed */}
+        <div style={{ padding: '4px 14px', fontFamily: C.mono, fontSize: 9, color: '#c0392b', background: '#fff8f0' }}>
+          debug: eventId={String(event && event.id)} · cpCount={String(event && event.checkpoints && event.checkpoints.length)} · seqLen={seq.length} · seq={JSON.stringify(seq)}
+        </div>
         {seq.map((cp, i) => {
           const done = i < runner.checkins.length;
           return (
