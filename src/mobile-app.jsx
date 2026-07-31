@@ -452,7 +452,14 @@ function EventPickerScreen({ user, session, onOpenApp, onFollow, onProfile }) {
     window.addEventListener('trt:events-updated', refresh);
     return () => window.removeEventListener('trt:events-updated', refresh);
   }, []);
-  const filtered = events.filter(e => window.eventStatus.computeStatus(e) === tab && (!q || e.name.toLowerCase().includes(q.toLowerCase())));
+  // Soonest-first for live/upcoming (the next race a runner cares about
+  // should be at the top, not wherever Admin happened to create it),
+  // most-recent-first for past — same ordering results/index.html and
+  // live-monitor.jsx already use to pick a default event.
+  const filtered = events.filter(e => window.eventStatus.computeStatus(e) === tab && (!q || e.name.toLowerCase().includes(q.toLowerCase())))
+    .sort((a, b) => tab === 'past'
+      ? (b.raceDateISO || '').localeCompare(a.raceDateISO || '')
+      : (a.raceDateISO || '').localeCompare(b.raceDateISO || ''));
 
   // session.runner only ever caches one registration (whichever event was
   // opened most recently) — checking just that against `ev.id` wrongly
