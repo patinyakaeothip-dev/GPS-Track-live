@@ -83,10 +83,10 @@ function resizeImageFile(file, maxSize, cb) {
   reader.readAsDataURL(file);
 }
 function syncProfileToCloud(uid, p) {
-  if (!window.fb || !uid) return Promise.resolve(false);
+  if (!window.fb || !uid) return Promise.resolve('ยังไม่ได้เชื่อมต่อระบบ');
   const data = {};
   PROFILE_FIELDS.forEach(k => { data[k] = p[k] ?? ''; });
-  return window.fb.setDocById('profiles', uid, data).then(() => true).catch(err => { console.warn('[trt] profile sync failed', err); return false; });
+  return window.fb.setDocById('profiles', uid, data).then(() => null).catch(err => { console.warn('[trt] profile sync failed', err); return (err && (err.code || err.message)) || 'ไม่ทราบสาเหตุ'; });
 }
 // One-shot pull (unsubscribes after the first snapshot) — login only needs
 // "whatever's there right now", not a live subscription that keeps firing
@@ -1990,15 +1990,16 @@ function ProfileScreen({ user, onLogout, onClose, onSave, onboard }) {
   const [medical, setMedical] = uS(user.medical || '');
   const [avatarPhoto, setAvatarPhoto] = uS(user.avatarPhoto || '');
   const [saved, setSaved] = uS(false);
-  const [saveError, setSaveError] = uS(false);
+  const [saveError, setSaveError] = uS('');
   const canSubmit = !onboard || (nickname.trim() && phone.trim() && emgName.trim() && emgPhone.trim());
 
-  // onSave (updateUser) returns a promise that resolves false if the
-  // Firestore write failed — without checking it, a sync failure just
-  // vanishes into a console nobody's looking at on a phone, and the runner
-  // has no idea their edit never actually reached their account.
+  // onSave (updateUser) returns a promise that resolves to an error
+  // string/code if the Firestore write failed, null on success — without
+  // checking it, a sync failure just vanishes into a console nobody's
+  // looking at on a phone, and the runner has no idea their edit never
+  // actually reached their account.
   function reportOutcome(result) {
-    if (result && result.then) result.then(ok => setSaveError(ok === false));
+    if (result && result.then) result.then(err => setSaveError(err || ''));
   }
   function save() {
     reportOutcome(onSave({ ...user, nickname, gender, phone, emgName, emgPhone, emgName2, emgPhone2, bloodType, medical, avatarPhoto }));
@@ -2074,7 +2075,7 @@ function ProfileScreen({ user, onLogout, onClose, onSave, onboard }) {
       </div>
 
       <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
-        {saveError && <div style={{ fontSize: 11.5, color: '#9b1c10', textAlign: 'center' }}>⚠ บันทึกขึ้นบัญชีไม่สำเร็จ (อาจไม่มีอินเทอร์เน็ต) — บันทึกไว้ในเครื่องนี้แล้ว แต่จะไม่ sync ไปเครื่องอื่นจนกว่าจะลองใหม่</div>}
+        {saveError && <div style={{ fontSize: 11.5, color: '#9b1c10', textAlign: 'center' }}>⚠ บันทึกขึ้นบัญชีไม่สำเร็จ — บันทึกไว้ในเครื่องนี้แล้ว แต่จะไม่ sync ไปเครื่องอื่นจนกว่าจะลองใหม่<br/><span style={{ fontFamily: C.mono, fontSize: 10 }}>{saveError}</span></div>}
         <Btn disabled={!canSubmit} onClick={save}>{onboard ? 'เริ่มใช้งาน →' : (saved ? '✓ บันทึกแล้ว' : 'บันทึกโปรไฟล์')}</Btn>
         {!onboard && <Btn variant="ghost" onClick={onLogout}>ออกจากระบบ</Btn>}
       </div>
