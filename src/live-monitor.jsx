@@ -670,6 +670,11 @@ function LiveMonitorApp() {
   // every other distance's runners cluttering a map that's now zoomed into
   // a completely different, unrelated course.
   const mapDisplays = mM(() => distFilter ? displays.filter(d => d.distance === distFilter) : displays, [displays, distFilter]);
+  // The sidebar's own runner list (shown while nothing's selected) — same
+  // distance scoping as the map, but ordered leader-first (furthest along
+  // first) instead of the map's arbitrary array order, since here it's
+  // read top-to-bottom as a ranking rather than looked up spatially.
+  const rosterList = mM(() => mapDisplays.slice().sort((a, b) => b.pct - a.pct || b.km - a.km), [mapDisplays]);
   mE(() => {
     const map = mapRef.current, L = window.L;
     if (!map) return;
@@ -976,8 +981,28 @@ function LiveMonitorApp() {
                   ))}
                 </div>
 
-                <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
-                  {!selected && <div style={{ padding: '30px 10px', textAlign: 'center', color: '#5d6b59', fontSize: 12.5, lineHeight: 1.6 }}>แตะนักวิ่งบนแผนที่<br/>เพื่อดูความเร็ว · ความชัน · ระดับความสูง</div>}
+                <div style={{ flex: 1, overflowY: 'auto', padding: selected ? 16 : 0 }}>
+                  {/* Nothing selected yet — show every runner in this
+                      distance filter, leader-first, instead of just an
+                      empty placeholder. Tapping a row (or the map, or the
+                      search box above) all do the same thing: select a bib
+                      and drop into its detail view below. */}
+                  {!selected && (
+                    <>
+                      {rosterList.length === 0 && <div style={{ padding: '30px 10px', textAlign: 'center', color: '#5d6b59', fontSize: 12.5, lineHeight: 1.6 }}>ยังไม่มีนักวิ่งในระยะนี้</div>}
+                      {rosterList.map((d, i) => (
+                        <div key={d.bib} onClick={() => setSelectedBib(d.bib)} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '9px 16px', borderBottom: '1px solid #f4f3ef', cursor: 'pointer' }}>
+                          <span style={{ width: 18, fontFamily: M_MONO, fontSize: 10.5, color: '#5d6b59', flexShrink: 0, textAlign: 'right' }}>{i + 1}</span>
+                          <LmAvatar size={28} photo={d.avatarPhoto} color={d.color} initial={d.initial}/>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 12.5, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.name}</div>
+                            <div style={{ fontFamily: M_MONO, fontSize: 10, color: '#5d6b59' }}>#{d.bib} · {d.distance}</div>
+                          </div>
+                          <span style={{ fontFamily: M_MONO, fontSize: 10, color: '#5d6b59', flexShrink: 0, whiteSpace: 'nowrap' }}>{d.km.toFixed(1)}/{d.totalKm.toFixed(1)}K</span>
+                        </div>
+                      ))}
+                    </>
+                  )}
                   {selected && (
                     <>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
