@@ -2132,7 +2132,21 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
   const [favBibs, setFavBibs] = uS(() => loadFavorites());
   const snap = uM(() => (window.buildSnapshot ? window.buildSnapshot('mid') : null), []);
   const currentEventId = isSpectator ? session.followEventId : (session.runner && session.runner.eventId);
-  const currentEvent = uM(() => (currentEventId ? getEvents().find(e => e.id === currentEventId) : null), [currentEventId]);
+  // A plain useMemo keyed only on currentEventId froze this the moment the
+  // session first mounted — if this device's snapshot of the events store
+  // was still mid-sync at that instant (e.g. an Admin edit like adding a
+  // checkpoint landed a beat later), everything reading currentEvent for
+  // the rest of the session kept seeing that stale copy forever, since
+  // eventId itself never changes again once a runner has started. Track it
+  // as state and refresh on 'trt:events-updated' instead, same as
+  // EventPickerScreen already does for the event list.
+  const [currentEvent, setCurrentEvent] = uS(() => (currentEventId ? getEvents().find(e => e.id === currentEventId) : null));
+  uE(() => {
+    function refresh() { setCurrentEvent(currentEventId ? getEvents().find(e => e.id === currentEventId) : null); }
+    refresh();
+    window.addEventListener('trt:events-updated', refresh);
+    return () => window.removeEventListener('trt:events-updated', refresh);
+  }, [currentEventId]);
   const currentDist = isSpectator
     ? (currentEventId && window.runnerStore ? (window.runnerStore.listRunners(currentEventId).find(r => r.bib === session.followBib) || {}).distance : null)
     : (session.runner && session.runner.dist);
