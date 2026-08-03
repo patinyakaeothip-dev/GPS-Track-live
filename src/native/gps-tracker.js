@@ -27,6 +27,7 @@ let lastFix = null; // { lat, lon, accuracy, speed } — most recent fix regardl
 let lastPingAt = 0;
 let heartbeatEventId = null;
 let heartbeatBib = null;
+let visibilityHandler = null;
 
 // The background-geolocation plugin only ever fires on ~50m of movement
 // (distanceFilter) — it has no time-based option of its own. That's fine
@@ -149,6 +150,23 @@ async function start(eventId, bib, onPingCb) {
       err => console.warn('[gps-tracker] browser watcher error', err),
       { enableHighAccuracy: true, maximumAge: 5000 },
     );
+    // watchPosition just silently stops delivering callbacks while the tab
+    // is backgrounded/screen-locked (see the file-level note on why) —
+    // there was nothing that kicked it back into gear once the runner
+    // unlocked their phone and came back, so Live Monitor kept showing
+    // wherever they were the moment the screen locked, arbitrarily far
+    // behind, until the next natural ~50m-of-movement callback happened to
+    // land. Grab one fresh fix immediately on regaining visibility instead
+    // of waiting for that.
+    visibilityHandler = () => {
+      if (document.visibilityState !== 'visible') return;
+      navigator.geolocation.getCurrentPosition(
+        pos => pushPing(eventId, bib, pos.coords.latitude, pos.coords.longitude, { accuracy: pos.coords.accuracy, speed: pos.coords.speed ?? null }),
+        err => console.warn('[gps-tracker] visibility catch-up fix failed', err),
+        { enableHighAccuracy: true, maximumAge: 5000 },
+      );
+    };
+    document.addEventListener('visibilitychange', visibilityHandler);
   }
 }
 
@@ -158,6 +176,7 @@ async function stop() {
   window.removeEventListener('online', flushPending);
   lastFix = null;
   lastPingAt = 0;
+  if (visibilityHandler) { document.removeEventListener('visibilitychange', visibilityHandler); visibilityHandler = null; }
   if (watcherId == null) return;
   if (isNative()) await BackgroundGeolocation.removeWatcher({ id: watcherId });
   else navigator.geolocation.clearWatch(watcherId);
