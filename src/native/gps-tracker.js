@@ -42,6 +42,20 @@ function isNative() {
   return Capacitor.isNativePlatform();
 }
 
+// A fix's accuracy is the radius (meters) the OS itself says the true
+// position could be off by. Under tree cover, in an urban canyon, or
+// whenever the OS falls back to cell/WiFi-based positioning instead of a
+// real GPS/GNSS lock, that radius can balloon to hundreds of meters or
+// more — and unlike a missing fix (which just means no update), a *bad*
+// fix looks exactly like a real one, so it gets plotted straight onto the
+// map/route and can visibly overshoot well past the runner's actual
+// location. Dropping fixes this poor and waiting for the next, better one
+// is worth far more than showing a wrong dot immediately.
+const MAX_ACCURACY_M = 100;
+function accuracyOk(accuracy) {
+  return accuracy == null || accuracy <= MAX_ACCURACY_M;
+}
+
 // GPS itself needs no signal (satellites, not cell towers) — but writing a
 // ping to Firestore does need connectivity, and trail courses routinely run
 // through dead zones. A failed write used to just get logged and dropped,
@@ -137,7 +151,9 @@ async function start(eventId, bib, onPingCb) {
       },
       (location, error) => {
         if (error) { console.warn('[gps-tracker] native watcher error', error); return; }
-        if (location) pushPing(eventId, bib, location.latitude, location.longitude, { accuracy: location.accuracy, speed: location.speed ?? null });
+        if (!location) return;
+        if (!accuracyOk(location.accuracy)) { console.warn('[gps-tracker] dropping low-accuracy native fix', location.accuracy); return; }
+        pushPing(eventId, bib, location.latitude, location.longitude, { accuracy: location.accuracy, speed: location.speed ?? null });
       },
     );
     return;
@@ -146,7 +162,10 @@ async function start(eventId, bib, onPingCb) {
   // Web fallback: foreground-only.
   if (navigator.geolocation) {
     watcherId = navigator.geolocation.watchPosition(
-      pos => pushPing(eventId, bib, pos.coords.latitude, pos.coords.longitude, { accuracy: pos.coords.accuracy, speed: pos.coords.speed ?? null }),
+      pos => {
+        if (!accuracyOk(pos.coords.accuracy)) { console.warn('[gps-tracker] dropping low-accuracy browser fix', pos.coords.accuracy); return; }
+        pushPing(eventId, bib, pos.coords.latitude, pos.coords.longitude, { accuracy: pos.coords.accuracy, speed: pos.coords.speed ?? null });
+      },
       err => console.warn('[gps-tracker] browser watcher error', err),
       { enableHighAccuracy: true, maximumAge: 5000 },
     );
@@ -161,7 +180,10 @@ async function start(eventId, bib, onPingCb) {
     visibilityHandler = () => {
       if (document.visibilityState !== 'visible') return;
       navigator.geolocation.getCurrentPosition(
-        pos => pushPing(eventId, bib, pos.coords.latitude, pos.coords.longitude, { accuracy: pos.coords.accuracy, speed: pos.coords.speed ?? null }),
+        pos => {
+          if (!accuracyOk(pos.coords.accuracy)) { console.warn('[gps-tracker] dropping low-accuracy catch-up fix', pos.coords.accuracy); return; }
+          pushPing(eventId, bib, pos.coords.latitude, pos.coords.longitude, { accuracy: pos.coords.accuracy, speed: pos.coords.speed ?? null });
+        },
         err => console.warn('[gps-tracker] visibility catch-up fix failed', err),
         { enableHighAccuracy: true, maximumAge: 5000 },
       );
