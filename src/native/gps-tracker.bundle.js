@@ -531,6 +531,7 @@
   var lastPingAt = 0;
   var heartbeatEventId = null;
   var heartbeatBib = null;
+  var visibilityHandler = null;
   var HEARTBEAT_MS = 3e4;
   function isNative() {
     return Capacitor.isNativePlatform();
@@ -617,6 +618,15 @@
         (err) => console.warn("[gps-tracker] browser watcher error", err),
         { enableHighAccuracy: true, maximumAge: 5e3 }
       );
+      visibilityHandler = () => {
+        if (document.visibilityState !== "visible") return;
+        navigator.geolocation.getCurrentPosition(
+          (pos) => pushPing(eventId, bib, pos.coords.latitude, pos.coords.longitude, { accuracy: pos.coords.accuracy, speed: pos.coords.speed ?? null }),
+          (err) => console.warn("[gps-tracker] visibility catch-up fix failed", err),
+          { enableHighAccuracy: true, maximumAge: 5e3 }
+        );
+      };
+      document.addEventListener("visibilitychange", visibilityHandler);
     }
   }
   async function stop() {
@@ -631,6 +641,10 @@
     window.removeEventListener("online", flushPending);
     lastFix = null;
     lastPingAt = 0;
+    if (visibilityHandler) {
+      document.removeEventListener("visibilitychange", visibilityHandler);
+      visibilityHandler = null;
+    }
     if (watcherId == null) return;
     if (isNative()) await BackgroundGeolocation.removeWatcher({ id: watcherId });
     else navigator.geolocation.clearWatch(watcherId);
