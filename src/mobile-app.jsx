@@ -1207,17 +1207,34 @@ function TrackTab({ runner, event, onScan, onSos, onDnf, offRoute, onCancelSos }
   const startMs = (rawStartMs != null && gunMs != null && rawStartMs < gunMs) ? gunMs : rawStartMs;
   const finishCk = checkins.find(c => c.cp === 'finish');
   const finishMs = finishCk && combine ? combine(event && event.raceDateISO, finishCk.t) : null;
-  const totalMs = (startMs != null && finishMs != null) ? finishMs - startMs : null;
-  const elapsedMs = startMs != null && !finished ? Date.now() - startMs : null;
+  // A DNF used to have no "stop point" at all — the clock just kept
+  // ticking up forever even though Results/Ranking correctly stopped
+  // showing progress the instant DNF was declared, which read as the
+  // clock being broken. dnfAt (recorded the moment DNF is confirmed — see
+  // the 'dnf' modal in AppShell) freezes it the same way finishMs already
+  // freezes a real finish.
+  const stopped = finished || runner.dnf;
+  const endMs = finishMs != null ? finishMs : (runner.dnf && runner.dnfAt) ? runner.dnfAt : null;
+  const totalMs = (startMs != null && endMs != null) ? endMs - startMs : null;
+  const elapsedMs = startMs != null && !stopped ? Date.now() - startMs : null;
   // Gun time (from the official start, whether or not this runner's own
   // scan landed before/after it) vs chip time (this runner's own actual
   // scan-to-finish, never clamped) — shown side by side so it's clear
   // which number is which, instead of a single figure that's secretly
   // already gun-clamped.
-  const chipTotalMs = (rawStartMs != null && finishMs != null) ? finishMs - rawStartMs : null;
-  const chipElapsedMs = rawStartMs != null && !finished ? Date.now() - rawStartMs : null;
-  const gunTotalMs = (gunMs != null && finishMs != null) ? finishMs - gunMs : null;
-  const gunElapsedMs = gunMs != null && !finished ? Date.now() - gunMs : null;
+  const chipTotalMs = (rawStartMs != null && endMs != null) ? endMs - rawStartMs : null;
+  const chipElapsedMs = rawStartMs != null && !stopped ? Date.now() - rawStartMs : null;
+  const gunTotalMs = (gunMs != null && endMs != null) ? endMs - gunMs : null;
+  const gunElapsedMs = gunMs != null && !stopped ? Date.now() - gunMs : null;
+  // Cutoff — distDef.cutoff is minutes-from-gun; nothing warned a runner
+  // they were closing in on it, or told them clearly once they'd already
+  // blown past it while still technically "active" (not yet DNF'd/
+  // finished). Only meaningful while still racing — a finisher beat it by
+  // definition, and a DNF already has its own banner.
+  const cutoffMs = (gunMs != null && distDef && distDef.cutoff) ? gunMs + parseFloat(distDef.cutoff) * 60000 : null;
+  const msToCutoff = cutoffMs != null && !stopped ? cutoffMs - Date.now() : null;
+  const pastCutoff = msToCutoff != null && msToCutoff <= 0;
+  const nearCutoff = msToCutoff != null && msToCutoff > 0 && msToCutoff <= 30 * 60000;
   function fmtElapsed(ms) {
     if (ms == null) return '—';
     const s = Math.floor(ms / 1000);
@@ -1253,14 +1270,24 @@ function TrackTab({ runner, event, onScan, onSos, onDnf, offRoute, onCancelSos }
       )}
       {startMs != null && (
         <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 14, padding: 16, boxShadow: '0 1px 3px rgba(31,42,28,0.08)' }}>
-          <Kicker>{finished ? 'เวลารวม' : 'เวลาที่วิ่งมาแล้ว'}</Kicker>
+          <Kicker>{finished ? 'เวลารวม' : runner.dnf ? 'เวลาก่อนถอนตัว' : 'เวลาที่วิ่งมาแล้ว'}</Kicker>
           <div style={{ fontFamily: C.mono, fontSize: 30, fontWeight: 800, color: C.text, marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>
-            {fmtElapsed(finished ? totalMs : elapsedMs)}
+            {fmtElapsed(stopped ? totalMs : elapsedMs)}
           </div>
           <div style={{ display: 'flex', gap: 16, marginTop: 8 }}>
-            <div style={{ fontFamily: C.mono, fontSize: 11, color: C.muted }}>Gun time: <b style={{ color: C.text }}>{gunMs != null ? fmtElapsed(finished ? gunTotalMs : gunElapsedMs) : '—'}</b></div>
-            <div style={{ fontFamily: C.mono, fontSize: 11, color: C.muted }}>Chip time: <b style={{ color: C.text }}>{fmtElapsed(finished ? chipTotalMs : chipElapsedMs)}</b></div>
+            <div style={{ fontFamily: C.mono, fontSize: 11, color: C.muted }}>Gun time: <b style={{ color: C.text }}>{gunMs != null ? fmtElapsed(stopped ? gunTotalMs : gunElapsedMs) : '—'}</b></div>
+            <div style={{ fontFamily: C.mono, fontSize: 11, color: C.muted }}>Chip time: <b style={{ color: C.text }}>{fmtElapsed(stopped ? chipTotalMs : chipElapsedMs)}</b></div>
           </div>
+        </div>
+      )}
+      {pastCutoff && (
+        <div style={{ padding: 14, background: '#fef2f2', border: '1px solid #f0c9c4', borderRadius: 12, fontSize: 12.5, color: '#9b1c10', lineHeight: 1.6 }}>
+          ⏱ <b>เกินเวลา cut-off ของระยะนี้แล้ว</b> — ทีมงานอาจติดต่อเพื่อสอบถามสถานะ หากต้องการถอนตัวกด "แจ้งถอนตัว (DNF)" ด้านล่าง
+        </div>
+      )}
+      {nearCutoff && (
+        <div style={{ padding: 14, background: '#fdf0d6', border: '1px solid #f0d9a0', borderRadius: 12, fontSize: 12.5, color: '#7c4a03', lineHeight: 1.6 }}>
+          ⚠ ใกล้ถึงเวลา cut-off แล้ว — เหลืออีก {fmtElapsed(msToCutoff)}
         </div>
       )}
       <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 14, padding: 16, boxShadow: '0 1px 3px rgba(31,42,28,0.08)' }}>
@@ -2528,7 +2555,7 @@ function MobileApp() {
       if (!rec) return;
       setSession(prev => {
         if (!prev || !prev.runner || prev.runner.rosterId !== rosterId) return prev;
-        const patch = { dist: rec.distance, name: rec.nickname, checkins: rec.checkins || [], progressKm: rec.progressKm || 0, bib: rec.bib, dnf: !!rec.dnf, sos: !!rec.sos, sosReason: rec.sosReason || '' };
+        const patch = { dist: rec.distance, name: rec.nickname, checkins: rec.checkins || [], progressKm: rec.progressKm || 0, bib: rec.bib, dnf: !!rec.dnf, dnfAt: rec.dnfAt || null, sos: !!rec.sos, sosReason: rec.sosReason || '' };
         const same = Object.keys(patch).every(k => JSON.stringify(patch[k]) === JSON.stringify(prev.runner[k]));
         if (same) return prev;
         const next = { ...prev, runner: { ...prev.runner, ...patch } };
@@ -2824,12 +2851,18 @@ function MobileApp() {
         }}/></Overlay>}
       {modal === 'dnf' && <Overlay><DnfScreen onCancel={() => setModal(null)} onConfirm={() => {
         if (window.trtGpsTracker) window.trtGpsTracker.stop();
-        if (session.runner && session.runner.rosterId && window.runnerStore) window.runnerStore.updateRunnerProgress(session.runner.rosterId, { dnf: true });
+        // dnfAt records the actual moment DNF was declared — without it,
+        // TrackTab's elapsed-time clock had no "stop point" to freeze at
+        // for a DNF the way it already does for a real finish (finishMs
+        // from the finish checkin), so it just kept ticking up forever
+        // even though Results/Ranking correctly stopped showing progress.
+        const dnfAt = Date.now();
+        if (session.runner && session.runner.rosterId && window.runnerStore) window.runnerStore.updateRunnerProgress(session.runner.rosterId, { dnf: true, dnfAt });
         // Roster gets patched above, but session.runner is this device's
         // own separate copy — without also updating it here, the Track tab
         // (which reads runner.dnf straight off session.runner) would show
         // no sign anything happened once back from the confirmation screen.
-        persist({ ...session, runner: { ...session.runner, dnf: true } });
+        persist({ ...session, runner: { ...session.runner, dnf: true, dnfAt } });
         setModal(null);
       }}/></Overlay>}
       {modal === 'cancel-reg' && <Overlay><ConfirmScreen
