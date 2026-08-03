@@ -536,6 +536,10 @@
   function isNative() {
     return Capacitor.isNativePlatform();
   }
+  var MAX_ACCURACY_M = 100;
+  function accuracyOk(accuracy) {
+    return accuracy == null || accuracy <= MAX_ACCURACY_M;
+  }
   var PENDING_KEY = "trt.gps.pendingPing.v1";
   function loadPending() {
     try {
@@ -607,21 +611,38 @@
             console.warn("[gps-tracker] native watcher error", error);
             return;
           }
-          if (location) pushPing(eventId, bib, location.latitude, location.longitude, { accuracy: location.accuracy, speed: location.speed ?? null });
+          if (!location) return;
+          if (!accuracyOk(location.accuracy)) {
+            console.warn("[gps-tracker] dropping low-accuracy native fix", location.accuracy);
+            return;
+          }
+          pushPing(eventId, bib, location.latitude, location.longitude, { accuracy: location.accuracy, speed: location.speed ?? null });
         }
       );
       return;
     }
     if (navigator.geolocation) {
       watcherId = navigator.geolocation.watchPosition(
-        (pos) => pushPing(eventId, bib, pos.coords.latitude, pos.coords.longitude, { accuracy: pos.coords.accuracy, speed: pos.coords.speed ?? null }),
+        (pos) => {
+          if (!accuracyOk(pos.coords.accuracy)) {
+            console.warn("[gps-tracker] dropping low-accuracy browser fix", pos.coords.accuracy);
+            return;
+          }
+          pushPing(eventId, bib, pos.coords.latitude, pos.coords.longitude, { accuracy: pos.coords.accuracy, speed: pos.coords.speed ?? null });
+        },
         (err) => console.warn("[gps-tracker] browser watcher error", err),
         { enableHighAccuracy: true, maximumAge: 5e3 }
       );
       visibilityHandler = () => {
         if (document.visibilityState !== "visible") return;
         navigator.geolocation.getCurrentPosition(
-          (pos) => pushPing(eventId, bib, pos.coords.latitude, pos.coords.longitude, { accuracy: pos.coords.accuracy, speed: pos.coords.speed ?? null }),
+          (pos) => {
+            if (!accuracyOk(pos.coords.accuracy)) {
+              console.warn("[gps-tracker] dropping low-accuracy catch-up fix", pos.coords.accuracy);
+              return;
+            }
+            pushPing(eventId, bib, pos.coords.latitude, pos.coords.longitude, { accuracy: pos.coords.accuracy, speed: pos.coords.speed ?? null });
+          },
           (err) => console.warn("[gps-tracker] visibility catch-up fix failed", err),
           { enableHighAccuracy: true, maximumAge: 5e3 }
         );
