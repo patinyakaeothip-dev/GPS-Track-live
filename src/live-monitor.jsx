@@ -834,11 +834,6 @@ function LiveMonitorApp() {
             <span style={{ fontFamily: M_MONO, fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 600 }}>Live · {counts.total} นักวิ่ง</span>
           </div>
         </header>
-        {selectedEvent && selectedStatus === 'live' && (
-          <div style={{ padding: '8px 22px', borderBottom: '1px solid #d8d2c2', background: '#fdf6e3', fontFamily: M_MONO, fontSize: 10.5, color: '#7c4a03', lineHeight: 1.5 }}>
-            ⚠ ข้อมูลนักวิ่งเป็นรายชื่อ/ตำแหน่งจริงจากการลงทะเบียนและสแกน QR แต่ละจุด — ตำแหน่งจะขยับเฉพาะตอนสแกน QR เท่านั้น ยังไม่ใช่พิกัด GPS สดต่อเนื่องจากมือถือนักวิ่ง (รอต่อ GPS จริง เป็นงานแยกต่างหาก)
-          </div>
-        )}
 
         {selectedEvent && selectedStatus === 'upcoming' && !showDashboard && (
           <div style={{ padding: '60px 24px', textAlign: 'center' }}>
