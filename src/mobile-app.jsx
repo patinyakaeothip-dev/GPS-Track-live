@@ -2365,6 +2365,37 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
     return () => clearInterval(id);
   }, [isSpectator, session.runner, course, effectiveLivePos]);
 
+  // A cutoff banner alone still left a runner "active" forever once they
+  // blew past it without ever tapping DNF themselves — Results/Ranking
+  // never learned anything happened, and this device's own clock (see
+  // TrackTab) had no dnfAt to freeze at either. Auto-DNF the moment cutoff
+  // passes, the same way a manual DNF already works (stop GPS, patch the
+  // real roster record so RD/Results see it too, not just a local-only
+  // display trick). Only fires once per runner — dnf/checkins in the
+  // effect deps means it naturally stops re-checking the instant the
+  // roster record already reflects dnf=true from anywhere (this device,
+  // another device, or Admin).
+  uE(() => {
+    if (isSpectator || !session.runner || !currentEvent) return;
+    const r = session.runner;
+    const finished = (r.checkins || []).some(c => c.cp === 'finish');
+    if (finished || r.dnf) return;
+    const combine = window.eventStatus && window.eventStatus.combineDateTime;
+    const distDef = (currentEvent.distances || []).find(d => d.label === r.dist);
+    const gunMs = distDef && distDef.cpTimes && combine ? combine(currentEvent.raceDateISO, distDef.cpTimes.start) : null;
+    const cutoffMs = (gunMs != null && distDef && distDef.cutoff) ? gunMs + parseFloat(distDef.cutoff) * 60000 : null;
+    if (cutoffMs == null) return;
+    function checkCutoff() {
+      if (Date.now() < cutoffMs) return;
+      if (window.trtGpsTracker) window.trtGpsTracker.stop();
+      if (r.rosterId && window.runnerStore) window.runnerStore.updateRunnerProgress(r.rosterId, { dnf: true, dnfAt: cutoffMs });
+      updateRunner(prev => ({ ...prev, dnf: true, dnfAt: cutoffMs }));
+    }
+    checkCutoff();
+    const id = setInterval(checkCutoff, 20000);
+    return () => clearInterval(id);
+  }, [isSpectator, session.runner, currentEvent]);
+
   // Track tab's "เพซปัจจุบัน"/"ความชัน" used to be hardcoded demo strings
   // ("6'42\"/กม.", "+4.2%") shown for every runner regardless of how they
   // were actually doing. Pace now comes from live GPS speed when a fix is
