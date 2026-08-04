@@ -22,7 +22,7 @@
       font-family: inherit; font-size: 14px; }
     .toolbar button.alt { background: transparent; color: #fff;
       border: 1px solid rgba(255,255,255,0.4); }
-    .stage { padding: 24px; display: flex; justify-content: center; }
+    .stage { padding: 24px; display: flex; justify-content: center; overflow-x: hidden; }
 
     /* A4 portrait = 210mm × 297mm */
     .cert {
@@ -150,6 +150,16 @@
       text-shadow: 0 1px 8px rgba(0,0,0,0.3);
     }
 
+    /* ── Elevation profile strip (below the photo) ──────────── */
+    .elevation-wrap { margin-top: 8mm; }
+    .elevation-wrap .kicker2 {
+      font-family: 'Geist Mono',monospace; font-size: 7.5pt;
+      letter-spacing: 0.28em; text-transform: uppercase; color: #5d6b59;
+      margin-bottom: 2mm;
+    }
+    .elevation-wrap svg { display: block; width: 100%; height: auto; }
+    .elevation-wrap { display: none; } /* shown via JS once a course is actually found */
+
     /* ── Footer below the photo ──────────────────────────── */
     .footer {
       margin-top: auto;  /* push to bottom of the page */
@@ -206,6 +216,7 @@
   <script src="/src/event-status.js"></script>
   <script src="/src/event-store.js"></script>
   <script src="/src/runner-store.js"></script>
+  <script src="/src/course-geo.js"></script>
   <div class="toolbar no-print">
     <span>📜 ใบประกาศ · กด Print เพื่อ Save as PDF</span>
     <button onclick="window.print()">🖨 Print / Save as PDF</button>
@@ -255,6 +266,12 @@
             </div>
           </div>
         </div>
+      </div>
+
+      <!-- Elevation profile — filled in by JS once the course is loaded -->
+      <div class="elevation-wrap" id="elevation-wrap">
+        <div class="kicker2">Elevation Profile</div>
+        <svg id="elevation-svg" viewBox="0 0 760 110" preserveAspectRatio="none"></svg>
       </div>
 
       <!-- Bottom: signature + date -->
@@ -322,6 +339,63 @@
         const medals = { 1: 'GOLD · #1', 2: 'SILVER · #2', 3: 'BRONZE · #3' };
         set('badge', medals[data.rank]);
       }
+      buildElevationChart(data.event_id, r.distance_current);
+    }
+
+    // Draws the same elevation profile the app's Route tab shows, so the
+    // certificate isn't just a name/time/rank card — it's a keepsake of the
+    // actual course run. Needs the event's own id (see mobile-app.jsx's
+    // saveCertificateResult / this file's buildDataFromRoster) to look up
+    // its GPX-derived course via window.courseGeo; silently hides the
+    // section instead of showing a broken chart if either is missing
+    // (e.g. an old finish result saved before event_id was added).
+    async function buildElevationChart(eventId, distLabel) {
+      const wrap = document.getElementById('elevation-wrap');
+      const svg = document.getElementById('elevation-svg');
+      if (!eventId || !distLabel || !window.courseGeo || !window.eventStore) { wrap.style.display = 'none'; return; }
+      try {
+        const ev = (window.eventStore.loadEvents() || []).find(e => e.id === eventId);
+        if (!ev) { wrap.style.display = 'none'; return; }
+        const course = await window.courseGeo.courseJsonForDistance(ev, distLabel);
+        if (!course || !course.points || !course.points.length || !course.totalKm) { wrap.style.display = 'none'; return; }
+        drawElevationSvg(svg, course, ev.checkpoints || []);
+        wrap.style.display = '';
+        fitCertToScreen(); // the chart just added real height — refit
+      } catch (err) {
+        console.warn('[trt] certificate elevation chart failed', err);
+        wrap.style.display = 'none';
+      }
+    }
+
+    function drawElevationSvg(svg, course, checkpoints) {
+      const W = 760, H = 110, padL = 30, padR = 10, padT = 8, padB = 22;
+      const totalKm = course.totalKm;
+      const minEle = course.minEle, maxEle = course.maxEle;
+      const eleRange = Math.max(1, maxEle - minEle);
+      const x = km => padL + (km / totalKm) * (W - padL - padR);
+      const y = ele => padT + (1 - (ele - minEle) / eleRange) * (H - padT - padB);
+      const baseline = H - padB;
+      let line = '';
+      course.points.forEach((p, i) => { line += `${i === 0 ? 'M' : 'L'}${x(p[3]).toFixed(1)},${y(p[2]).toFixed(1)} `; });
+      line = line.trim();
+      const area = `${line} L${x(totalKm).toFixed(1)},${baseline} L${x(0).toFixed(1)},${baseline} Z`;
+      let ticks = '';
+      (checkpoints || []).forEach(cp => {
+        const km = parseFloat(cp.km);
+        if (!isFinite(km) || km <= 0 || km >= totalKm) return;
+        const cx = x(km).toFixed(1);
+        ticks += `<line x1="${cx}" y1="${padT}" x2="${cx}" y2="${baseline}" stroke="#c7c0ac" stroke-width="1" stroke-dasharray="2,2"/>`;
+      });
+      svg.innerHTML = `
+        <path d="${area}" fill="#2d6a4f" fill-opacity="0.12"/>
+        ${ticks}
+        <path d="${line}" fill="none" stroke="#1f4d39" stroke-width="2"/>
+        <line x1="${padL}" y1="${baseline}" x2="${W - padR}" y2="${baseline}" stroke="#d8d2c2" stroke-width="1"/>
+        <text x="${padL}" y="${H - 6}" font-family="'Geist Mono',monospace" font-size="9" fill="#5d6b59">START</text>
+        <text x="${W - padR}" y="${H - 6}" text-anchor="end" font-family="'Geist Mono',monospace" font-size="9" fill="#5d6b59">FINISH · ${totalKm.toFixed(1)}K</text>
+        <text x="${padL - 6}" y="${padT + 6}" text-anchor="end" font-family="'Geist Mono',monospace" font-size="8" fill="#5d6b59">${Math.round(maxEle)}m</text>
+        <text x="${padL - 6}" y="${baseline}" text-anchor="end" font-family="'Geist Mono',monospace" font-size="8" fill="#5d6b59">${Math.round(minEle)}m</text>
+      `;
     }
 
     // Opened with ?event=<id>&bib=<bib> (e.g. from a "🏅 ใบประกาศ" link on
@@ -355,6 +429,7 @@
         rank: rankIdx >= 0 ? rankIdx + 1 : null,
         finish_at: finishMs,
         distance_km: parseInt(r.distance, 10) || 0,
+        event_id: eventId,
       };
     }
 
@@ -414,6 +489,46 @@
       reader.readAsDataURL(file);
     });
     try { applyPhoto(localStorage.getItem(PHOTO_KEY)); } catch (e) {}
+
+    // .cert is sized in real physical units (mm/pt) for print — correct for
+    // an actual A4 printout, but on a phone screen (the far more common way
+    // this page actually gets opened — the "บันทึกใบประกาศ" flow, TestFlight,
+    // etc.) those units render at their true physical size regardless of
+    // the tiny viewport, and nothing was scaling the card down to fit.
+    // Text that was sized to comfortably fit an A4-width photo ended up
+    // fighting for space in a viewport a fraction as wide, which is what
+    // actually produced the cramped, overlapping look — not a layout bug
+    // in the card itself. Scaling the whole card down as one rigid unit
+    // (instead of trying to redo the sizing in relative units) guarantees
+    // the on-screen look always matches the print-tested layout exactly,
+    // just smaller — nothing can overlap on screen that doesn't already
+    // overlap on the printed page.
+    function fitCertToScreen() {
+      const cert = document.querySelector('.cert');
+      const stage = document.querySelector('.stage');
+      if (!cert || !stage) return;
+      cert.style.transform = 'none';
+      const naturalWidth = cert.offsetWidth;
+      const naturalHeight = cert.offsetHeight;
+      const available = stage.clientWidth;
+      if (!naturalWidth || !naturalHeight || naturalWidth <= available) { stage.style.height = ''; return; }
+      const scale = available / naturalWidth;
+      cert.style.transformOrigin = 'top center';
+      cert.style.transform = `scale(${scale})`;
+      // Scaling down leaves the natural (unscaled) height reserved in
+      // normal flow otherwise — a tall blank gap below the now-smaller
+      // card. Explicitly shrinking .stage's height to match closes it.
+      stage.style.height = (naturalHeight * scale) + 'px';
+    }
+    window.addEventListener('resize', fitCertToScreen);
+    window.addEventListener('orientationchange', fitCertToScreen);
+    window.addEventListener('load', fitCertToScreen);
+    fitCertToScreen();
+    // Printing must use the real, untransformed physical size — a phone
+    // can still trigger window.print() (Print/Save as PDF), so the scale
+    // has to come off first and go back on after.
+    window.addEventListener('beforeprint', () => { const c = document.querySelector('.cert'); if (c) c.style.transform = 'none'; });
+    window.addEventListener('afterprint', fitCertToScreen);
   </script>
 </body>
 </html>
