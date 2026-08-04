@@ -71,10 +71,18 @@ function downloadCsv(filename, rows) {
   URL.revokeObjectURL(url);
 }
 
+// Newest-created first — same ordering as Admin's own event list (see
+// admin-app.jsx) — so both the dropdown's order and its default selection
+// below land on a genuinely recent event instead of whatever order
+// Firestore/localStorage happened to return (which skewed toward an old,
+// already-finished event by coincidence).
+function sortEventsNewestFirst(list) {
+  return list.slice().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+}
 function RunnerManagerApp({ adminEmail, onLogout }) {
-  const [events, setEvents] = rS(() => (window.eventStore ? window.eventStore.loadEvents() : []));
+  const [events, setEvents] = rS(() => sortEventsNewestFirst(window.eventStore ? window.eventStore.loadEvents() : []));
   rE(() => {
-    const refresh = () => setEvents(window.eventStore.loadEvents());
+    const refresh = () => setEvents(sortEventsNewestFirst(window.eventStore.loadEvents()));
     window.addEventListener('trt:events-updated', refresh);
     return () => window.removeEventListener('trt:events-updated', refresh);
   }, []);
@@ -144,7 +152,7 @@ function RunnerManagerApp({ adminEmail, onLogout }) {
   const filtered = (showCancelled ? runners : activeRunners)
     .filter(r => distFilter === 'all' || r.distance === distFilter)
     .filter(r => !query || r.nickname.toLowerCase().includes(query) || r.bib.includes(query) || (r.phone || '').includes(query))
-    .sort((a, b) => (b.registeredAt || 0) - (a.registeredAt || 0));
+    .sort((a, b) => a.bib.localeCompare(b.bib, undefined, { numeric: true }));
 
   const inputStyle = { padding: '6px 8px', background: '#fff', border: '1px solid #e5e0d3', borderRadius: 6, fontSize: 12.5, fontFamily: 'inherit', width: '100%' };
 
