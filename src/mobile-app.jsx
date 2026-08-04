@@ -2610,6 +2610,24 @@ function MobileApp() {
     function syncRunner() {
       const rec = window.runnerStore.listRunners(eventId, { includeCancelled: true }).find(r => r.id === rosterId);
       if (!rec) return;
+      // A cancellation (Admin's "ยกเลิก" in the runner-manager, or the
+      // runner's own cancelRegistration) used to have no path back into an
+      // already-open session either — same gap as the comment above, just
+      // for the one field that isn't safe to just patch in place, since
+      // the rest of this effect otherwise keeps mirroring a roster record
+      // that no longer represents an active registration at all. Clear the
+      // stale session and bounce back to the event list instead of leaving
+      // the device frozen on a Track tab for a registration that's gone.
+      if (rec.cancelled) {
+        setSession(prev => {
+          if (!prev || !prev.runner || prev.runner.rosterId !== rosterId) return prev;
+          const next = { ...prev, runner: null };
+          saveSession(next);
+          return next;
+        });
+        setScreen('events');
+        return;
+      }
       setSession(prev => {
         if (!prev || !prev.runner || prev.runner.rosterId !== rosterId) return prev;
         const patch = { dist: rec.distance, name: rec.nickname, checkins: rec.checkins || [], progressKm: rec.progressKm || 0, bib: rec.bib, dnf: !!rec.dnf, dnfAt: rec.dnfAt || null, sos: !!rec.sos, sosReason: rec.sosReason || '' };
@@ -2742,8 +2760,21 @@ function MobileApp() {
   function openRunnerSpace(ev) {
     setPendingEvent(ev);
     if (session && session.runner && session.runner.eventId === ev.id) {
-      setScreen(initialScreenFor(session));
-      return;
+      // The syncRunner effect above already clears session.runner once it
+      // notices a cancellation — but that only fires after a
+      // 'trt:runners-updated' event actually reaches this device. Re-check
+      // directly here too, so tapping straight back into this event right
+      // after cancelling (the same flow this ticket is about — cancel in
+      // Admin, then immediately try to re-register to test again) can't
+      // possibly race that: a cached session.runner is only trusted once
+      // it's confirmed still active in the roster right now.
+      const cancelled = window.runnerStore && session.runner.rosterId &&
+        !window.runnerStore.listRunners(ev.id).find(r => r.id === session.runner.rosterId);
+      if (!cancelled) {
+        setScreen(initialScreenFor(session));
+        return;
+      }
+      persist({ ...session, runner: null });
     }
     // session.runner only ever holds one registration at a time — if this
     // runner has registered for more than one event, whichever one the
