@@ -117,8 +117,14 @@ function RunnerManagerApp({ adminEmail, onLogout }) {
     window.runnerStore.deleteRunner(r.id);
     flash(`✓ ลบ #${r.bib} ถาวรแล้ว`);
   }
+  // dnfAt/dnfBy give this an audit trail — a runner's own DNF tap already
+  // records when it happened (see mobile-app.jsx's dnf confirm handler),
+  // but this admin toggle previously flipped the flag with no record of
+  // when or by whom, so a wrongly-set DNF was impossible to trace back
+  // afterward.
   function toggleDnf(r) {
-    editRunner(r, { dnf: !r.dnf });
+    const next = !r.dnf;
+    editRunner(r, { dnf: next, dnfAt: next ? Date.now() : null, dnfBy: next ? adminEmail : null });
   }
   function exportCsv() {
     const rows = [['bib', 'ชื่อ', 'เบอร์โทร', 'อีเมล', 'เพศ', 'ระยะ', 'เช็คอิน', 'DNF', 'ผู้ติดต่อฉุกเฉิน', 'เบอร์ฉุกเฉิน', 'ผู้ติดต่อฉุกเฉิน 2', 'เบอร์ฉุกเฉิน 2', 'กรุ๊ปเลือด', 'โรคประจำตัว']];
