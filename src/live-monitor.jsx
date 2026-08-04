@@ -271,18 +271,25 @@ function LiveElevationSvg({ geo, coursePaths, distance, checkpoints, displays, s
 const M_ADMIN_EMAILS = ['patinya.kaeothip@gmail.com'];
 function useIsAdmin() {
   const [isAdmin, setIsAdmin] = mS(false);
+  // The SOS log (see runner-store.js's resolveSosLog) records *which*
+  // admin account resolved a signal — isAdmin alone doesn't carry that.
+  const [adminEmail, setAdminEmail] = mS('');
   mE(() => {
     if (!window.fb) return;
-    return window.fb.onAuthChange(u => setIsAdmin(!!u && M_ADMIN_EMAILS.includes(u.email)));
+    return window.fb.onAuthChange(u => {
+      const allowed = !!u && M_ADMIN_EMAILS.includes(u.email);
+      setIsAdmin(allowed);
+      setAdminEmail(allowed ? u.email : '');
+    });
   }, []);
-  return isAdmin;
+  return { isAdmin, adminEmail };
 }
 
 function LiveMonitorApp() {
-  const isAdmin = useIsAdmin();
+  const { isAdmin, adminEmail } = useIsAdmin();
   const [ready, setReady] = mS(false);
   const [selectedBib, setSelectedBib] = mS(null);
-  const [dashView, setDashView] = mS('map'); // 'map' | 'ranking'
+  const [dashView, setDashView] = mS('map'); // 'map' | 'ranking' | 'sos-log'
   const [distFilter, setDistFilter] = mS(null);
   const [showLabels, setShowLabels] = mS(false);
   // Everything below was laid out for a wide RD desktop/tablet screen — a
@@ -384,6 +391,16 @@ function LiveMonitorApp() {
     refresh();
     window.addEventListener('trt:runners-updated', refresh);
     return () => window.removeEventListener('trt:runners-updated', refresh);
+  }, [eventId]);
+
+  // "ประวัติ SOS" tab — see runner-store.js's logSosTriggered/resolveSosLog.
+  const [sosLog, setSosLog] = mS([]);
+  mE(() => {
+    if (!eventId) { setSosLog([]); return; }
+    const refresh = () => setSosLog(window.runnerStore ? window.runnerStore.listSosLog(eventId) : []);
+    refresh();
+    window.addEventListener('trt:sosLog-updated', refresh);
+    return () => window.removeEventListener('trt:sosLog-updated', refresh);
   }, [eventId]);
 
   // Real-time GPS, bib -> latest fix — src/native/gps-tracker.js writes one
@@ -757,7 +774,10 @@ function LiveMonitorApp() {
   }, [displays]);
 
   function clearSos(id) {
-    if (window.runnerStore && id) window.runnerStore.updateRunnerProgress(id, { sos: false });
+    if (window.runnerStore && id) {
+      window.runnerStore.updateRunnerProgress(id, { sos: false });
+      window.runnerStore.resolveSosLog(id, adminEmail);
+    }
   }
 
   const searchResults = mM(() => {
@@ -894,6 +914,7 @@ function LiveMonitorApp() {
         <div style={{ display: 'flex', borderBottom: '1px solid #d8d2c2' }}>
           <button onClick={() => setDashView('map')} style={{ flex: 1, padding: 12, background: 'none', border: 'none', borderBottom: `3px solid ${dashView === 'map' ? M_BRAND : 'transparent'}`, cursor: 'pointer', fontFamily: M_MONO, fontSize: 11.5, letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 700, color: dashView === 'map' ? M_BRAND : '#a8b1a3' }}>🗺 Live Map Monitor</button>
           <button onClick={() => setDashView('ranking')} style={{ flex: 1, padding: 12, background: 'none', border: 'none', borderBottom: `3px solid ${dashView === 'ranking' ? M_BRAND : 'transparent'}`, cursor: 'pointer', fontFamily: M_MONO, fontSize: 11.5, letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 700, color: dashView === 'ranking' ? M_BRAND : '#a8b1a3' }}>🏆 Ranking</button>
+          <button onClick={() => setDashView('sos-log')} style={{ flex: 1, padding: 12, background: 'none', border: 'none', borderBottom: `3px solid ${dashView === 'sos-log' ? M_BRAND : 'transparent'}`, cursor: 'pointer', fontFamily: M_MONO, fontSize: 11.5, letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 700, color: dashView === 'sos-log' ? M_BRAND : '#a8b1a3' }}>🆘 ประวัติ SOS</button>
         </div>
 
         {/* Kept mounted (just hidden) instead of conditionally unmounted —
@@ -1135,6 +1156,44 @@ function LiveMonitorApp() {
                 </tbody>
               </table>
             </div>
+          </div>
+        )}
+        {dashView === 'sos-log' && (
+          <div style={{ display: 'flex', flexDirection: 'column', minHeight: isMobile ? 'auto' : 560 }}>
+            <div style={{ padding: isMobile ? '12px 12px 10px' : '16px 20px 12px', fontFamily: M_MONO, fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 600, color: '#5d6b59', borderBottom: '1px solid #d8d2c2' }}>
+              ประวัติ SOS ทั้งหมด · {sosLog.length}
+            </div>
+            {sosLog.length === 0 ? (
+              <div style={{ padding: 40, textAlign: 'center', color: '#a8b1a3', fontSize: 13 }}>ยังไม่มีประวัติ SOS ของงานนี้</div>
+            ) : (
+              <div style={{ flex: 1, overflowY: 'auto', overflowX: isMobile ? 'auto' : 'visible' }}>
+                <table style={{ width: '100%', minWidth: isMobile ? 760 : 'auto', borderCollapse: 'collapse', fontSize: 13 }}>
+                  <thead>
+                    <tr style={{ position: 'sticky', top: 0, background: '#fff' }}>
+                      {['สถานะ', 'นักวิ่ง', 'เหตุ', 'เวลาส่ง SOS', 'เวลารับทราบ', 'รับทราบโดย'].map((h, i) => (
+                        <th key={i} style={{ textAlign: 'left', padding: i === 0 ? '9px 20px' : '9px 14px', fontFamily: M_MONO, fontSize: 10, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#5d6b59', borderBottom: '1px solid #d8d2c2' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sosLog.map(e => (
+                      <tr key={e.id} style={{ borderBottom: '1px solid #f4f3ef' }}>
+                        <td style={{ padding: '10px 20px' }}>
+                          {e.resolvedAt
+                            ? <span style={{ padding: '3px 8px', borderRadius: 7, fontSize: 11, fontWeight: 600, background: '#eaf3ee', color: '#1f4d39' }}>✓ รับทราบแล้ว</span>
+                            : <span style={{ padding: '3px 8px', borderRadius: 7, fontSize: 11, fontWeight: 700, background: '#dc2626', color: '#fff' }}>🆘 ยังไม่รับทราบ</span>}
+                        </td>
+                        <td style={{ padding: '10px 14px' }}>{e.nickname} <span style={{ fontFamily: M_MONO, fontSize: 10.5, color: '#5d6b59' }}>bib {e.bib}</span></td>
+                        <td style={{ padding: '10px 14px' }}>{e.reason || '—'}</td>
+                        <td style={{ padding: '10px 14px', fontFamily: M_MONO, fontSize: 11.5 }}>{e.triggeredAt ? new Date(e.triggeredAt).toLocaleString('th-TH') : '—'}</td>
+                        <td style={{ padding: '10px 14px', fontFamily: M_MONO, fontSize: 11.5 }}>{e.resolvedAt ? new Date(e.resolvedAt).toLocaleString('th-TH') : '—'}</td>
+                        <td style={{ padding: '10px 14px', fontFamily: M_MONO, fontSize: 11.5, color: '#5d6b59' }}>{e.resolvedAt ? (e.resolvedBy || 'นักวิ่งยกเลิกเอง') : '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
         </>

@@ -2860,6 +2860,9 @@ function MobileApp() {
     onCancelSos={() => {
       if (session.runner && session.runner.rosterId && window.runnerStore) {
         window.runnerStore.updateRunnerProgress(session.runner.rosterId, { sos: false, sosReason: '' });
+        // resolvedBy blank — this is the runner cancelling their own
+        // signal, not Admin responding to it (see resolveSosLog's comment).
+        window.runnerStore.resolveSosLog(session.runner.rosterId, '');
       }
       persist({ ...session, runner: { ...session.runner, sos: false, sosReason: '' } });
     }}/>;
@@ -2884,6 +2887,7 @@ function MobileApp() {
             // tab) that their SOS actually went out, same gap DNF used to
             // have before it started doing this.
             persist({ ...session, runner: { ...session.runner, sos: true, sosReason: reason } });
+            window.runnerStore.logSosTriggered({ eventId: session.runner.eventId, rosterId: session.runner.rosterId, bib: session.runner.bib, nickname: session.runner.name, reason });
             return window.runnerStore.updateRunnerProgress(session.runner.rosterId, { sos: true, sosReason: reason, sosAt: Date.now() }).synced;
           }
           return Promise.resolve(false);
