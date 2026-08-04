@@ -71,13 +71,15 @@ function downloadCsv(filename, rows) {
   URL.revokeObjectURL(url);
 }
 
-// Newest-created first — same ordering as Admin's own event list (see
-// admin-app.jsx) — so both the dropdown's order and its default selection
-// below land on a genuinely recent event instead of whatever order
-// Firestore/localStorage happened to return (which skewed toward an old,
-// already-finished event by coincidence).
+// Newest-created first — same ordering (and same id-based fallback for
+// events older than the `createdAt` field itself — see the comment above
+// this function in admin-app.jsx) as Admin's own event list, so both the
+// dropdown's order and its default selection below land on a genuinely
+// recent event instead of whatever order Firestore/localStorage happened
+// to return (which skewed toward an old, already-finished event by
+// coincidence).
 function sortEventsNewestFirst(list) {
-  return list.slice().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  return list.slice().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0) || (b.id > a.id ? 1 : b.id < a.id ? -1 : 0));
 }
 function RunnerManagerApp({ adminEmail, onLogout }) {
   const [events, setEvents] = rS(() => sortEventsNewestFirst(window.eventStore ? window.eventStore.loadEvents() : []));

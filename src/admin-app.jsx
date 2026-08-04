@@ -188,6 +188,20 @@ function RunnerRosterLink({ eventId }) {
   );
 }
 
+// Newest-created first. `createdAt` only exists on events created after
+// this sorting feature shipped — every event that already existed before
+// then has no timestamp to sort by, which without a fallback left them
+// all tied and stuck in whatever order Firestore/localStorage happened to
+// return (oldest-first, in practice) even after adding the `createdAt`
+// desc sort below. `newEventId()` (src/event-store.js) embeds the
+// creation time directly in the id itself (`'ev' + Date.now().toString(36)
+// + ...`), so comparing ids as a tie-break recovers real creation order
+// for every event that predates `createdAt`, without needing a one-time
+// data migration.
+function sortEventsNewestFirst(list) {
+  return list.slice().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0) || (b.id > a.id ? 1 : b.id < a.id ? -1 : 0));
+}
+
 const STATUS_META = {
   live: { label: '🟢 กำลังแข่ง', color: A_BRAND },
   upcoming: { label: '🕓 กำลังจะมาถึง', color: '#7c4a03' },
@@ -699,7 +713,7 @@ function AdminApp({ adminEmail, onLogout }) {
       )}
       {view === 'form'
         ? <EventForm initial={editing} onCancel={cancelForm} onSave={saveEvent} onSaveInPlace={saveEventInPlace} onDelete={deleteEvent}/>
-        : <EventList events={events.slice().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))} onEdit={openEdit} onDelete={deleteEvent} onCreate={openCreate}/>}
+        : <EventList events={sortEventsNewestFirst(events)} onEdit={openEdit} onDelete={deleteEvent} onCreate={openCreate}/>}
     </div>
   );
 }
