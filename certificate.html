@@ -64,15 +64,15 @@
        this far up the page. */
     .event-kicker-wrap {
       position: absolute; top: 10mm; right: 10mm; z-index: 3;
-      display: flex; align-items: center; gap: 6px;
-      max-width: 70%;
+      display: flex; align-items: center; gap: 8px;
+      max-width: 72%;
       background: rgba(0,0,0,0.4); backdrop-filter: blur(6px);
-      padding: 5px 12px 5px 7px; border-radius: 999px;
+      padding: 6px 14px 6px 8px; border-radius: 999px;
     }
-    .event-kicker-wrap img { width: 15px; height: 15px; flex-shrink: 0; }
+    .event-kicker-wrap img { width: 26px; height: 26px; flex-shrink: 0; }
     .event-kicker {
-      font-family: 'Geist Mono',monospace; font-size: 8.5pt;
-      letter-spacing: 0.1em; text-transform: uppercase;
+      font-family: 'Geist Mono',monospace; font-size: 10.5pt; font-weight: 600;
+      letter-spacing: 0.08em; text-transform: uppercase;
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
 
@@ -176,9 +176,17 @@
   <script src="/src/event-store.js"></script>
   <script src="/src/runner-store.js"></script>
   <script src="/src/course-geo.js"></script>
+  <!-- Renders the .cert card to an actual PNG for saveCertImage() below —
+       this card is now meant primarily for sharing on Facebook/Instagram
+       (see the 4:5 sizing), and "print to PDF then convert to an image" was
+       too many steps for that. No bundler here, so pulled from CDN like
+       every other third-party lib this project already uses (React,
+       Leaflet, jsQR, ...). -->
+  <script src="https://unpkg.com/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <div class="toolbar no-print">
-    <span>📜 ใบประกาศ · กด Print เพื่อ Save as PDF</span>
-    <button onclick="window.print()">🖨 Print / Save as PDF</button>
+    <span>📜 ใบประกาศ</span>
+    <button onclick="saveCertImage()">💾 บันทึกรูปภาพ</button>
+    <button class="alt" onclick="window.print()">🖨 Print / Save as PDF</button>
     <input type="file" accept="image/*" id="photo-input" style="display:none;">
     <button id="photo-btn" onclick="document.getElementById('photo-input').click()">📷 แนบรูป</button>
     <button class="alt" id="photo-remove-btn" onclick="removePhoto()" style="display:none;">✕ ลบรูป</button>
@@ -430,6 +438,35 @@
       reader.readAsDataURL(file);
     });
     try { applyPhoto(localStorage.getItem(PHOTO_KEY)); } catch (e) {}
+
+    // Renders the card to a real PNG and downloads it — the button most
+    // people actually want (share to Facebook/Instagram), since going
+    // through Print/Save-as-PDF and then converting that to an image was
+    // an unreasonable number of steps for what's now primarily a
+    // shareable photo card, not a document to file away.
+    async function saveCertImage() {
+      const cert = document.querySelector('.cert');
+      if (!cert) return;
+      if (!window.html2canvas) { alert('โหลดตัวช่วยบันทึกรูปไม่สำเร็จ ลองเช็คอินเทอร์เน็ตแล้วรีเฟรชหน้านี้ใหม่ครับ'); return; }
+      // Capture at the card's real, unscaled size (not whatever
+      // fitCertToScreen shrank it to for on-screen display) — otherwise a
+      // phone screen would produce a blurry, low-resolution PNG.
+      const prevTransform = cert.style.transform;
+      cert.style.transform = 'none';
+      try {
+        const canvas = await html2canvas(cert, { useCORS: true, scale: 2, backgroundColor: '#1f4d39' });
+        const link = document.createElement('a');
+        link.download = 'rayong-trail-certificate.png';
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+      } catch (err) {
+        console.warn('[trt] save image failed', err);
+        alert('บันทึกรูปไม่สำเร็จ ลองใช้ปุ่ม Print / Save as PDF แทนได้ครับ');
+      } finally {
+        cert.style.transform = prevTransform;
+        fitCertToScreen();
+      }
+    }
 
     // .cert is sized in real physical units (mm/pt) for print — correct for
     // an actual A4 printout, but on a phone screen (the far more common way
