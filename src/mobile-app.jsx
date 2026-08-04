@@ -1187,6 +1187,11 @@ function saveCertificateResult(session, event, checkins) {
       rank,
       finish_at: finishMs,
       distance_km: parseFloat(runner.dist) || 0,
+      // Lets certificate.html draw the same elevation-profile chart the
+      // Route tab shows, via window.courseGeo.courseJsonForDistance —
+      // wasn't stored before, so the certificate had no way to look up
+      // which event/course this finish belonged to.
+      event_id: event && event.id,
     };
     localStorage.setItem('trt.finish.result', JSON.stringify(data));
   } catch (err) { console.warn('[trt] certificate save failed', err); }
