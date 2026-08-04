@@ -1231,7 +1231,7 @@ function TrackTab({ runner, event, onScan, onSos, onDnf, offRoute, onCancelSos }
   // blown past it while still technically "active" (not yet DNF'd/
   // finished). Only meaningful while still racing — a finisher beat it by
   // definition, and a DNF already has its own banner.
-  const cutoffMs = (gunMs != null && distDef && distDef.cutoff) ? gunMs + parseFloat(distDef.cutoff) * 60000 : null;
+  const cutoffMs = (gunMs != null && distDef && distDef.cutoff) ? gunMs.getTime() + parseFloat(distDef.cutoff) * 60000 : null;
   const msToCutoff = cutoffMs != null && !stopped ? cutoffMs - Date.now() : null;
   const pastCutoff = msToCutoff != null && msToCutoff <= 0;
   const nearCutoff = msToCutoff != null && msToCutoff > 0 && msToCutoff <= 30 * 60000;
@@ -2383,7 +2383,7 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
     const combine = window.eventStatus && window.eventStatus.combineDateTime;
     const distDef = (currentEvent.distances || []).find(d => d.label === r.dist);
     const gunMs = distDef && distDef.cpTimes && combine ? combine(currentEvent.raceDateISO, distDef.cpTimes.start) : null;
-    const cutoffMs = (gunMs != null && distDef && distDef.cutoff) ? gunMs + parseFloat(distDef.cutoff) * 60000 : null;
+    const cutoffMs = (gunMs != null && distDef && distDef.cutoff) ? gunMs.getTime() + parseFloat(distDef.cutoff) * 60000 : null;
     if (cutoffMs == null) return;
     function checkCutoff() {
       if (Date.now() < cutoffMs) return;
