@@ -8,6 +8,27 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&family=Noto+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script>
+    // Chrome bug workaround: the Google Fonts stylesheet above uses
+    // `display=swap`, so the page paints once immediately with a fallback
+    // font, then a second time once the real webfont finishes downloading
+    // (font-swap). For text sitting inside nested `overflow:hidden`
+    // ancestors (e.g. EventCard's buttons, themselves inside #phone's own
+    // bezel) that second repaint sometimes never actually happens in
+    // Chrome — the glyphs stay invisible (background color still shows
+    // fine) until *something else* forces a full repaint, like changing
+    // the browser's zoom level. Forcing a synchronous reflow ourselves the
+    // moment the browser reports every font finished loading works around
+    // it without needing the user to zoom.
+    if (window.document && document.fonts && document.fonts.ready) {
+      document.fonts.ready.then(() => {
+        if (!document.body) return; // fonts resolved before <body> parsed — nothing to reflow yet
+        document.body.style.display = 'none';
+        void document.body.offsetHeight; // forces the reflow
+        document.body.style.display = '';
+      });
+    }
+  </script>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
