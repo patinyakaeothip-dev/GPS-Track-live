@@ -1161,13 +1161,23 @@ function saveCertificateResult(session, event, checkins) {
     const startCk = checkins.find(c => c.cp === 'start');
     const finishCk = checkins.find(c => c.cp === 'finish');
     const combine = window.eventStatus && window.eventStatus.combineDateTime;
-    const startMs = startCk && combine ? combine(event && event.raceDateISO, startCk.t) : null;
+    const chipStartMs = startCk && combine ? combine(event && event.raceDateISO, startCk.t) : null;
     const finishMs = finishCk && combine ? combine(event && event.raceDateISO, finishCk.t) : Date.now();
-    const totalMs = (startMs && finishMs) ? finishMs - startMs : null;
+    const chipTimeMs = (chipStartMs && finishMs) ? finishMs - chipStartMs : null;
+    // Gun time — elapsed since the event's *official* start, same
+    // distinction TrackTab already shows (Chip time above is this
+    // runner's own start-scan instead). Needed for the certificate's
+    // Gun/Chip stat pair (see certificate.html).
+    const distDef = (event && event.distances || []).find(d => d.label === runner.dist);
+    const gunMs = distDef && distDef.cpTimes && combine ? combine(event.raceDateISO, distDef.cpTimes.start) : null;
+    const gunTimeMs = (gunMs && finishMs) ? finishMs - gunMs : null;
 
     let rank = null;
+    let myRecord = null;
     if (window.runnerStore && event && combine) {
-      const times = window.runnerStore.listRunners(event.id)
+      const rosterRunners = window.runnerStore.listRunners(event.id);
+      myRecord = rosterRunners.find(r => r.bib === runner.bib) || null;
+      const times = rosterRunners
         .filter(r => r.distance === runner.dist && (r.checkins || []).some(c => c.cp === 'finish'))
         .map(r => {
           const s = (r.checkins || []).find(c => c.cp === 'start');
@@ -1182,8 +1192,9 @@ function saveCertificateResult(session, event, checkins) {
     }
 
     const data = {
-      runner: { name: runner.name, distance_current: runner.dist, distance_original: runner.dist },
-      total_time_ms: totalMs,
+      runner: { name: runner.name, distance_current: runner.dist, distance_original: runner.dist, bib: runner.bib, gender: (myRecord && myRecord.gender) || '' },
+      gun_time_ms: gunTimeMs,
+      chip_time_ms: chipTimeMs,
       rank,
       finish_at: finishMs,
       distance_km: parseFloat(runner.dist) || 0,
@@ -1192,6 +1203,8 @@ function saveCertificateResult(session, event, checkins) {
       // wasn't stored before, so the certificate had no way to look up
       // which event/course this finish belonged to.
       event_id: event && event.id,
+      event_name: event && event.name,
+      race_year: event && event.raceDateISO ? event.raceDateISO.slice(0, 4) : '',
     };
     localStorage.setItem('trt.finish.result', JSON.stringify(data));
   } catch (err) { console.warn('[trt] certificate save failed', err); }
