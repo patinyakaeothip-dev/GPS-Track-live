@@ -30,8 +30,20 @@
     html, body { margin: 0; overflow: hidden; overscroll-behavior: none; background: #efe9dc; font-family: 'Plus Jakarta Sans','Noto Sans Thai',ui-sans-serif,system-ui,sans-serif; }
     body { height: 100vh; display: flex; flex-direction: column; }
     * { box-sizing: border-box; }
-    #stage { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; gap: 14px; }
-    #phone { width: 402px; max-width: 100%; height: 850px; max-height: 90vh; border-radius: 40px; overflow: hidden;
+    /* overflow:auto (not the hidden default) so the desktop mockup frame
+       can be scrolled into view instead of clipped if #phone's min-height
+       below ever exceeds the available space — e.g. a heavily zoomed-in
+       browser window, where 90vh alone shrinks to less than a usable
+       phone screen (see #phone's min-height comment). */
+    #stage { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; gap: 14px; overflow: auto; }
+    /* max-height: 90vh alone let a heavily zoomed-in browser (vh shrinks
+       in CSS-pixel terms as zoom % goes up) squash this down to a sliver —
+       tall enough for the header but leaving almost nothing for the actual
+       content below, which read as "everything got compressed into a few
+       thin bars" rather than legible cards. min-height keeps it at a
+       usable phone-screen size regardless of zoom; #stage above scrolls
+       instead if that ever pushes #phone taller than the viewport. */
+    #phone { width: 402px; max-width: 100%; height: 850px; min-height: 560px; max-height: 90vh; border-radius: 40px; overflow: hidden;
       box-shadow: 0 30px 70px rgba(31,42,28,0.25), 0 0 0 10px #1a1a1a; position: relative; background: #efe9dc; }
     #root { height: 100%; }
     .trt-nav { flex-shrink: 0; display: flex; gap: 6px; align-items: center; padding: 10px 20px; background: #fff;
@@ -45,7 +57,7 @@
        home indicator so content doesn't render underneath them. */
     @media (max-width: 480px) {
       #stage { padding: 0; gap: 0; }
-      #phone { width: 100%; height: 100%; max-height: none; border-radius: 0;
+      #phone { width: 100%; height: 100%; min-height: 0; max-height: none; border-radius: 0;
         box-shadow: none; background: #efe9dc;
         padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
     }
