@@ -24,11 +24,13 @@
       border: 1px solid rgba(255,255,255,0.4); }
     .stage { padding: 24px; display: flex; justify-content: center; overflow-x: hidden; }
 
-    /* A4 portrait = 210mm × 297mm — the whole page is now one full-bleed
-       finisher photo (Strava/race-photo-timing style) instead of a bordered
-       certificate with a logo header and signature footer. */
+    /* 210mm × 262.5mm = a 4:5 ratio — Instagram's recommended portrait post
+       size (and works fine for Facebook too), instead of A4's taller 210:297
+       (≈ 0.707) — the whole page is one full-bleed finisher photo
+       (Strava/race-photo-timing style) instead of a bordered certificate
+       with a logo header and signature footer. */
     .cert {
-      width: 210mm; height: 297mm;
+      width: 210mm; height: 262.5mm;
       position: relative; overflow: hidden;
       page-break-after: always;
       box-shadow: 0 10px 30px rgba(0,0,0,0.18);
@@ -56,24 +58,39 @@
       pointer-events: none; z-index: 1;
     }
 
-    /* Top-right small event label (e.g. "RAYONG TRAIL · 44.2K · 2026") */
+    /* Top-right event label + logo — its own dark pill background (instead
+       of just a text-shadow) so it stays legible no matter how bright the
+       photo behind it is; the bottom-fade (.cert::after) doesn't reach
+       this far up the page. */
+    .event-kicker-wrap {
+      position: absolute; top: 10mm; right: 10mm; z-index: 3;
+      display: flex; align-items: center; gap: 6px;
+      max-width: 70%;
+      background: rgba(0,0,0,0.4); backdrop-filter: blur(6px);
+      padding: 5px 12px 5px 7px; border-radius: 999px;
+    }
+    .event-kicker-wrap img { width: 15px; height: 15px; flex-shrink: 0; }
     .event-kicker {
-      position: absolute; top: 12mm; right: 14mm; z-index: 3;
       font-family: 'Geist Mono',monospace; font-size: 8.5pt;
-      letter-spacing: 0.14em; text-transform: uppercase;
-      text-shadow: 0 1px 6px rgba(0,0,0,0.5);
-      max-width: 60%; text-align: right;
+      letter-spacing: 0.1em; text-transform: uppercase;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
 
-    /* Elevation profile, drawn translucent directly on the photo like a
-       watermark (Suunto/Strava activity-share style) instead of a boxed
-       chart with its own background — see buildElevationChart below. */
+    /* Elevation profile, drawn directly on the photo like a watermark
+       (Suunto/Strava activity-share style) instead of a boxed chart with
+       its own background — see buildElevationChart below. A soft dark
+       scrim behind it (not just relying on opacity/text-shadow on the line
+       itself) keeps it visible even over a bright/overexposed part of the
+       photo, which plain white-on-photo wasn't guaranteed to survive. */
     .elev-watermark {
       position: relative; z-index: 2;
-      opacity: 0.8; margin-bottom: 6mm;
+      margin-bottom: 6mm; padding: 6mm 2mm 1mm;
+      border-radius: 8px;
+      background: linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.28) 100%);
       display: none; /* shown via JS once a course is actually found */
     }
-    .elev-watermark svg { display: block; width: 100%; height: auto; }
+    .elev-watermark svg { display: block; width: 100%; height: auto;
+      filter: drop-shadow(0 1px 3px rgba(0,0,0,0.6)); }
     .elev-watermark .elev-stats {
       display: flex; gap: 14mm; margin-top: 2mm;
     }
@@ -171,7 +188,10 @@
   <div class="stage">
     <div class="cert">
       <img id="user-photo" alt="" style="display:none;position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;">
-      <div class="event-kicker" id="event-kicker">RAYONG TRAIL · 2026</div>
+      <div class="event-kicker-wrap">
+        <img src="/assets/rayong-trail-icon.png" alt=""/>
+        <span class="event-kicker" id="event-kicker">RAYONG TRAIL · 2026</span>
+      </div>
 
       <div class="bottom-block">
         <!-- Elevation profile — filled in + shown by JS once a course is
@@ -307,8 +327,8 @@
       line = line.trim();
       const area = `${line} L${x(totalKm).toFixed(1)},${baseline} L${x(0).toFixed(1)},${baseline} Z`;
       svg.innerHTML = `
-        <path d="${area}" fill="#fff" fill-opacity="0.22"/>
-        <path d="${line}" fill="none" stroke="#fff" stroke-width="2.5" stroke-opacity="0.9"/>
+        <path d="${area}" fill="#fff" fill-opacity="0.3"/>
+        <path d="${line}" fill="none" stroke="#fff" stroke-width="3.5"/>
       `;
     }
 
