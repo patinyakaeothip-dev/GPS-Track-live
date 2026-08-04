@@ -182,5 +182,67 @@
   if (window.fb) startFirestoreSync();
   else window.addEventListener('trt:firebase-ready', startFirestoreSync, { once: true });
 
-  Object.assign(window, { runnerStore: { listRunners, listRunnersByUid, registerRunner, updateRunnerProgress, cancelRunner, deleteRunner, renumberBibs } });
+  // ── SOS log ───────────────────────────────────────────────────────────
+  // Separate from the roster's own sos/sosReason fields, which only ever
+  // reflect the *current* signal — clearing an SOS (self-cancel or Admin's
+  // "รับทราบ" button) wiped those fields with nothing kept behind, so
+  // there was no way to answer "who SOS'd, when, and who responded" after
+  // the fact. One doc per SOS event here, never overwritten in place other
+  // than to attach a resolution once it's handled, so the history survives
+  // regardless of what the roster's live fields say right now.
+  const LOG_KEY = 'trt.sosLog.v1';
+  function loadSosLog() {
+    try { return JSON.parse(localStorage.getItem(LOG_KEY)) || []; } catch (_) { return []; }
+  }
+  function saveSosLog(list) {
+    try { localStorage.setItem(LOG_KEY, JSON.stringify(list)); } catch (_) {}
+  }
+  function notifySosLogUpdated() {
+    window.dispatchEvent(new CustomEvent('trt:sosLog-updated'));
+  }
+  // Called the moment a runner sends SOS (see mobile-app.jsx's SOS confirm
+  // handler) — logs a new, unresolved entry.
+  function logSosTriggered({ eventId, rosterId, bib, nickname, reason }) {
+    const entry = {
+      id: `sos${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`,
+      eventId, rosterId, bib, nickname, reason: reason || '',
+      triggeredAt: Date.now(), resolvedAt: null, resolvedBy: '',
+    };
+    const list = loadSosLog().slice();
+    list.push(entry);
+    saveSosLog(list);
+    if (window.fb) window.fb.setDocById('sosLog', entry.id, entry).catch(err => console.warn('[runner-store] Firestore write failed', err));
+    notifySosLogUpdated();
+    return entry;
+  }
+  // Called both when a runner cancels their own SOS and when Admin hits
+  // "รับทราบ · ปิดสัญญาณ SOS" on Live Monitor — resolvedBy is left blank
+  // for a self-cancel (see both call sites) so the log can distinguish "the
+  // runner called it off themselves" from "Admin responded".
+  function resolveSosLog(rosterId, resolvedBy) {
+    const list = loadSosLog().slice();
+    // Newest-first so a runner who's SOS'd more than once resolves their
+    // *latest* open signal, not whichever unresolved entry happens to be
+    // first in storage order.
+    const idx = list.slice().reverse().findIndex(e => e.rosterId === rosterId && !e.resolvedAt);
+    if (idx < 0) return;
+    const realIdx = list.length - 1 - idx;
+    list[realIdx] = { ...list[realIdx], resolvedAt: Date.now(), resolvedBy: resolvedBy || '' };
+    saveSosLog(list);
+    if (window.fb) window.fb.setDocById('sosLog', list[realIdx].id, list[realIdx]).catch(err => console.warn('[runner-store] Firestore write failed', err));
+    notifySosLogUpdated();
+  }
+  function listSosLog(eventId) {
+    return loadSosLog().filter(e => e.eventId === eventId).sort((a, b) => (b.triggeredAt || 0) - (a.triggeredAt || 0));
+  }
+  function startSosLogFirestoreSync() {
+    if (!window.fb) return;
+    window.fb.listDocs('sosLog').then(remote => { if (remote.length) { saveSosLog(remote); notifySosLogUpdated(); } })
+      .catch(err => console.warn('[runner-store] SOS log initial load failed', err));
+    window.fb.watchCollection('sosLog', remote => { saveSosLog(remote); notifySosLogUpdated(); });
+  }
+  if (window.fb) startSosLogFirestoreSync();
+  else window.addEventListener('trt:firebase-ready', startSosLogFirestoreSync, { once: true });
+
+  Object.assign(window, { runnerStore: { listRunners, listRunnersByUid, registerRunner, updateRunnerProgress, cancelRunner, deleteRunner, renumberBibs, logSosTriggered, resolveSosLog, listSosLog } });
 })();
