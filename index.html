@@ -34,8 +34,16 @@
        can be scrolled into view instead of clipped if #phone's min-height
        below ever exceeds the available space — e.g. a heavily zoomed-in
        browser window, where 90vh alone shrinks to less than a usable
-       phone screen (see #phone's min-height comment). */
-    #stage { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; gap: 14px; overflow: auto; }
+       phone screen (see #phone's min-height comment). Plain `center`
+       alone has a well-known flexbox gotcha though: once content overflows,
+       the browser still centers around the same fixed point, which pins
+       the far edge in place and makes the near edge unreachable by
+       scrolling no matter how far you drag the scrollbar — here that meant
+       the top of #phone (and, depending on scroll position, its bottom)
+       could go permanently off-screen with no way to scroll back to it.
+       `safe center` falls back to start-alignment once content overflows,
+       so scrolling can always reach every edge. */
+    #stage { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: safe center; justify-content: safe center; padding: 24px; gap: 14px; overflow: auto; }
     /* max-height: 90vh alone let a heavily zoomed-in browser (vh shrinks
        in CSS-pixel terms as zoom % goes up) squash this down to a sliver —
        tall enough for the header but leaving almost nothing for the actual
