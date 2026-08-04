@@ -266,6 +266,7 @@ function blankEvent() {
   const checkpoints = DEFAULT_CHECKPOINTS.map(cp => ({ ...cp }));
   return {
     id: window.eventStore.newEventId(),
+    createdAt: Date.now(),
     name: '', date: '', raceDateISO: '', regClose: '', regCloseISO: '', status: 'upcoming', closed: false, hotlines: [''],
     gpxFiles: {},
     checkpoints,
@@ -698,7 +699,7 @@ function AdminApp({ adminEmail, onLogout }) {
       )}
       {view === 'form'
         ? <EventForm initial={editing} onCancel={cancelForm} onSave={saveEvent} onSaveInPlace={saveEventInPlace} onDelete={deleteEvent}/>
-        : <EventList events={events} onEdit={openEdit} onDelete={deleteEvent} onCreate={openCreate}/>}
+        : <EventList events={events.slice().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))} onEdit={openEdit} onDelete={deleteEvent} onCreate={openCreate}/>}
     </div>
   );
 }

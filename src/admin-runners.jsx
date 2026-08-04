@@ -144,7 +144,7 @@ function RunnerManagerApp({ adminEmail, onLogout }) {
   const filtered = (showCancelled ? runners : activeRunners)
     .filter(r => distFilter === 'all' || r.distance === distFilter)
     .filter(r => !query || r.nickname.toLowerCase().includes(query) || r.bib.includes(query) || (r.phone || '').includes(query))
-    .sort((a, b) => a.bib.localeCompare(b.bib, undefined, { numeric: true }));
+    .sort((a, b) => (b.registeredAt || 0) - (a.registeredAt || 0));
 
   const inputStyle = { padding: '6px 8px', background: '#fff', border: '1px solid #e5e0d3', borderRadius: 6, fontSize: 12.5, fontFamily: 'inherit', width: '100%' };
 
