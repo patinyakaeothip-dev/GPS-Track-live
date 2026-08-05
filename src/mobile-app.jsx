@@ -1366,12 +1366,17 @@ function TrackTab({ runner, event, onScan, onSos, onDnf, offRoute, onCancelSos }
         <Btn variant="primary" onClick={() => { window.location.href = 'certificate.html'; }}>🏅 บันทึกใบประกาศ</Btn>
       ) : !runner.dnf ? (
         <div style={{ display: 'flex', gap: 10 }}>
-          {/* Auto mode has nothing for the runner to tap — AppShell's
-              auto-checkin effect fires on its own once GPS says they're
-              close enough — so this slot becomes a status readout instead
-              of a button. Start still always uses the real Scan QR button
-              (this event never got here without having scanned it). */}
-          {event && event.checkpointMode === 'auto'
+          {/* Auto mode has nothing for the runner to tap for mid-course
+              checkpoints — AppShell's auto-checkin effect fires on its own
+              once GPS says they're close enough — so this slot becomes a
+              status readout instead of a button. But the start line always
+              needs its own QR scan (see AppShell's auto-checkin effect,
+              which skips 'start' on purpose) regardless of this event's
+              mode, and PreRaceScreen's "เปิด Track/Route/Ranking" preview
+              button reaches this tab *before* that scan happens — so the
+              real Scan QR button has to keep showing until checkins is
+              non-empty, not just flip based on the mode alone. */}
+          {event && event.checkpointMode === 'auto' && runner.checkins.length > 0
             ? <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, padding: 16, borderRadius: 12, background: '#eaf3ee', color: C.brandDk, fontSize: 12.5, fontWeight: 700 }}>📍 ตรวจจับจุดถัดไปอัตโนมัติ</div>
             : <Btn variant="primary" onClick={onScan} style={{ flex: 1 }}>
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><CameraIcon size={16}/> Scan QR</span>
