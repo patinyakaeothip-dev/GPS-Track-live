@@ -1075,6 +1075,28 @@ function cpKmFor(event, cpId, distLabel) {
   const cp = event && (event.checkpoints || []).find(c => c.id === cpId);
   return cp ? (parseFloat(cp.km) || 0) : 0;
 }
+// Real-world lat/lon of a checkpoint (nearest recorded course point to its
+// km-along-route) — for GPS geofencing (see AppShell's auto-checkin effect
+// below), which needs an actual physical point to measure distance to, not
+// a position projected onto the course.
+function checkpointLatLon(course, km) {
+  if (!course || !course.points || !course.points.length) return null;
+  let best = course.points[0], bestDiff = Infinity;
+  for (const p of course.points) {
+    const diff = Math.abs(p[3] - km);
+    if (diff < bestDiff) { bestDiff = diff; best = p; }
+  }
+  return { lat: best[0], lon: best[1] };
+}
+// 50m — generous enough to fire reliably despite typical trail GPS drift
+// (worse under tree canopy) without being so wide it could plausibly
+// overlap a neighboring checkpoint. Requiring AUTO_CHECKIN_CONFIRM_HITS
+// consecutive fixes inside the radius (not just one) is what actually
+// guards against a single bad fix causing a false check-in — one stray
+// reading lands inside the radius reasonably often on a winding trail,
+// two in a row much less so.
+const AUTO_CHECKIN_RADIUS_KM = 0.05;
+const AUTO_CHECKIN_CONFIRM_HITS = 2;
 // Same idea as src/course-geo.js's nearestKmOnTrack (project a lat/lon onto
 // the recorded track, return the nearest point's km) but working against
 // this app's tuple point shape ([lat, lon, ele, km]) instead of that
@@ -1344,9 +1366,16 @@ function TrackTab({ runner, event, onScan, onSos, onDnf, offRoute, onCancelSos }
         <Btn variant="primary" onClick={() => { window.location.href = 'certificate.html'; }}>🏅 บันทึกใบประกาศ</Btn>
       ) : !runner.dnf ? (
         <div style={{ display: 'flex', gap: 10 }}>
-          <Btn variant="primary" onClick={onScan} style={{ flex: 1 }}>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><CameraIcon size={16}/> Scan QR</span>
-          </Btn>
+          {/* Auto mode has nothing for the runner to tap — AppShell's
+              auto-checkin effect fires on its own once GPS says they're
+              close enough — so this slot becomes a status readout instead
+              of a button. Start still always uses the real Scan QR button
+              (this event never got here without having scanned it). */}
+          {event && event.checkpointMode === 'auto'
+            ? <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, padding: 16, borderRadius: 12, background: '#eaf3ee', color: C.brandDk, fontSize: 12.5, fontWeight: 700 }}>📍 ตรวจจับจุดถัดไปอัตโนมัติ</div>
+            : <Btn variant="primary" onClick={onScan} style={{ flex: 1 }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><CameraIcon size={16}/> Scan QR</span>
+              </Btn>}
           <Btn variant="danger" onClick={onSos} style={{ flex: 1 }}>🆘 SOS</Btn>
         </div>
       ) : null}
@@ -2498,6 +2527,33 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
     }
     if (nextCp === 'finish') saveCertificateResult(session, currentEvent, checkins);
   }
+
+  // Auto-checkin (see Admin's "วิธีเช็คพอยต์" toggle) — same effect as
+  // scanning a QR, just triggered by GPS proximity instead of a camera
+  // read. Only covers mid-course checkpoints and the finish; the start
+  // line always goes through its own QR scan regardless of this setting
+  // (see the 'qr-start' screen below — it's the moment gun time starts,
+  // and normally has real people staffing it anyway).
+  const autoCheckinRef = uR({ cp: null, hits: 0, firedFor: null });
+  uE(() => {
+    if (isSpectator || !session.runner || !currentEvent || currentEvent.checkpointMode !== 'auto') return;
+    if (!nextCp || nextCp === 'start') return;
+    if (!course || !effectiveLivePos || effectiveLivePos.lat == null) return;
+    if (autoCheckinRef.current.firedFor === nextCp) return; // already fired this tick, waiting for checkins to catch up
+    if (autoCheckinRef.current.cp !== nextCp) autoCheckinRef.current = { cp: nextCp, hits: 0, firedFor: null };
+    const target = checkpointLatLon(course, cpKmFor(currentEvent, nextCp, session.runner.dist));
+    if (!target) return;
+    const distKm = window.courseGeo.haversineKm(effectiveLivePos.lat, effectiveLivePos.lon, target.lat, target.lon);
+    if (distKm <= AUTO_CHECKIN_RADIUS_KM) {
+      autoCheckinRef.current.hits += 1;
+      if (autoCheckinRef.current.hits >= AUTO_CHECKIN_CONFIRM_HITS) {
+        autoCheckinRef.current.firedFor = nextCp;
+        scanComplete();
+      }
+    } else {
+      autoCheckinRef.current.hits = 0;
+    }
+  }, [isSpectator, session.runner, currentEvent, course, effectiveLivePos, nextCp]);
 
   if (scanning) return <QrScanScreen label={nextCp === 'start' ? 'จุดสตาร์ท' : cpLabelFor(currentEvent, nextCp)}
     expectedCode={`TRT:${session.runner.eventId}:${nextCp}`} onBack={() => setScanning(false)} onScanned={scanComplete}/>;
