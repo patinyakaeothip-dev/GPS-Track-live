@@ -282,6 +282,7 @@ function blankEvent() {
     id: window.eventStore.newEventId(),
     createdAt: Date.now(),
     name: '', date: '', raceDateISO: '', regClose: '', regCloseISO: '', status: 'upcoming', closed: false, hotlines: [''],
+    checkpointMode: 'qr',
     gpxFiles: {},
     checkpoints,
     distances: [
@@ -511,6 +512,22 @@ function EventForm({ initial, onCancel, onSave, onSaveInPlace, onDelete }) {
                 </div>
               ))}
               <button onClick={addHotline} style={{ alignSelf: 'flex-start', padding: '6px 12px', background: 'transparent', border: '1px dashed #bdb6a4', borderRadius: 8, fontFamily: A_MONO, fontSize: 10.5, fontWeight: 600, color: '#1f2a1c', cursor: 'pointer' }}>+ เพิ่มเบอร์</button>
+            </div>
+          </Field>
+        </div>
+
+        <div style={{ marginBottom: 18 }}>
+          <Field label="วิธีเช็คพอยต์ระหว่างทาง">
+            <div style={{ display: 'flex', gap: 8 }}>
+              {[['qr', '📷 สแกน QR Code'], ['auto', '📍 ตรวจจับอัตโนมัติด้วย GPS']].map(([v, label]) => (
+                <button key={v} onClick={() => set({ checkpointMode: v })} style={{ padding: '9px 14px', borderRadius: 10, cursor: 'pointer', fontFamily: A_MONO, fontSize: 11.5, fontWeight: 700,
+                  border: `1.5px solid ${(ev.checkpointMode || 'qr') === v ? A_BRAND : '#e5e0d3'}`,
+                  background: (ev.checkpointMode || 'qr') === v ? A_BRAND : '#fff',
+                  color: (ev.checkpointMode || 'qr') === v ? '#fff' : '#1f2a1c' }}>{label}</button>
+              ))}
+            </div>
+            <div style={{ fontFamily: A_MONO, fontSize: 10, color: '#5d6b59', marginTop: 6, lineHeight: 1.5 }}>
+              จุดสตาร์ทยังต้องสแกน QR เสมอไม่ว่าจะเลือกแบบไหน (เป็นจุดเริ่มจับเวลาที่ต้องแม่นยำ และมักมีกรรมการอยู่ที่จุดนั้นอยู่แล้ว) — โหมด "ตรวจจับอัตโนมัติ" มีผลกับจุดเช็คพอยต์ระหว่างทางและเส้นชัยเท่านั้น: แอปจะเช็คอินให้เองเมื่อ GPS ของนักวิ่งเข้าใกล้จุดนั้นในระยะ ~50 เมตร ต่อเนื่อง 2 ครั้ง (กันตำแหน่ง GPS สะเปะสะปะเช็คอินผิดจุด) — แม่นยำน้อยกว่าสแกน QR แต่สะดวกกว่าเวลาวิ่งผ่านไม่อยากหยุด
             </div>
           </Field>
         </div>
