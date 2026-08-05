@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NSHumanReadableCopyright</key>
+	<string></string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>LSApplicationCategoryType</key>
+	<string></string>
+	<key>CFBundleName</key>
+    <string>Rayong Trail</string>
+	<key>CFBundleDisplayName</key>
+    <string>Rayong Trail</string>
+	<key>CFBundleVersion</key>
+	<string>2</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0</string>
+	<key>CFBundleGetInfoString</key>
+	<string></string>
+    <key>UILaunchStoryboardName</key>
+    <string>LaunchScreen</string>
+    <key>UIMainStoryboardFile</key>
+    <string>Main</string>
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>แอพต้องใช้ตำแหน่ง GPS เพื่อติดตามเส้นทางวิ่งของคุณแบบเรียลไทม์ระหว่างการแข่งขัน</string>
+    <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+    <string>แอพต้องใช้ตำแหน่ง GPS ต่อเนื่องแม้ปิดหน้าจอ เพื่อความปลอดภัยระหว่างการแข่งขัน</string>
+    <key>NSCameraUsageDescription</key>
+    <string>แอพต้องใช้กล้องเพื่อสแกน QR code ที่จุดเช็คพอยต์ระหว่างการแข่งขัน</string>
+    <key>CFBundleURLTypes</key>
+    <array>
+    <dict>
+    <key>CFBundleURLSchemes</key>
+    <array>
+    <string>com.googleusercontent.apps.404432675602-qu39jg3o4a8atl0unuktbv1jpvuo5ovl</string>
+    </array>
+    </dict>
+    </array>
+    <key>UISupportedInterfaceOrientations</key>
+    <array>
+    <string>UIInterfaceOrientationPortrait</string>
+    <string>UIInterfaceOrientationPortraitUpsideDown</string>
+    <string>UIInterfaceOrientationLandscapeLeft</string>
+    <string>UIInterfaceOrientationLandscapeRight</string>
+    </array>
+    <key>UISupportedInterfaceOrientations~ipad</key>
+    <array>
+    <string>UIInterfaceOrientationPortrait</string>
+    <string>UIInterfaceOrientationPortraitUpsideDown</string>
+    <string>UIInterfaceOrientationLandscapeLeft</string>
+    <string>UIInterfaceOrientationLandscapeRight</string>
+    </array>
+    <key>UIBackgroundModes</key>
+    <array>
+    <string>location</string>
+    </array>
+</dict>
+</plist>
