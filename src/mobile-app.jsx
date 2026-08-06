@@ -1469,6 +1469,14 @@ function RouteTab({ course, runner, event, spectatorRunner, livePos }) {
   // Moves the runner dot on its own, separate from the (expensive, one-time)
   // map/route setup above — either to a real GPS fix when one's available,
   // or back to the checkpoint-interpolated point along the route otherwise.
+  // lastRawPosRef remembers the last fix that *was* fresh, so a runner's
+  // own GPS genuinely going stale (signal lost, not just finished) holds
+  // the dot at their real last-known spot instead of snapping back to
+  // wherever their last checkpoint scan/auto-checkin happened to be —
+  // which, on a winding course, can read as "teleporting" a large visible
+  // distance backward. Same idea as lastOnCourseKmRef below, just for the
+  // literal lat/lon marker instead of the elevation chart's km axis.
+  const lastRawPosRef = uR(null);
   uE(() => {
     if (!mapObj.current || !runnerMarkerRef.current || !course) return;
     // A GPS fix with lat/lon present isn't necessarily *current* — once a
@@ -1476,12 +1484,15 @@ function RouteTab({ course, runner, event, spectatorRunner, livePos }) {
     // trtGpsTracker.stop()) so livePos is permanently whatever their last
     // ping happened to be, which could be minutes or a whole checkpoint
     // away from the finish. Only trust it while it's actually fresh;
-    // otherwise fall back to the checkpoint-interpolated position, which
-    // correctly reflects the finish once progressKm has been updated to
-    // the full distance.
+    // otherwise hold at the last position it *was* fresh, falling back to
+    // the checkpoint-interpolated position only if there's never been a
+    // real fix at all yet.
     const gpsFresh = livePos && livePos.lat != null && livePos.lon != null && livePos.at && (Date.now() - livePos.at) < 2 * 60 * 1000;
     if (gpsFresh) {
-      runnerMarkerRef.current.setLatLng([livePos.lat, livePos.lon]);
+      lastRawPosRef.current = [livePos.lat, livePos.lon];
+      runnerMarkerRef.current.setLatLng(lastRawPosRef.current);
+    } else if (lastRawPosRef.current) {
+      runnerMarkerRef.current.setLatLng(lastRawPosRef.current);
     } else {
       const idx = Math.min(course.points.length - 1, Math.round((runner.progressKm / course.totalKm) * course.points.length));
       const pos = course.points[idx];
@@ -2015,15 +2026,22 @@ function FriendMapSheet({ runner, eventId, event, onClose }) {
     setTimeout(() => map.invalidateSize(), 60);
   }, [course]);
 
-  // Same GPS-fresh/checkpoint-fallback rule as the runner's own Route tab
-  // (see RouteTab) — livePos here only ever comes from Firestore (this is
-  // someone else's device), so it's only ever as fresh as their last
-  // successful sync.
+  // Same GPS-fresh/last-known-fallback rule as the runner's own Route tab
+  // (see RouteTab's lastRawPosRef) — livePos here only ever comes from
+  // Firestore (this is someone else's device), so it's only ever as fresh
+  // as their last successful sync. Holding at their last real fix instead
+  // of snapping to the checkpoint-interpolated point reads as "GPS signal
+  // lost around here" — which is what actually happened — instead of a
+  // misleading jump back to wherever they last scanned/auto-checked-in.
+  const lastRawPosRef = uR(null);
   uE(() => {
     if (!mapObjRef.current || !markerRef.current || !course) return;
     const gpsFresh = livePos && livePos.lat != null && livePos.lon != null && livePos.at && (Date.now() - livePos.at) < 2 * 60 * 1000;
     if (gpsFresh) {
-      markerRef.current.setLatLng([livePos.lat, livePos.lon]);
+      lastRawPosRef.current = [livePos.lat, livePos.lon];
+      markerRef.current.setLatLng(lastRawPosRef.current);
+    } else if (lastRawPosRef.current) {
+      markerRef.current.setLatLng(lastRawPosRef.current);
     } else {
       const idx = Math.min(course.points.length - 1, Math.round(((runner.progressKm || 0) / course.totalKm) * course.points.length));
       const pos = course.points[idx];
@@ -2049,7 +2067,7 @@ function FriendMapSheet({ runner, eventId, event, onClose }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '16px 18px', borderBottom: `1px solid ${C.border}` }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 15, fontWeight: 700 }}>{runner.nickname}</div>
-          <div style={{ fontFamily: C.mono, fontSize: 10.5, color: gpsFresh ? C.brand : C.muted }}>{gpsFresh ? '🟢 GPS สด' : '⚪ ไม่มี GPS สด · แสดงตำแหน่งจากเช็คพอยท์ล่าสุด'}</div>
+          <div style={{ fontFamily: C.mono, fontSize: 10.5, color: gpsFresh ? C.brand : C.muted }}>{gpsFresh ? '🟢 GPS สด' : '⚪ ไม่มี GPS สด · แสดงตำแหน่งล่าสุดที่หลุดสัญญาณ'}</div>
         </div>
         <div onClick={onClose} style={{ width: 30, height: 30, borderRadius: 10, border: `1.6px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 14, flexShrink: 0 }}>✕</div>
       </div>
