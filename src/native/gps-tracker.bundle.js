@@ -540,6 +540,12 @@
   function accuracyOk(accuracy) {
     return accuracy == null || accuracy <= MAX_ACCURACY_M;
   }
+  var ACCURACY_GRACE_MS = 6e4;
+  var lastAcceptedAt = 0;
+  function shouldAcceptFix(accuracy) {
+    if (accuracyOk(accuracy)) return true;
+    return Date.now() - lastAcceptedAt > ACCURACY_GRACE_MS;
+  }
   var PENDING_KEY = "trt.gps.pendingPing.v1";
   function loadPending() {
     try {
@@ -572,6 +578,7 @@
   async function pushPing(eventId, bib, lat, lon, extra) {
     lastFix = { lat, lon, ...extra };
     lastPingAt = Date.now();
+    lastAcceptedAt = lastPingAt;
     heartbeatEventId = eventId;
     heartbeatBib = bib;
     const ping = { eventId, bib, lat, lon, at: Date.now(), ...extra };
@@ -612,7 +619,7 @@
             return;
           }
           if (!location) return;
-          if (!accuracyOk(location.accuracy)) {
+          if (!shouldAcceptFix(location.accuracy)) {
             console.warn("[gps-tracker] dropping low-accuracy native fix", location.accuracy);
             return;
           }
@@ -624,7 +631,7 @@
     if (navigator.geolocation) {
       watcherId = navigator.geolocation.watchPosition(
         (pos) => {
-          if (!accuracyOk(pos.coords.accuracy)) {
+          if (!shouldAcceptFix(pos.coords.accuracy)) {
             console.warn("[gps-tracker] dropping low-accuracy browser fix", pos.coords.accuracy);
             return;
           }
@@ -637,7 +644,7 @@
         if (document.visibilityState !== "visible") return;
         navigator.geolocation.getCurrentPosition(
           (pos) => {
-            if (!accuracyOk(pos.coords.accuracy)) {
+            if (!shouldAcceptFix(pos.coords.accuracy)) {
               console.warn("[gps-tracker] dropping low-accuracy catch-up fix", pos.coords.accuracy);
               return;
             }
@@ -662,6 +669,7 @@
     window.removeEventListener("online", flushPending);
     lastFix = null;
     lastPingAt = 0;
+    lastAcceptedAt = 0;
     if (visibilityHandler) {
       document.removeEventListener("visibilitychange", visibilityHandler);
       visibilityHandler = null;
