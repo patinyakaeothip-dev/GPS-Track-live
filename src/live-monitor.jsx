@@ -607,6 +607,14 @@ function LiveMonitorApp() {
     return ms || (earliestStart && earliestStart.getTime()) || null;
   }, [selectedEvent, viewLabel, earliestStart]);
 
+  // Remembers each runner's last fresh GPS fix (by bib) across renders —
+  // once a fix goes stale, the dot holds at the real last-known spot
+  // instead of jumping to the checkpoint-interpolated position, which read
+  // as a misleading teleport backward on a winding course. Only reset by a
+  // fresh fix actually landing; switching events/selection doesn't clear
+  // it, but a different event's runners use different bibs in practice so
+  // stale entries here are just inert, never displayed for the wrong event.
+  const lastRawPosByBibRef = mR({});
   // Real roster → map/ranking rows. Position is each runner's last QR
   // check-in km (progressKm), and pace/staleness are derived from
   // checkin clock times reconstructed against the event's race date — same
@@ -677,8 +685,10 @@ function LiveMonitorApp() {
       // can't tell progress along a looped course.
       const live = livePosByBib[r.bib];
       const gpsLive = !!(live && live.at && (Date.now() - live.at) < 2 * 60 * 1000);
-      const mapLat = gpsLive ? live.lat : p.lat;
-      const mapLon = gpsLive ? live.lon : p.lon;
+      const lastRaw = lastRawPosByBibRef.current[r.bib];
+      if (gpsLive) lastRawPosByBibRef.current[r.bib] = { lat: live.lat, lon: live.lon };
+      const mapLat = gpsLive ? live.lat : (lastRaw ? lastRaw.lat : p.lat);
+      const mapLon = gpsLive ? live.lon : (lastRaw ? lastRaw.lon : p.lon);
       // The elevation chart's dot used to always project the checkpoint-
       // interpolated point (p.lat/p.lon) onto the course, ignoring a live
       // GPS fix entirely — so it sat frozen at the last checkpoint's km
