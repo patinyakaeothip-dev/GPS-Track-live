@@ -55,6 +55,21 @@ const MAX_ACCURACY_M = 100;
 function accuracyOk(accuracy) {
   return accuracy == null || accuracy <= MAX_ACCURACY_M;
 }
+// A GPS chip coming from a cold-ish start (just walked outside from
+// indoors, phone just unlocked, etc.) can take a while to settle to a
+// genuinely good fix — every reading in that window can plausibly stay
+// worse than MAX_ACCURACY_M, which meant strict filtering alone could
+// reject every single fix indefinitely and show "no live GPS" forever
+// even outdoors with a real, if imprecise, position available the whole
+// time. A late/rough position beats no position — once it's been this
+// long since the last *accepted* fix, accept the next one regardless of
+// accuracy rather than keep waiting for a good one that may not come.
+const ACCURACY_GRACE_MS = 60000;
+let lastAcceptedAt = 0;
+function shouldAcceptFix(accuracy) {
+  if (accuracyOk(accuracy)) return true;
+  return Date.now() - lastAcceptedAt > ACCURACY_GRACE_MS;
+}
 
 // GPS itself needs no signal (satellites, not cell towers) — but writing a
 // ping to Firestore does need connectivity, and trail courses routinely run
@@ -96,6 +111,7 @@ async function flushPending() {
 async function pushPing(eventId, bib, lat, lon, extra) {
   lastFix = { lat, lon, ...extra };
   lastPingAt = Date.now();
+  lastAcceptedAt = lastPingAt;
   heartbeatEventId = eventId;
   heartbeatBib = bib;
   const ping = { eventId, bib, lat, lon, at: Date.now(), ...extra };
@@ -152,7 +168,7 @@ async function start(eventId, bib, onPingCb) {
       (location, error) => {
         if (error) { console.warn('[gps-tracker] native watcher error', error); return; }
         if (!location) return;
-        if (!accuracyOk(location.accuracy)) { console.warn('[gps-tracker] dropping low-accuracy native fix', location.accuracy); return; }
+        if (!shouldAcceptFix(location.accuracy)) { console.warn('[gps-tracker] dropping low-accuracy native fix', location.accuracy); return; }
         pushPing(eventId, bib, location.latitude, location.longitude, { accuracy: location.accuracy, speed: location.speed ?? null });
       },
     );
@@ -163,7 +179,7 @@ async function start(eventId, bib, onPingCb) {
   if (navigator.geolocation) {
     watcherId = navigator.geolocation.watchPosition(
       pos => {
-        if (!accuracyOk(pos.coords.accuracy)) { console.warn('[gps-tracker] dropping low-accuracy browser fix', pos.coords.accuracy); return; }
+        if (!shouldAcceptFix(pos.coords.accuracy)) { console.warn('[gps-tracker] dropping low-accuracy browser fix', pos.coords.accuracy); return; }
         pushPing(eventId, bib, pos.coords.latitude, pos.coords.longitude, { accuracy: pos.coords.accuracy, speed: pos.coords.speed ?? null });
       },
       err => console.warn('[gps-tracker] browser watcher error', err),
@@ -181,7 +197,7 @@ async function start(eventId, bib, onPingCb) {
       if (document.visibilityState !== 'visible') return;
       navigator.geolocation.getCurrentPosition(
         pos => {
-          if (!accuracyOk(pos.coords.accuracy)) { console.warn('[gps-tracker] dropping low-accuracy catch-up fix', pos.coords.accuracy); return; }
+          if (!shouldAcceptFix(pos.coords.accuracy)) { console.warn('[gps-tracker] dropping low-accuracy catch-up fix', pos.coords.accuracy); return; }
           pushPing(eventId, bib, pos.coords.latitude, pos.coords.longitude, { accuracy: pos.coords.accuracy, speed: pos.coords.speed ?? null });
         },
         err => console.warn('[gps-tracker] visibility catch-up fix failed', err),
@@ -198,6 +214,7 @@ async function stop() {
   window.removeEventListener('online', flushPending);
   lastFix = null;
   lastPingAt = 0;
+  lastAcceptedAt = 0;
   if (visibilityHandler) { document.removeEventListener('visibilitychange', visibilityHandler); visibilityHandler = null; }
   if (watcherId == null) return;
   if (isNative()) await BackgroundGeolocation.removeWatcher({ id: watcherId });
