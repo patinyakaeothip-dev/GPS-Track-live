@@ -391,6 +391,11 @@ function LoginScreen({ onLogin }) {
 }
 
 // ── Screen: Event picker ──────────────────────────────────────────────────
+// These buttons briefly had transform:translateZ(0) (a workaround for a
+// Chrome desktop-zoom text-paint bug — see index.html's fonts.ready reflow
+// fix, which turned out to fix the same root cause without it) — removed
+// again after it broke touch-scrolling the whole event list on iOS,
+// a worse regression than the bug it was working around.
 function EventCard({ ev, isRegistered, onRunnerSpace, onFollow, onSeeResult }) {
   // Computed live from ev's schedule data on every render (see
   // src/event-status.js) instead of trusting ev.status/ev.closed, which are
@@ -409,15 +414,7 @@ function EventCard({ ev, isRegistered, onRunnerSpace, onFollow, onSeeResult }) {
             <div style={{ fontFamily: C.mono, fontSize: 10.5, color: C.muted, marginTop: 2 }}>{ev.date}{ev.bib ? ` · bib #${ev.bib}` : ''}{ev.distance ? ` · ${ev.distance}` : ''} · จบแล้ว</div>
           </div>
         </div>
-        {/* transform:translateZ(0) forces this button onto its own GPU
-            compositing layer — without it, a Chrome rendering bug at
-            certain heavy desktop browser-zoom levels (the card sits inside
-            two nested overflow:hidden ancestors: this card and #phone's
-            own mockup bezel) can leave the button's own text/emoji
-            unpainted while its background color still renders fine,
-            showing as an empty colored bar even though the button is
-            otherwise fully functional (still clickable). */}
-        <button onClick={onSeeResult} style={{ width: '100%', padding: 13, background: C.bg, border: 'none', borderTop: `1px solid ${C.border}`, fontSize: 12.5, fontWeight: 700, color: C.brandDk, cursor: 'pointer', transform: 'translateZ(0)' }}>🏅 See Result</button>
+        <button onClick={onSeeResult} style={{ width: '100%', padding: 13, background: C.bg, border: 'none', borderTop: `1px solid ${C.border}`, fontSize: 12.5, fontWeight: 700, color: C.brandDk, cursor: 'pointer' }}>🏅 See Result</button>
       </div>
     );
   }
@@ -439,14 +436,14 @@ function EventCard({ ev, isRegistered, onRunnerSpace, onFollow, onSeeResult }) {
         {status === 'live' && <span style={{ fontFamily: C.mono, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.06em', color: '#fff', background: `linear-gradient(135deg,${C.brandLt},${C.brandDk})`, padding: '4px 10px', borderRadius: 999 }}>LIVE</span>}
       </div>
       <div style={{ display: 'flex' }}>
-        <button onClick={onRunnerSpace} style={{ flex: 1, padding: 13, background: (closed && !isRegistered) ? '#e5e4df' : C.orange, color: (closed && !isRegistered) ? '#7c7566' : '#fff', border: 'none', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', transform: 'translateZ(0)' }}>
+        <button onClick={onRunnerSpace} style={{ flex: 1, padding: 13, background: (closed && !isRegistered) ? '#e5e4df' : C.orange, color: (closed && !isRegistered) ? '#7c7566' : '#fff', border: 'none', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>
           🏃 Runner Space
           <div style={{ fontFamily: C.mono, fontSize: 9, fontWeight: 600, opacity: 0.85, marginTop: 1 }}>
             {isRegistered ? 'ไปหน้าติดตามของฉัน' : closed ? 'ปิดรับสมัครแล้ว' : (status === 'live' ? 'ไปหน้าติดตามของฉัน' : 'ดูสถานะการลงทะเบียน')}
           </div>
         </button>
         {status === 'live' && (
-          <button onClick={onFollow} style={{ flex: 1, padding: 13, background: C.brand, color: '#fff', border: 'none', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', transform: 'translateZ(0)' }}>
+          <button onClick={onFollow} style={{ flex: 1, padding: 13, background: C.brand, color: '#fff', border: 'none', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>
             🔗 Follow the race
             <div style={{ fontFamily: C.mono, fontSize: 9, fontWeight: 600, opacity: 0.85, marginTop: 1 }}>ดูเพื่อนที่ในงานนี้</div>
           </button>
