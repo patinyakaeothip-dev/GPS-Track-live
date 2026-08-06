@@ -2847,7 +2847,16 @@ function MobileApp() {
       const cancelled = window.runnerStore && session.runner.rosterId &&
         !window.runnerStore.listRunners(ev.id).find(r => r.id === session.runner.rosterId);
       if (!cancelled) {
-        setScreen(initialScreenFor(session));
+        // A leftover session.spectator=true from an earlier "Follow the
+        // race" tap (any event, any time before) doesn't get cleared by
+        // anything else once a runner comes back to their *own* Runner
+        // Space — AppShell reads isSpectator off this flag alone, so it
+        // kept showing the spectator UI (no Track tab, wrong data source
+        // for things like Ranking) despite session.runner being correct
+        // and current the whole time.
+        const nextSession = session.spectator ? { ...session, spectator: false, followBib: null, followEventId: null } : session;
+        if (nextSession !== session) persist(nextSession);
+        setScreen(initialScreenFor(nextSession));
         return;
       }
       persist({ ...session, runner: null });
@@ -2862,7 +2871,8 @@ function MobileApp() {
       const rec = window.runnerStore.listRunnersByUid(session.user.uid).find(r => r.eventId === ev.id);
       if (rec) {
         const runner = { dist: rec.distance, name: rec.nickname, checkins: rec.checkins || [], progressKm: rec.progressKm || 0, eventId: rec.eventId, bib: rec.bib, rosterId: rec.id };
-        const nextSession = { ...session, runner };
+        // Same stale-spectator-flag clear as the fast path above.
+        const nextSession = { ...session, runner, spectator: false, followBib: null, followEventId: null };
         persist(nextSession);
         setScreen(initialScreenFor(nextSession));
         return;
