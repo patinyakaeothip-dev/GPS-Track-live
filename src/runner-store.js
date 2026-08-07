@@ -104,8 +104,14 @@
     if (idx < 0) return { runner: null, synced: Promise.resolve(false) };
     list[idx] = { ...list[idx], ...patch };
     saveRunners(list);
+    // Firestore-side merge of just `patch`, not a full-document overwrite
+    // of list[idx] — list[idx] comes from this device's local cache, which
+    // can be behind (e.g. this same runner just got a finish check-in
+    // recorded from a different device/tab). Writing the whole cached
+    // object back used to silently revert whatever fields Firestore had
+    // moved on without this device knowing.
     const synced = window.fb
-      ? window.fb.setDocById('runners', id, list[idx]).then(() => true).catch(err => { console.warn('[runner-store] Firestore write failed', err); return false; })
+      ? window.fb.setDocById('runners', id, patch, { merge: true }).then(() => true).catch(err => { console.warn('[runner-store] Firestore write failed', err); return false; })
       : Promise.resolve(false);
     notifyUpdated();
     return { runner: list[idx], synced };
