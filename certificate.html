@@ -289,6 +289,11 @@
       set('s-gender', genderLabel(r.gender));
       set('event-kicker', (data.event_name || 'RAYONG TRAIL') + ' · ' + (r.distance_current || '') + (data.race_year ? (' · ' + data.race_year) : ''));
       buildElevationChart(data.event_id, r.distance_current);
+      // The attached-photo key depends on *whose* certificate this is —
+      // see loadPhotoForCurrentRunner below for why. Only knowable once
+      // data has actually loaded, so the initial photo load has to happen
+      // here instead of unconditionally at script startup.
+      loadPhotoForCurrentRunner(data.event_id || qEventId, r.bib);
     }
 
     // Draws the same elevation profile the app's Route tab shows, rendered
@@ -405,8 +410,14 @@
     // Optional runner photo (e.g. a finish-line selfie) to show instead of
     // the default mountain silhouette background — stored as a data URL in
     // localStorage so it survives reopening this page, same pattern as the
-    // finish result itself.
-    const PHOTO_KEY = 'trt.cert.photo';
+    // finish result itself. Keyed per event+bib (not one shared key) — this
+    // page is also opened via ?event=&bib= to view *someone else's*
+    // certificate (from Results/Ranking), and a single shared key meant
+    // whichever photo this device had attached most recently — even for a
+    // completely different runner — showed up automatically on every
+    // certificate viewed afterward, looking like it had been "auto-attached"
+    // to a stranger's result.
+    let currentPhotoKey = null;
     const photoImg = document.getElementById('user-photo');
     const photoBtn = document.getElementById('photo-btn');
     const removeBtn = document.getElementById('photo-remove-btn');
@@ -423,21 +434,24 @@
         removeBtn.style.display = 'none';
       }
     }
+    function loadPhotoForCurrentRunner(eventId, bib) {
+      currentPhotoKey = 'trt.cert.photo.' + (eventId || '') + '_' + (bib || '');
+      try { applyPhoto(localStorage.getItem(currentPhotoKey)); } catch (e) { applyPhoto(null); }
+    }
     function removePhoto() {
-      try { localStorage.removeItem(PHOTO_KEY); } catch (e) {}
+      if (currentPhotoKey) { try { localStorage.removeItem(currentPhotoKey); } catch (e) {} }
       applyPhoto(null);
     }
     document.getElementById('photo-input').addEventListener('change', (e) => {
       const file = e.target.files && e.target.files[0];
-      if (!file) return;
+      if (!file || !currentPhotoKey) return;
       const reader = new FileReader();
       reader.onload = () => {
-        try { localStorage.setItem(PHOTO_KEY, reader.result); } catch (err) { console.warn('[trt] photo save failed', err); }
+        try { localStorage.setItem(currentPhotoKey, reader.result); } catch (err) { console.warn('[trt] photo save failed', err); }
         applyPhoto(reader.result);
       };
       reader.readAsDataURL(file);
     });
-    try { applyPhoto(localStorage.getItem(PHOTO_KEY)); } catch (e) {}
 
     // Renders the card to a real PNG and downloads it — the button most
     // people actually want (share to Facebook/Instagram), since going
