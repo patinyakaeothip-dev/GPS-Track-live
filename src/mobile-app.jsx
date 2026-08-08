@@ -414,11 +414,12 @@ function EventCard({ ev, isRegistered, onRunnerSpace, onFollow, onSeeResult }) {
             <div style={{ fontFamily: C.mono, fontSize: 10.5, color: C.muted, marginTop: 2 }}>{ev.date}{ev.bib ? ` · bib #${ev.bib}` : ''}{ev.distance ? ` · ${ev.distance}` : ''} · จบแล้ว</div>
           </div>
         </div>
-        {/* C.bg2 (near-white), not C.bg — C.bg is the exact page background
-            color behind this card, so the button visually vanished into it
-            and read as a separate, narrower floating pill instead of the
-            full-width bottom half of this same white card. */}
-        <button onClick={onSeeResult} style={{ width: '100%', padding: 13, background: C.bg2, border: 'none', borderTop: `1px solid ${C.border}`, fontSize: 12.5, fontWeight: 700, color: C.brandDk, cursor: 'pointer' }}>🏅 See Result</button>
+        {/* A light brand-green tint, not C.bg/C.bg2 — those are both close
+            to the exact page background color behind this card (too close
+            to tell apart by eye), so the button visually vanished into the
+            page and read as a separate, narrower floating pill instead of
+            the full-width bottom half of this same white card. */}
+        <button onClick={onSeeResult} style={{ width: '100%', padding: 13, background: '#e8f2ec', border: 'none', borderTop: `1px solid ${C.border}`, fontSize: 12.5, fontWeight: 700, color: C.brandDk, cursor: 'pointer' }}>🏅 See Result</button>
       </div>
     );
   }
