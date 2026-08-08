@@ -204,7 +204,7 @@
          actually running the latest deployed code or a cached/stale copy
          of this page. Bump this string on every meaningful change to this
          file so that question can be answered by looking, not guessing. -->
-    <span style="font-size:9px;opacity:0.5;">build 2026-08-08-3</span>
+    <span style="font-size:9px;opacity:0.5;">build 2026-08-08-4</span>
     <button onclick="saveCertImage()">💾 บันทึกรูปภาพ</button>
     <button class="alt" onclick="window.print()">🖨 Print / Save as PDF</button>
     <input type="file" accept="image/*" id="photo-input" style="display:none;">
@@ -628,11 +628,25 @@
         // directly from the card's own CSS mm dimensions instead removes
         // any dependency on a DOM measurement that isn't behaving
         // consistently in this WKWebView.
+        // Only windowWidth/windowHeight (the *virtual viewport* html2canvas
+        // lays its clone out against) — explicit width/height (the
+        // *output canvas* size) used to also get forced to this same
+        // computed value, but that doesn't necessarily match the card's
+        // true rendered box to the sub-pixel, and any mismatch showed up
+        // as a thin strip of backgroundColor along an edge (reported as
+        // "ขอบเขียวของแอพติดมาด้วย" — that green is literally the
+        // backgroundColor fallback below, visible only because of that
+        // mismatch). Leaving width/height unset lets html2canvas capture
+        // the card at whatever its own actual rendered size is —
+        // reliable, since that's a real layout pass html2canvas does
+        // itself, unlike the buggy JS-side cert.scrollWidth read this
+        // replaced — while windowWidth/windowHeight still fixes the
+        // original squeeze bug by keeping the layout viewport consistent.
         const MM_TO_PX = 96 / 25.4; // CSS spec: 1in = 96px, 1in = 25.4mm
         const certWidthPx = Math.round(210 * MM_TO_PX);
         const certHeightPx = Math.round(262.5 * MM_TO_PX);
         const canvas = await html2canvas(cert, { useCORS: true, scale: 2, backgroundColor: '#1f4d39',
-          width: certWidthPx, height: certHeightPx, windowWidth: certWidthPx, windowHeight: certHeightPx });
+          windowWidth: certWidthPx, windowHeight: certHeightPx });
         const pngDataUrl = canvas.toDataURL('image/png');
         // Inside the native app shell, save straight to Photos — one tap,
         // no share sheet at all. This needed an actual native plugin
