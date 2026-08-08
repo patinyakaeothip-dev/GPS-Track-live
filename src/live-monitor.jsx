@@ -695,7 +695,14 @@ function LiveMonitorApp() {
       // GPS fix entirely — so it sat frozen at the last checkpoint's km
       // while the map above it correctly tracked GPS. Project from the same
       // GPS-preferred position the map uses instead.
-      const physKm = geo.nearestKmOnTrack(coursePaths[viewLabel] || coursePaths[overviewLabel], mapLat, mapLon);
+      const physPts = coursePaths[viewLabel] || coursePaths[overviewLabel];
+      const physKm = geo.nearestKmOnTrack(physPts, mapLat, mapLon);
+      // Elevation for the chart dot has to come from this same physKm, not
+      // p.ele (the checkpoint-interpolated point) — otherwise the dot's X
+      // (physKm-based, GPS-preferred) and Y (still checkpoint-based) refer
+      // to two different points on the course, so it floats off the actual
+      // elevation curve instead of riding it.
+      const physEle = geo.pointAtKm(physPts, physKm).ele;
       return { bib: r.bib, id: r.id, name: r.nickname, distance: r.distance, gender: r.gender,
         color: colorFor({ status, distance: r.distance }, distColor),
         initial: (r.nickname || '?').slice(0, 1), lat: mapLat, lon: mapLon, gpsLive, km, totalKm,
@@ -703,7 +710,7 @@ function LiveMonitorApp() {
         pace: fmtPace(pace),
         gradStr: started ? `+${gain} m` : '—',
         gradColor: started ? gainColor(gain) : '#5d6b59',
-        ele: p.ele, ago: lastAtMs != null ? fmtAgo((Date.now() - lastAtMs) / 1000) : '—',
+        ele: physEle, ago: lastAtMs != null ? fmtAgo((Date.now() - lastAtMs) / 1000) : '—',
         elapsedMs, endMs, checkinTimes,
         sos: !!r.sos, sosReason: r.sosReason || '',
         emgName: r.emgName || '', emgPhone: r.emgPhone || '', emgName2: r.emgName2 || '', emgPhone2: r.emgPhone2 || '', bloodType: r.bloodType || '', medical: r.medical || '',
