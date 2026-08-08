@@ -660,8 +660,19 @@
       const naturalWidth = cert.offsetWidth;
       const naturalHeight = cert.offsetHeight;
       const available = stage.clientWidth;
-      if (!naturalWidth || !naturalHeight || naturalWidth <= available) { stage.style.height = ''; return; }
-      const scale = available / naturalWidth;
+      if (!naturalWidth || !naturalHeight) { stage.style.height = ''; return; }
+      // Always apply an explicit scale() — even 1, when the card already
+      // fits — instead of leaving transform as 'none' in that case. Two
+      // different code paths (no transform vs. transform: scale(x))
+      // rendering the same 4:5 photo were the one real, reproducible
+      // difference between portrait and landscape (rotating the phone
+      // changes available viewport width, which flips which branch ran) —
+      // reported as the attached photo cropping differently just from
+      // rotating the screen while viewing, with nothing else changing.
+      // Forcing the exact same code path regardless of orientation removes
+      // that divergence outright, whatever WebKit-level quirk was actually
+      // behind it.
+      const scale = Math.min(1, available / naturalWidth);
       cert.style.transformOrigin = 'top center';
       cert.style.transform = `scale(${scale})`;
       // Scaling down leaves the natural (unscaled) height reserved in
