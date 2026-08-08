@@ -139,6 +139,35 @@ function GpxCard({ label, filename, stats, filled, onParsed }) {
   );
 }
 
+// `<a download>` on a data: URL is a no-op on mobile Safari/Chrome (and
+// inside WKWebView) — it just navigates to/opens the image instead of
+// saving it, since those browsers don't support the download attribute
+// for data: URIs at all. Same root cause already fixed for the
+// certificate save button (certificate.html's saveCertImage): use
+// navigator.share (a real file, opens the native share sheet with
+// "Save Image") on mobile, and keep the plain <a download> for desktop
+// where it already works with zero extra dialogs.
+async function downloadQr(dataUrl, filename) {
+  const isMobileBrowser = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  if (isMobileBrowser) {
+    try {
+      const blob = await (await fetch(dataUrl)).blob();
+      const file = new File([blob], filename, { type: blob.type || 'image/gif' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: filename });
+        return;
+      }
+    } catch (err) {
+      if (err && err.name === 'AbortError') return; // user closed the share sheet — not a failure
+      console.warn('[trt] QR share failed, falling back to direct download', err);
+    }
+  }
+  const link = document.createElement('a');
+  link.href = dataUrl;
+  link.download = filename;
+  link.click();
+}
+
 // Renders + lets RD download the actual QR image runners scan at each CP.
 // Encodes `TRT:{eventId}:{cpKey}` so the app's real camera scanner (see
 // QrScanScreen in mobile-app.jsx) can reject a QR from the wrong event or
@@ -157,7 +186,7 @@ function QrCard({ eventId, cpKey, label }) {
       {dataUrl
         ? <img src={dataUrl} alt={`QR ${label}`} style={{ width: 110, height: 110, border: '1px solid #e5e0d3', borderRadius: 8 }}/>
         : <div style={{ width: 110, height: 110, background: '#f0ede3', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#5d6b59' }}>โหลดไม่สำเร็จ</div>}
-      {dataUrl && <a href={dataUrl} download={`qr-${cpKey}.png`} style={{ display: 'block', marginTop: 6, fontFamily: A_MONO, fontSize: 10, color: A_BRAND, textDecoration: 'underline' }}>ดาวน์โหลด</a>}
+      {dataUrl && <button onClick={() => downloadQr(dataUrl, `qr-${cpKey}.png`)} style={{ display: 'block', width: '100%', marginTop: 6, padding: 0, background: 'none', border: 'none', fontFamily: A_MONO, fontSize: 10, color: A_BRAND, textDecoration: 'underline', cursor: 'pointer' }}>ดาวน์โหลด</button>}
     </div>
   );
 }
