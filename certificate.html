@@ -514,6 +514,32 @@
       cert.style.transform = 'none';
       try {
         const canvas = await html2canvas(cert, { useCORS: true, scale: 2, backgroundColor: '#1f4d39' });
+        // A synthetic <a download> click is the standard web way to save a
+        // generated file, and still works fine in a real browser tab — but
+        // inside the app's own Capacitor/WKWebView shell there's no
+        // Downloads folder for it to land in, so the click just silently
+        // did nothing at all (no error, nothing to see — this is exactly
+        // what a runner reported as "กดบันทึกภาพแล้วไม่มีอะไรเกิดขึ้นเลย").
+        // navigator.share with an actual File is a standard Web API WebKit
+        // already supports inside WKWebView without needing a new native
+        // Capacitor plugin/rebuild — it opens iOS's real share sheet, and
+        // "Save Image" from there writes to Photos properly (through
+        // WebKit's own supported share flow, not the crash-prone raw
+        // long-press-on-<img> path this page disables above). Falls back
+        // to the old <a download> for a real desktop/mobile browser tab,
+        // where Web Share's file support may not exist but downloads work
+        // fine directly.
+        const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+        const file = blob && new File([blob], 'rayong-trail-certificate.png', { type: 'image/png' });
+        if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
+          try {
+            await navigator.share({ files: [file], title: 'Rayong Trail Finisher' });
+            return;
+          } catch (shareErr) {
+            if (shareErr && shareErr.name === 'AbortError') return; // user closed the share sheet — not a failure
+            console.warn('[trt] share failed, falling back to direct download', shareErr);
+          }
+        }
         const link = document.createElement('a');
         link.download = 'rayong-trail-certificate.png';
         link.href = canvas.toDataURL('image/png');
