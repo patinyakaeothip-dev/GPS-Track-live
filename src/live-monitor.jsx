@@ -231,7 +231,7 @@ function LiveElevationSvg({ geo, coursePaths, distance, checkpoints, displays, s
             <text x={x(km)} y={h - 6} textAnchor="middle" fontFamily={M_MONO} fontSize="8.5" fill="#5d6b59">{km.toFixed(1)}K</text>
           </g>
         ))}
-        {displays.map(dd => {
+        {displays.filter(dd => dd.physKm != null).map(dd => {
           const dimmed = focusBib != null && focusBib !== dd.bib;
           return (
             <circle key={dd.bib} cx={x(dd.physKm)} cy={y(dd.ele)} r={selectedBib === dd.bib ? 8 : 4.5}
@@ -251,7 +251,7 @@ function LiveElevationSvg({ geo, coursePaths, distance, checkpoints, displays, s
           Show it for either. */}
       {(hoverBib || selectedBib) && (() => {
         const dd = displays.find(r => r.bib === (hoverBib || selectedBib));
-        if (!dd) return null;
+        if (!dd || dd.physKm == null) return null;
         const leftPct = (x(dd.physKm) / w) * 100;
         return (
           <div style={{ position: 'absolute', left: `${leftPct}%`, top: `${(y(dd.ele) / h) * 100}%`, transform: 'translate(-50%, -130%)',
@@ -417,6 +417,16 @@ function LiveMonitorApp() {
   // whenever a fix is fresh; checkpoints remain the source of truth for
   // pace/progress, which GPS alone can't derive (start/finish times, laps).
   const [livePosByBib, setLivePosByBib] = mS({});
+  // False from the moment the event changes (including the very first
+  // page load) until the first real livePos snapshot has actually landed.
+  // Before that, livePosByBib is just an empty {} because nothing's
+  // arrived yet — not because these runners have no GPS data — so using
+  // it as-is made every runner's dot flash at their checkpoint-
+  // interpolated position for a couple seconds on every page refresh
+  // before snapping to their real last-known spot once the snapshot
+  // caught up. Gating position on this instead of an empty-object check
+  // tells "no data yet" apart from "confirmed no GPS for this runner".
+  const [livePosReady, setLivePosReady] = mS(false);
   // At full field size (100+ runners all pinging independently), the raw
   // Firestore listener can fire many times a second — applying every single
   // one straight to state would re-render the whole 150-row map/ranking
@@ -426,6 +436,7 @@ function LiveMonitorApp() {
   const pendingLiveRef = mR(null);
   const liveThrottleRef = mR(null);
   mE(() => {
+    setLivePosReady(false);
     if (!eventId || !window.fb) { setLivePosByBib({}); return; }
     const prefix = `${eventId}_`;
     const unsub = window.fb.watchCollection('livePos', all => {
@@ -436,6 +447,7 @@ function LiveMonitorApp() {
       liveThrottleRef.current = setTimeout(() => {
         liveThrottleRef.current = null;
         setLivePosByBib(pendingLiveRef.current);
+        setLivePosReady(true);
       }, 2000);
     });
     return () => {
@@ -591,8 +603,12 @@ function LiveMonitorApp() {
     if (!bib) return;
     const turningOn = focusBib !== bib;
     markersRef.current.forEach((m, b) => m.setStyle({ opacity: turningOn && b !== bib ? 0.15 : 1, fillOpacity: turningOn && b !== bib ? 0.15 : 1 }));
-    if (turningOn) mapRef.current.flyTo(markersRef.current.get(bib).getLatLng(), 15, { duration: 0.6 });
-    else recenter();
+    // A bib can be selected (search/ranking/alerts rows) before its position
+    // is known at all — no marker exists yet in that case, see livePosReady
+    // above — so this has to check .has() the same way recenter() already
+    // does, instead of assuming a marker's always there to fly to.
+    if (turningOn && markersRef.current.has(bib)) mapRef.current.flyTo(markersRef.current.get(bib).getLatLng(), 15, { duration: 0.6 });
+    else if (!turningOn) recenter();
     setFocusBib(turningOn ? bib : null);
   }
 
@@ -693,21 +709,28 @@ function LiveMonitorApp() {
       // was never a need to remember it separately client-side.
       const live = livePosByBib[r.bib];
       const gpsLive = !!(live && live.at && (Date.now() - live.at) < 2 * 60 * 1000);
-      const mapLat = live ? live.lat : p.lat;
-      const mapLon = live ? live.lon : p.lon;
+      // Before livePosReady, livePosByBib is empty because the first
+      // snapshot just hasn't landed yet, not because these runners have no
+      // GPS — falling back to the checkpoint position in that gap made
+      // every dot flash there for ~2s on every page load/refresh before
+      // snapping to its real spot. Show nothing for the position (map/
+      // elevation markers below skip a runner with no lat) until it's
+      // actually known one way or the other.
+      const mapLat = live ? live.lat : (livePosReady ? p.lat : null);
+      const mapLon = live ? live.lon : (livePosReady ? p.lon : null);
       // The elevation chart's dot used to always project the checkpoint-
       // interpolated point (p.lat/p.lon) onto the course, ignoring a live
       // GPS fix entirely — so it sat frozen at the last checkpoint's km
       // while the map above it correctly tracked GPS. Project from the same
       // GPS-preferred position the map uses instead.
       const physPts = coursePaths[viewLabel] || coursePaths[overviewLabel];
-      const physKm = geo.nearestKmOnTrack(physPts, mapLat, mapLon);
+      const physKm = mapLat != null ? geo.nearestKmOnTrack(physPts, mapLat, mapLon) : null;
       // Elevation for the chart dot has to come from this same physKm, not
       // p.ele (the checkpoint-interpolated point) — otherwise the dot's X
       // (physKm-based, GPS-preferred) and Y (still checkpoint-based) refer
       // to two different points on the course, so it floats off the actual
       // elevation curve instead of riding it.
-      const physEle = geo.pointAtKm(physPts, physKm).ele;
+      const physEle = physKm != null ? geo.pointAtKm(physPts, physKm).ele : null;
       return { bib: r.bib, id: r.id, name: r.nickname, distance: r.distance, gender: r.gender,
         color: colorFor({ status, distance: r.distance }, distColor),
         initial: (r.nickname || '?').slice(0, 1), lat: mapLat, lon: mapLon, gpsLive, km, totalKm,
@@ -741,6 +764,11 @@ function LiveMonitorApp() {
     if (!map) return;
     const seen = new Set();
     mapDisplays.forEach(d => {
+      // Position not known yet (see livePosReady above) — skip drawing
+      // this runner's dot entirely rather than guessing at a checkpoint;
+      // leaving it out of `seen` also cleans up an existing marker if a
+      // runner's position ever genuinely becomes unknown again.
+      if (d.lat == null || d.lon == null) return;
       seen.add(d.bib);
       const dimmed = focusBib != null && focusBib !== d.bib;
       let m = markersRef.current.get(d.bib);
