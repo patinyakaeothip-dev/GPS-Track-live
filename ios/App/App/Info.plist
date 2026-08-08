@@ -38,6 +38,14 @@
     <string>แอพต้องใช้กล้องเพื่อสแกน QR code ที่จุดเช็คพอยต์ระหว่างการแข่งขัน</string>
     <key>NSPhotoLibraryAddUsageDescription</key>
     <string>แอพต้องการสิทธิ์เพื่อบันทึกรูปใบประกาศลงในอัลบั้มรูปภาพของคุณ</string>
+    <!-- Only savePhoto (add-only) is actually called from this app, but
+         @capacitor-community/media also ships getMedias/getAlbums (full
+         read access) — App Store Connect's static analysis flags the
+         read-capable API surface in the linked library regardless of
+         which functions this app's own code calls, and rejects the
+         upload (error 90683) without this key present too. -->
+    <key>NSPhotoLibraryUsageDescription</key>
+    <string>แอพต้องการสิทธิ์เพื่อบันทึกรูปใบประกาศลงในอัลบั้มรูปภาพของคุณ</string>
     <key>CFBundleURLTypes</key>
     <array>
     <dict>
