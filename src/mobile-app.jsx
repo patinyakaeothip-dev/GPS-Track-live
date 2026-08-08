@@ -518,7 +518,7 @@ function EventPickerScreen({ user, session, onOpenApp, onFollow, onProfile }) {
             color: tab === k ? C.brandDk : C.muted, fontSize: 12.5, fontWeight: tab === k ? 700 : 600, cursor: 'pointer' }}>{l}</div>
         ))}
       </div>
-      <div style={{ flex: 1, overflow: 'auto', padding: '14px 18px 18px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '14px 18px 18px', display: 'flex', flexDirection: 'column', gap: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '11px 13px', background: '#fff', border: `1px solid ${C.border}`, borderRadius: 10, boxShadow: '0 1px 3px rgba(31,42,28,0.08)' }}>
           <span style={{ fontSize: 13, color: C.mute2 }}>🔍</span>
           <input value={q} onChange={e => setQ(e.target.value)} placeholder="ค้นหาชื่องาน" style={{ border: 'none', outline: 'none', fontSize: 13, flex: 1, fontFamily: C.font, background: 'transparent' }}/>
@@ -570,7 +570,7 @@ function FollowPickerScreen({ eventId, onBack, onPick }) {
           <input value={q} onChange={e => setQ(e.target.value)} placeholder="ชื่อ หรือ BIB" style={{ border: 'none', outline: 'none', fontSize: 13, flex: 1, fontFamily: C.font, background: 'transparent' }}/>
         </div>
       </div>
-      <div style={{ flex: 1, overflow: 'auto', padding: '0 18px 18px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '0 18px 18px', display: 'flex', flexDirection: 'column', gap: 8 }}>
         {filtered.length === 0 && <div style={{ textAlign: 'center', color: C.muted, fontSize: 13, padding: 30 }}>{runners.length === 0 ? 'ยังไม่มีใครลงทะเบียนงานนี้' : 'ไม่พบนักวิ่งที่ค้นหา'}</div>}
         {filtered.map(r => (
           <div key={r.bib} onClick={() => onPick(r.bib)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 12, background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, boxShadow: '0 1px 3px rgba(31,42,28,0.08)', cursor: 'pointer' }}>
@@ -621,7 +621,7 @@ function FavoritePickerScreen({ eventId, onBack, favBibs, onToggle }) {
           <input value={q} onChange={e => setQ(e.target.value)} placeholder="ชื่อ หรือ BIB" style={{ border: 'none', outline: 'none', fontSize: 13, flex: 1, fontFamily: C.font, background: 'transparent' }}/>
         </div>
       </div>
-      <div style={{ flex: 1, overflow: 'auto', padding: '0 18px 18px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '0 18px 18px', display: 'flex', flexDirection: 'column', gap: 8 }}>
         {filtered.length === 0 && <div style={{ textAlign: 'center', color: C.muted, fontSize: 13, padding: 30 }}>{runners.length === 0 ? 'ยังไม่มีใครลงทะเบียนงานนี้' : 'ไม่พบนักวิ่งที่ค้นหา'}</div>}
         {filtered.map(r => {
           const fav = favBibs.includes(r.bib);
@@ -686,7 +686,7 @@ function RegisterScreen({ event, profile, onDone, onBack }) {
         <div style={{ fontSize: 22, fontWeight: 800, marginTop: 8 }}>สวัสดี! กรอกข้อมูลก่อนเริ่มวิ่ง</div>
         <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.8)', marginTop: 6 }}>ใช้ครั้งเดียว · ระบบผูกเบอร์โทรกับอุปกรณ์นี้ให้อัตโนมัติ</div>
       </div>
-      <div style={{ flex: 1, overflow: 'auto', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
         <Field label="ชื่อเล่น"><input value={nick} onChange={e => setNick(e.target.value)} placeholder="เช่น ธีระ" style={fieldStyle()}/></Field>
         <Field label="เบอร์โทร"><input value={phone} onChange={e => setPhone(e.target.value)} placeholder="08X-XXX-XXXX" style={{ ...fieldStyle(), fontFamily: C.mono }}/></Field>
         <Field label="ระยะที่ลงวิ่ง">
@@ -1295,7 +1295,7 @@ function TrackTab({ runner, event, onScan, onSos, onDnf, offRoute, onCancelSos }
   }
 
   return (
-    <div style={{ flex: 1, overflow: 'auto', padding: '16px 18px 20px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+    <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '16px 18px 20px', display: 'flex', flexDirection: 'column', gap: 14 }}>
       {runner.dnf && (
         <div style={{ padding: 14, background: '#fef2f2', border: '1px solid #f0c9c4', borderRadius: 12, fontSize: 12.5, color: '#9b1c10', lineHeight: 1.6, display: 'flex', alignItems: 'center', gap: 10 }}>
           <FlagIcon size={18}/>
@@ -1529,7 +1529,7 @@ function RouteTab({ course, runner, event, spectatorRunner, livePos }) {
     map.flyTo(marker.getLatLng(), Math.max(map.getZoom(), 15));
   }
   return (
-    <div style={{ flex: 1, overflow: 'auto', overscrollBehavior: 'contain', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ flex: 1, minHeight: 0, overflow: 'auto', overscrollBehavior: 'contain', display: 'flex', flexDirection: 'column' }}>
       <div style={{ position: 'relative', flex: 1, minHeight: 260 }}>
         <div ref={mapRef} style={{ position: 'absolute', inset: 0, background: '#eee' }}/>
         <div onClick={recenterToMe} style={{ position: 'absolute', bottom: 12, right: 12, zIndex: 400,
@@ -1848,7 +1848,7 @@ function RankingTab({ snap, eventId, event }) {
     return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}`;
   }
   return (
-    <div style={{ flex: 1, overflow: 'auto', padding: '14px 18px 90px' }}>
+    <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '14px 18px 90px' }}>
       <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
         {distLabels.map(d => (
           <div key={d} onClick={() => setDist(d)} style={{ padding: '6px 12px', borderRadius: 999, fontSize: 12, fontWeight: 700, cursor: 'pointer',
@@ -1929,7 +1929,7 @@ function FriendsTab({ eventId, event, followedBib, favBibs, onAddFavorite, onRem
   }
 
   return (
-    <div style={{ flex: 1, overflow: 'auto', padding: '14px 18px 90px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+    <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '14px 18px 90px', display: 'flex', flexDirection: 'column', gap: 14 }}>
       {followed && (
         <div>
           <div style={{ fontFamily: C.mono, fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted, marginBottom: 6 }}>กำลังติดตามอยู่</div>
@@ -2126,7 +2126,7 @@ function FriendMapSheet({ runner, eventId, event, onClose }) {
         </div>
         <div onClick={onClose} style={{ width: 30, height: 30, borderRadius: 10, border: `1.6px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 14, flexShrink: 0 }}>✕</div>
       </div>
-      <div style={{ flex: 1, overflow: 'auto', overscrollBehavior: 'contain', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ flex: 1, minHeight: 0, overflow: 'auto', overscrollBehavior: 'contain', display: 'flex', flexDirection: 'column' }}>
         <div style={{ position: 'relative', flex: 1, minHeight: 220 }}>
           {!course && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.muted, fontSize: 12.5 }}>กำลังโหลดแผนที่...</div>}
           <div ref={mapHostRef} style={{ position: 'absolute', inset: 0, background: '#eee', display: course ? 'block' : 'none' }}/>
@@ -2500,7 +2500,7 @@ function ProfileScreen({ user, onLogout, onClose, onSave, onboard }) {
         </div>
       </div>
 
-      <div style={{ flex: 1, overflow: 'auto', marginTop: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ flex: 1, minHeight: 0, overflow: 'auto', marginTop: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
         <Field label="ชื่อเล่น" required={onboard}><input value={nickname} onChange={e => setNickname(e.target.value)} placeholder="เช่น ธีระ" style={fieldStyle()}/></Field>
         <Field label="เพศ">
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
