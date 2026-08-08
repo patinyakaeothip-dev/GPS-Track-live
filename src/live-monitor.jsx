@@ -297,6 +297,20 @@ function LiveMonitorApp() {
   const [dashView, setDashView] = mS('map'); // 'map' | 'ranking' | 'sos-log'
   const [distFilter, setDistFilter] = mS(null);
   const [showLabels, setShowLabels] = mS(false);
+  // Multi-select "only show these runners" — unlike the Friends tab's
+  // equivalent on the runner app, there's no listener-count reason to cap
+  // this: the RD dashboard already subscribes to every runner's GPS in one
+  // shared Firestore listener regardless of how many are actually shown,
+  // so selecting more people here costs nothing extra.
+  const [watchMode, setWatchMode] = mS(false);
+  const [watchBibs, setWatchBibs] = mS([]);
+  function toggleWatchMode() {
+    setWatchMode(v => !v);
+    setWatchBibs([]);
+  }
+  function toggleWatchBib(bib) {
+    setWatchBibs(sel => sel.includes(bib) ? sel.filter(b => b !== bib) : [...sel, bib]);
+  }
   // Everything below was laid out for a wide RD desktop/tablet screen — a
   // fixed-width sidebar next to the map, a 4-across stats row, an
   // absolutely-positioned legend overlay — none of which fit a phone
@@ -753,12 +767,19 @@ function LiveMonitorApp() {
   // tab already uses — so switching to one distance's course doesn't leave
   // every other distance's runners cluttering a map that's now zoomed into
   // a completely different, unrelated course.
-  const mapDisplays = mM(() => distFilter ? displays.filter(d => d.distance === distFilter) : displays, [displays, distFilter]);
+  const distDisplays = mM(() => distFilter ? displays.filter(d => d.distance === distFilter) : displays, [displays, distFilter]);
+  // Hide (not just dim, like focusBib does for one runner) anyone not in
+  // the watch list — an actual filter on the map/elevation chart, not a
+  // highlight, since the point is decluttering a busy map down to a
+  // handful of people. The roster/picker list below stays unfiltered
+  // (distDisplays) so there's still something to pick *from* while
+  // watchMode is on, instead of the list collapsing to just the picks.
+  const mapDisplays = mM(() => watchBibs.length ? distDisplays.filter(d => watchBibs.includes(d.bib)) : distDisplays, [distDisplays, watchBibs]);
   // The sidebar's own runner list (shown while nothing's selected) — same
   // distance scoping as the map, but ordered leader-first (furthest along
   // first) instead of the map's arbitrary array order, since here it's
   // read top-to-bottom as a ranking rather than looked up spatially.
-  const rosterList = mM(() => mapDisplays.slice().sort((a, b) => b.pct - a.pct || b.km - a.km), [mapDisplays]);
+  const rosterList = mM(() => distDisplays.slice().sort((a, b) => b.pct - a.pct || b.km - a.km), [distDisplays]);
   mE(() => {
     const map = mapRef.current, L = window.L;
     if (!map) return;
@@ -1077,18 +1098,29 @@ function LiveMonitorApp() {
                       and drop into its detail view below. */}
                   {!selected && (
                     <>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '10px 16px', borderBottom: '1px solid #f4f3ef' }}>
+                        <button onClick={toggleWatchMode} style={{ padding: '5px 10px', background: watchMode ? M_BRAND : 'transparent', border: `1px solid ${watchMode ? M_BRAND : '#d8d2c2'}`, borderRadius: 8, fontFamily: M_MONO, fontSize: 10, fontWeight: 700, color: watchMode ? '#fff' : '#5d6b59', cursor: 'pointer' }}>{watchMode ? '✕ ยกเลิกเลือก' : '👁 เลือกดูหลายคน'}</button>
+                        {watchBibs.length > 0 && <span style={{ fontFamily: M_MONO, fontSize: 10, color: '#5d6b59' }}>แสดง {watchBibs.length} คน · <span onClick={() => setWatchBibs([])} style={{ color: M_BRAND, cursor: 'pointer', textDecoration: 'underline' }}>ล้าง</span></span>}
+                      </div>
                       {rosterList.length === 0 && <div style={{ padding: '30px 10px', textAlign: 'center', color: '#5d6b59', fontSize: 12.5, lineHeight: 1.6 }}>ยังไม่มีนักวิ่งในระยะนี้</div>}
-                      {rosterList.map((d, i) => (
-                        <div key={d.bib} onClick={() => setSelectedBib(d.bib)} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '9px 16px', borderBottom: '1px solid #f4f3ef', cursor: 'pointer' }}>
-                          <span style={{ width: 18, fontFamily: M_MONO, fontSize: 10.5, color: '#5d6b59', flexShrink: 0, textAlign: 'right' }}>{i + 1}</span>
-                          <LmAvatar size={28} photo={d.avatarPhoto} color={d.color} initial={d.initial}/>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: 12.5, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.name}</div>
-                            <div style={{ fontFamily: M_MONO, fontSize: 10, color: '#5d6b59' }}>#{d.bib} · {d.distance}</div>
+                      {rosterList.map((d, i) => {
+                        const checked = watchBibs.includes(d.bib);
+                        return (
+                          <div key={d.bib} onClick={() => watchMode ? toggleWatchBib(d.bib) : setSelectedBib(d.bib)} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '9px 16px', borderBottom: '1px solid #f4f3ef', cursor: 'pointer', background: watchMode && checked ? 'rgba(45,106,79,0.06)' : 'transparent' }}>
+                            {watchMode ? (
+                              <div style={{ width: 18, height: 18, borderRadius: 5, border: `1.6px solid ${checked ? M_BRAND : '#d8d2c2'}`, background: checked ? M_BRAND : 'transparent', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{checked ? '✓' : ''}</div>
+                            ) : (
+                              <span style={{ width: 18, fontFamily: M_MONO, fontSize: 10.5, color: '#5d6b59', flexShrink: 0, textAlign: 'right' }}>{i + 1}</span>
+                            )}
+                            <LmAvatar size={28} photo={d.avatarPhoto} color={d.color} initial={d.initial}/>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: 12.5, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.name}</div>
+                              <div style={{ fontFamily: M_MONO, fontSize: 10, color: '#5d6b59' }}>#{d.bib} · {d.distance}</div>
+                            </div>
+                            <span style={{ fontFamily: M_MONO, fontSize: 10, color: '#5d6b59', flexShrink: 0, whiteSpace: 'nowrap' }}>{d.km.toFixed(1)}/{d.totalKm.toFixed(1)}K</span>
                           </div>
-                          <span style={{ fontFamily: M_MONO, fontSize: 10, color: '#5d6b59', flexShrink: 0, whiteSpace: 'nowrap' }}>{d.km.toFixed(1)}/{d.totalKm.toFixed(1)}K</span>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </>
                   )}
                   {selected && (
