@@ -418,8 +418,15 @@ function EventCard({ ev, isRegistered, onRunnerSpace, onFollow, onSeeResult }) {
             to the exact page background color behind this card (too close
             to tell apart by eye), so the button visually vanished into the
             page and read as a separate, narrower floating pill instead of
-            the full-width bottom half of this same white card. */}
-        <button onClick={onSeeResult} style={{ width: '100%', padding: 13, background: '#e8f2ec', border: 'none', borderTop: `1px solid ${C.border}`, fontSize: 12.5, fontWeight: 700, color: C.brandDk, cursor: 'pointer' }}>🏅 See Result</button>
+            the full-width bottom half of this same white card. Padding and
+            the subtitle line match the live/upcoming cards' "Runner Space"
+            button below — that one is two lines (bold label + subtitle),
+            which made this single-line button look thin/cut-off by
+            comparison even once the color was fixed. */}
+        <button onClick={onSeeResult} style={{ width: '100%', padding: 13, background: '#e8f2ec', border: 'none', borderTop: `1px solid ${C.border}`, fontSize: 12.5, fontWeight: 700, color: C.brandDk, cursor: 'pointer' }}>
+          🏅 See Result
+          <div style={{ fontFamily: C.mono, fontSize: 9, fontWeight: 600, opacity: 0.85, marginTop: 1 }}>ดูผลการแข่งขันของคุณ</div>
+        </button>
       </div>
     );
   }
