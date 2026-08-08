@@ -520,6 +520,12 @@ function EventPickerScreen({ user, session, onOpenApp, onFollow, onProfile }) {
           <Brand/>
           <Kicker>GPS Trail Tracker</Kicker>
           <div style={{ fontSize: 21, fontWeight: 800, marginTop: 4, color: C.text }}>เลือกงานแข่งของคุณ</div>
+          {/* Temporary visible version marker — this screen's fixes kept
+              appearing not to take effect on a tester's device even after
+              force-quitting the app, and there was no way to tell from a
+              screenshot whether that was stale cached code or a real bug.
+              Remove once cache staleness is confirmed resolved. */}
+          <div style={{ fontSize: 9, opacity: 0.4, marginTop: 2 }}>build 2026-08-08-1</div>
         </div>
         <PersonIcon size={38} onClick={onProfile} photo={user.avatarPhoto}/>
       </div>
