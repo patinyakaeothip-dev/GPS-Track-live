@@ -212,7 +212,7 @@
          actually running the latest deployed code or a cached/stale copy
          of this page. Bump this string on every meaningful change to this
          file so that question can be answered by looking, not guessing. -->
-    <span style="font-size:9px;opacity:0.5;">build 2026-08-08-6</span>
+    <span style="font-size:9px;opacity:0.5;">build 2026-08-08-7</span>
     <button onclick="saveCertImage()">💾 บันทึกรูปภาพ</button>
     <button class="alt" onclick="window.print()">🖨 Print / Save as PDF</button>
     <input type="file" accept="image/*" id="photo-input" style="display:none;">
@@ -613,17 +613,26 @@
         // fitCertToScreen) — it's always laid out at its true physical
         // size (210mm × 262.5mm converted to px), with .stage scrolling
         // to show the rest on a small screen instead of shrinking the
-        // card. That means there's no "current viewport smaller than the
-        // card" mismatch left for html2canvas to get wrong — capturing
-        // the element directly, with no windowWidth/windowHeight virtual-
-        // viewport override and no transform to undo, gives back exactly
-        // the same box every time regardless of device or orientation.
-        // (Two earlier bugs traced back to exactly that kind of capture-
-        // vs-real-layout mismatch: a squeezed/stretched photo in portrait,
-        // and — once windowWidth was forcing a layout wider than the real
-        // device viewport — a visible seam down the middle of the saved
-        // PNG where html2canvas's internal clone didn't render evenly.)
-        const canvas = await html2canvas(cert, { useCORS: true, scale: 2, backgroundColor: '#1f4d39' });
+        // card.
+        //
+        // html2canvas still needs windowWidth/windowHeight explicitly set
+        // here though: when left unset, it defaults its internal clone's
+        // layout viewport to the *real* window.innerWidth/innerHeight —
+        // ~390px in portrait vs. ~844px in landscape on the same phone —
+        // and the card (~794px wide) doesn't fit inside that in portrait,
+        // so the clone mis-measures it and the saved image comes out
+        // narrower in portrait than landscape (same bug as before, just
+        // via a different unset-default path). Forcing both to the card's
+        // own true fixed size removes the orientation dependence — safe to
+        // do now that there's no on-screen transform anymore, which is
+        // what caused the previous attempt at this (windowWidth set while
+        // the card was *also* being transform-scaled for display) to
+        // produce a seam down the middle instead.
+        const MM_TO_PX = 96 / 25.4; // CSS spec: 1in = 96px, 1in = 25.4mm
+        const certWidthPx = Math.round(210 * MM_TO_PX);
+        const certHeightPx = Math.round(262.5 * MM_TO_PX);
+        const canvas = await html2canvas(cert, { useCORS: true, scale: 2, backgroundColor: '#1f4d39',
+          windowWidth: certWidthPx, windowHeight: certHeightPx });
         const pngDataUrl = canvas.toDataURL('image/png');
         // Inside the native app shell, save straight to Photos — one tap,
         // no share sheet at all. This needed an actual native plugin
