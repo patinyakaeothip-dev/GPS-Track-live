@@ -1890,9 +1890,19 @@ function runnerStatusLabel(r) {
   return 'ยังไม่เริ่ม';
 }
 
+// Viewing several friends' GPS at once means one Leaflet map + N live-position
+// Firestore listeners open at the same time on the viewer's own phone — fine
+// for a handful, but letting it scale to "everyone in the race" would be a
+// real battery/data cost with sharply diminishing usefulness on a crowded
+// map. 10 is generous for the actual use case (a group of friends running
+// together) without inviting that.
+const MULTI_MAP_LIMIT = 10;
 function FriendsTab({ eventId, event, followedBib, favBibs, onAddFavorite, onRemoveFavorite }) {
   const [runners, setRunners] = uS(() => (eventId && window.runnerStore ? window.runnerStore.listRunners(eventId) : []));
   const [detailBib, setDetailBib] = uS(null);
+  const [multiMode, setMultiMode] = uS(false);
+  const [multiSel, setMultiSel] = uS([]);
+  const [showMultiMap, setShowMultiMap] = uS(false);
   uE(() => {
     if (!eventId || !window.runnerStore) return;
     const refresh = () => setRunners(window.runnerStore.listRunners(eventId));
@@ -1904,6 +1914,19 @@ function FriendsTab({ eventId, event, followedBib, favBibs, onAddFavorite, onRem
   const followed = runners.find(r => r.bib === followedBib);
   const favs = uM(() => favBibs.map(bib => runners.find(r => r.bib === bib)).filter(Boolean), [runners, favBibs]);
   const detail = runners.find(r => r.bib === detailBib);
+  const multiRunners = uM(() => multiSel.map(bib => favs.find(r => r.bib === bib)).filter(Boolean), [favs, multiSel]);
+
+  function toggleMultiMode() {
+    setMultiMode(v => !v);
+    setMultiSel([]);
+  }
+  function toggleMultiSel(bib) {
+    setMultiSel(sel => {
+      if (sel.includes(bib)) return sel.filter(b => b !== bib);
+      if (sel.length >= MULTI_MAP_LIMIT) return sel; // silently capped — the count badge already shows N/10
+      return [...sel, bib];
+    });
+  }
 
   return (
     <div style={{ flex: 1, overflow: 'auto', padding: '14px 18px 90px', display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -1921,28 +1944,46 @@ function FriendsTab({ eventId, event, followedBib, favBibs, onAddFavorite, onRem
       )}
 
       <div>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, gap: 8 }}>
           <div style={{ fontFamily: C.mono, fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted }}>เพื่อนที่ favourite ({favs.length})</div>
-          <button onClick={onAddFavorite} style={{ padding: '6px 10px', background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 8, fontFamily: C.mono, fontSize: 10.5, fontWeight: 700, color: C.brand, cursor: 'pointer' }}>♥ เพิ่มเพื่อน</button>
+          <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+            {favs.length > 1 && (
+              <button onClick={toggleMultiMode} style={{ padding: '6px 10px', background: multiMode ? C.brand : 'transparent', border: `1px solid ${multiMode ? C.brand : C.border}`, borderRadius: 8, fontFamily: C.mono, fontSize: 10.5, fontWeight: 700, color: multiMode ? '#fff' : C.brand, cursor: 'pointer', whiteSpace: 'nowrap' }}>{multiMode ? '✕ ยกเลิก' : '📍 ดูพร้อมกัน'}</button>
+            )}
+            {!multiMode && <button onClick={onAddFavorite} style={{ padding: '6px 10px', background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 8, fontFamily: C.mono, fontSize: 10.5, fontWeight: 700, color: C.brand, cursor: 'pointer', whiteSpace: 'nowrap' }}>♥ เพิ่มเพื่อน</button>}
+          </div>
         </div>
         {favs.length === 0 && <div style={{ color: C.muted, fontSize: 13, textAlign: 'center', padding: 24, background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12 }}>ยังไม่มีเพื่อนที่ favourite · กด "♥ เพิ่มเพื่อน"</div>}
         {favs.length > 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {favs.map(r => (
-              <div key={r.bib} onClick={() => setDetailBib(r.bib)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 10, background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, boxShadow: '0 1px 3px rgba(31,42,28,0.08)', cursor: 'pointer' }}>
-                <AvatarCircle size={36} photo={r.avatarPhoto} initial={r.nickname[0]}/>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 14, fontWeight: 600 }}>{r.nickname}</div>
-                  <div style={{ fontFamily: C.mono, fontSize: 10.5, color: C.muted }}>bib {r.bib} · {r.distance} · {runnerStatusLabel(r)}</div>
+            {favs.map(r => {
+              const checked = multiSel.includes(r.bib);
+              return (
+                <div key={r.bib} onClick={() => multiMode ? toggleMultiSel(r.bib) : setDetailBib(r.bib)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 10, background: '#fff', border: `1px solid ${checked ? C.brand : C.border}`, borderRadius: 12, boxShadow: '0 1px 3px rgba(31,42,28,0.08)', cursor: 'pointer' }}>
+                  {multiMode && (
+                    <div style={{ width: 20, height: 20, borderRadius: 6, border: `1.6px solid ${checked ? C.brand : C.border}`, background: checked ? C.brand : 'transparent', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>{checked ? '✓' : ''}</div>
+                  )}
+                  <AvatarCircle size={36} photo={r.avatarPhoto} initial={r.nickname[0]}/>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 14, fontWeight: 600 }}>{r.nickname}</div>
+                    <div style={{ fontFamily: C.mono, fontSize: 10.5, color: C.muted }}>bib {r.bib} · {r.distance} · {runnerStatusLabel(r)}</div>
+                  </div>
+                  {!multiMode && <span onClick={e => { e.stopPropagation(); onRemoveFavorite(r.bib); }} style={{ fontSize: 18, cursor: 'pointer', color: '#e0453e', lineHeight: 1 }}>♥</span>}
                 </div>
-                <span onClick={e => { e.stopPropagation(); onRemoveFavorite(r.bib); }} style={{ fontSize: 18, cursor: 'pointer', color: '#e0453e', lineHeight: 1 }}>♥</span>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
 
+      {multiMode && multiSel.length > 0 && (
+        <div style={{ position: 'fixed', left: 18, right: 18, bottom: 78, zIndex: 5 }}>
+          <Btn variant="primary" onClick={() => setShowMultiMap(true)}>📍 ดูบนแผนที่เดียวกัน ({multiSel.length}/{MULTI_MAP_LIMIT})</Btn>
+        </div>
+      )}
+
       {detail && <FriendDetailSheet runner={detail} eventId={eventId} event={event} onClose={() => setDetailBib(null)}/>}
+      {showMultiMap && <FriendsMultiMapSheet runners={multiRunners} eventId={eventId} event={event} onClose={() => setShowMultiMap(false)}/>}
     </div>
   );
 }
@@ -2084,6 +2125,162 @@ function FriendMapSheet({ runner, eventId, event, onClose }) {
             <ElevationSvg course={course} progressKm={elevationKm} checkpoints={(event && event.checkpoints) || []}/>
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+// Distinct marker colors per runner, cycled by selection order — same
+// length as MULTI_MAP_LIMIT so no two runners on one map ever share a color.
+const MULTI_MAP_COLORS = ['#2d6a4f', '#e07a3e', '#0369a1', '#9b1c10', '#7c4a03', '#6d28d9', '#be185d', '#065f46', '#1f4d39', '#357a5c'];
+
+// Several friends on one map at once — separate from FriendMapSheet (one
+// runner) because the course-loading and live-position plumbing differ:
+// runners here can be on different distances (different paths on a course
+// that branches, e.g. the 11K turns around before the 22K/29K hill loop),
+// so this uses window.courseGeo.buildEventCoursePaths — the same
+// per-distance-path + shared-overview-course engine Live Monitor already
+// relies on — instead of useCourse's single-distance course. And with a
+// variable-length runner list, live positions can't be subscribed via the
+// useLivePos hook (a fixed number of hook calls is required per render) —
+// each runner's Firestore doc is watched directly instead, all torn down
+// together on unmount.
+function FriendsMultiMapSheet({ runners, eventId, event, onClose }) {
+  const [coursePaths, setCoursePaths] = uS(null);
+  const [liveByBib, setLiveByBib] = uS({});
+  // Same "don't guess at a checkpoint before real data has loaded" lesson
+  // as Live Monitor's livePosReady — becomes true once every selected
+  // runner's livePos doc has reported at least once (Firestore's
+  // onSnapshot always fires once immediately, even for a doc that doesn't
+  // exist, so this reliably converges instead of hanging on someone with
+  // no GPS data at all).
+  const [liveReady, setLiveReady] = uS(false);
+  const mapHostRef = uR(null);
+  const mapObjRef = uR(null);
+  const markersRef = uR(new Map());
+
+  uE(() => {
+    let cancelled = false;
+    if (event && window.courseGeo) {
+      window.courseGeo.buildEventCoursePaths(event).then(r => { if (!cancelled) setCoursePaths(r); }).catch(() => {});
+    }
+    return () => { cancelled = true; };
+  }, [event && event.id]);
+
+  uE(() => {
+    if (!eventId || !window.fb || !runners.length) { setLiveReady(!runners.length); return; }
+    setLiveByBib({});
+    setLiveReady(false);
+    const reported = new Set();
+    const unsubs = runners.map(r => window.fb.watchDocById('livePos', `${eventId}_${r.bib}`, pos => {
+      reported.add(r.bib);
+      setLiveByBib(prev => ({ ...prev, [r.bib]: pos }));
+      if (reported.size >= runners.length) setLiveReady(true);
+    }));
+    return () => unsubs.forEach(u => u && u());
+  }, [eventId, runners.map(r => r.bib).join(',')]);
+
+  // Position for one runner, same GPS-preferred/checkpoint-fallback rule as
+  // FriendMapSheet — prefers any last-known Firestore fix over the
+  // checkpoint-interpolated point regardless of age, and (via liveReady)
+  // shows nothing rather than a guessed checkpoint position before the
+  // first real snapshot has actually landed.
+  function posFor(r) {
+    if (!coursePaths) return null;
+    const pts = coursePaths.paths[r.distance] || coursePaths.paths[coursePaths.overviewLabel];
+    const live = liveByBib[r.bib];
+    if (live && live.lat != null && live.lon != null) return { lat: live.lat, lon: live.lon };
+    if (!liveReady) return null;
+    const p = window.courseGeo.pointAtKm(pts, r.progressKm || 0);
+    return { lat: p.lat, lon: p.lon };
+  }
+
+  uE(() => {
+    if (!coursePaths || !window.L || !mapHostRef.current || mapObjRef.current) return;
+    const L = window.L;
+    const geo = window.courseGeo;
+    const overviewPts = coursePaths.paths[coursePaths.overviewLabel];
+    const map = L.map(mapHostRef.current, { zoomControl: false, attributionControl: false })
+      .fitBounds(geo.coursePolylineLatLngs(overviewPts));
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+    // One distinct distance can mean one distinct physical path (a course
+    // that branches, not just an out-and-back at different turnaround
+    // points) — draw every distance actually present among the selected
+    // runners, not just the overview, so a runner on the 11K still shows
+    // sitting on their own real path instead of implicitly projected onto
+    // the 29K's.
+    const distances = [...new Set(runners.map(r => r.distance))];
+    (distances.length ? distances : [coursePaths.overviewLabel]).forEach(label => {
+      const pts = coursePaths.paths[label] || overviewPts;
+      L.polyline(geo.coursePolylineLatLngs(pts), { color: C.brand, weight: 4, opacity: 0.7 }).addTo(map);
+    });
+    function nearestPoint(km) {
+      let best = overviewPts[0], bestDiff = Infinity;
+      for (const p of overviewPts) {
+        const diff = Math.abs(p.km - km);
+        if (diff < bestDiff) { bestDiff = diff; best = p; }
+      }
+      return best;
+    }
+    const placed = [];
+    function addCpMarker(km, label, color) {
+      const p = nearestPoint(km);
+      const overlapping = placed.filter(q => Math.abs(q.lat - p.lat) < 0.0005 && Math.abs(q.lon - p.lon) < 0.0005).length;
+      placed.push({ lat: p.lat, lon: p.lon });
+      const dx = overlapping * 46;
+      L.marker([p.lat, p.lon], { icon: L.divIcon({ className: '', iconSize: null, html:
+        `<div style="transform:translate(calc(-50% + ${dx}px),-100%);background:${color};color:#fff;font:700 10px 'JetBrains Mono',monospace;padding:3px 7px;border-radius:999px;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.35);white-space:nowrap;">${label}</div>` }) }).addTo(map);
+    }
+    addCpMarker(0, 'START', C.brand);
+    ((event && event.checkpoints) || []).forEach(cp => addCpMarker(parseFloat(cp.km) || 0, cp.label, C.orange));
+    addCpMarker(overviewPts[overviewPts.length - 1].km, 'FINISH', '#9b1c10');
+    mapObjRef.current = map;
+    setTimeout(() => map.invalidateSize(), 60);
+  }, [coursePaths]);
+
+  uE(() => {
+    const map = mapObjRef.current;
+    if (!map || !coursePaths) return;
+    const L = window.L;
+    runners.forEach((r, i) => {
+      const pos = posFor(r);
+      const existing = markersRef.current.get(r.bib);
+      if (!pos) { if (existing) { map.removeLayer(existing); markersRef.current.delete(r.bib); } return; }
+      const color = MULTI_MAP_COLORS[i % MULTI_MAP_COLORS.length];
+      if (existing) {
+        existing.setLatLng([pos.lat, pos.lon]);
+      } else {
+        const m = L.circleMarker([pos.lat, pos.lon], { radius: 8, color: '#fff', weight: 2, fillColor: color, fillOpacity: 1 }).addTo(map);
+        m.bindTooltip(`#${r.bib} ${r.nickname}`, { direction: 'top', offset: [0, -8] });
+        markersRef.current.set(r.bib, m);
+      }
+    });
+    const stillSelected = new Set(runners.map(r => r.bib));
+    markersRef.current.forEach((m, bib) => {
+      if (!stillSelected.has(bib)) { map.removeLayer(m); markersRef.current.delete(bib); }
+    });
+  }, [coursePaths, liveByBib, liveReady, runners.map(r => r.bib).join(',')]);
+
+  return (
+    <div style={{ position: 'absolute', inset: 0, zIndex: 10, background: '#fff', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '16px 18px', borderBottom: `1px solid ${C.border}` }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 15, fontWeight: 700 }}>เพื่อน {runners.length} คน</div>
+          <div style={{ fontFamily: C.mono, fontSize: 10.5, color: C.muted }}>{liveReady ? 'อัพเดทแบบเรียลไทม์' : 'กำลังโหลดตำแหน่ง...'}</div>
+        </div>
+        <div onClick={onClose} style={{ width: 30, height: 30, borderRadius: 10, border: `1.6px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 14, flexShrink: 0 }}>✕</div>
+      </div>
+      <div style={{ position: 'relative', flex: 1 }}>
+        {!coursePaths && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.muted, fontSize: 12.5 }}>กำลังโหลดแผนที่...</div>}
+        <div ref={mapHostRef} style={{ position: 'absolute', inset: 0, background: '#eee', display: coursePaths ? 'block' : 'none' }}/>
+      </div>
+      <div style={{ flexShrink: 0, maxHeight: 130, overflow: 'auto', borderTop: `1px solid ${C.border}`, padding: '8px 14px' }}>
+        {runners.map((r, i) => (
+          <div key={r.bib} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', fontSize: 12.5 }}>
+            <span style={{ width: 10, height: 10, borderRadius: 999, background: MULTI_MAP_COLORS[i % MULTI_MAP_COLORS.length], flexShrink: 0 }}/>
+            <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>#{r.bib} {r.nickname}</span>
+            <span style={{ fontFamily: C.mono, fontSize: 10.5, color: C.muted, flexShrink: 0 }}>{(r.progressKm || 0).toFixed(1)}K · {liveByBib[r.bib] && liveByBib[r.bib].lat != null ? '🟢' : '⚪'}</span>
+          </div>
+        ))}
       </div>
     </div>
   );
