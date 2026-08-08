@@ -30,8 +30,16 @@
     .toolbar button.alt { background: transparent; color: #fff;
       border: 1px solid rgba(255,255,255,0.4); }
     /* padding-bottom reserves space for the now-floating .toolbar so it
-       doesn't sit on top of/hide whatever's at the bottom of the card. */
-    .stage { padding: 24px 24px calc(90px + env(safe-area-inset-bottom)); display: flex; justify-content: center; overflow-x: hidden; }
+       doesn't sit on top of/hide whatever's at the bottom of the card.
+       The card is never scaled down to fit the screen (see fitCertToScreen
+       below for why) — on a phone it's routinely wider/taller than the
+       viewport, so .stage scrolls/pans instead of shrinking it. This also
+       means what's on screen is pixel-for-pixel what gets saved: no
+       transform trick, no "virtual viewport" html2canvas has to guess at,
+       which is what was producing a visible seam down the middle of some
+       saved photos (html2canvas mis-stitching a DOM clone laid out wider
+       than the real device viewport). */
+    .stage { padding: 24px 24px calc(90px + env(safe-area-inset-bottom)); display: flex; justify-content: center; overflow: auto; }
 
     /* 210mm × 262.5mm = a 4:5 ratio — Instagram's recommended portrait post
        size (and works fine for Facebook too), instead of A4's taller 210:297
@@ -204,7 +212,7 @@
          actually running the latest deployed code or a cached/stale copy
          of this page. Bump this string on every meaningful change to this
          file so that question can be answered by looking, not guessing. -->
-    <span style="font-size:9px;opacity:0.5;">build 2026-08-08-5</span>
+    <span style="font-size:9px;opacity:0.5;">build 2026-08-08-6</span>
     <button onclick="saveCertImage()">💾 บันทึกรูปภาพ</button>
     <button class="alt" onclick="window.print()">🖨 Print / Save as PDF</button>
     <input type="file" accept="image/*" id="photo-input" style="display:none;">
@@ -600,53 +608,22 @@
       const cert = document.querySelector('.cert');
       if (!cert) return;
       if (!window.html2canvas) { alert('โหลดตัวช่วยบันทึกรูปไม่สำเร็จ ลองเช็คอินเทอร์เน็ตแล้วรีเฟรชหน้านี้ใหม่ครับ'); return; }
-      // Capture at the card's real, unscaled size (not whatever
-      // fitCertToScreen shrank it to for on-screen display) — otherwise a
-      // phone screen would produce a blurry, low-resolution PNG.
-      const prevTransform = cert.style.transform;
-      cert.style.transform = 'none';
       try {
-        // html2canvas has a well-documented bug where it mis-renders an
-        // element significantly larger than the *current* viewport — the
-        // .cert card is physically ~794px wide (210mm) regardless of
-        // device, but a portrait phone viewport is only ~390-430px, far
-        // smaller. Reported as the saved photo coming out squeezed/
-        // stretched specifically when the phone was held portrait while
-        // saving, but fine in landscape (a wider viewport, closer to the
-        // card's own size) — same photo, same crop, same everything else;
-        // only the viewport size at the moment of capture differed.
-        // windowWidth/windowHeight tell html2canvas to lay out its
-        // internal clone against a virtual viewport at least as large as
-        // the card itself, regardless of the real device viewport, which
-        // is the standard fix for this class of html2canvas bug.
-        //
-        // Measuring that target size from the live DOM (cert.scrollWidth/
-        // scrollHeight) turned out to be unreliable on-device — two saves
-        // of the exact same untouched card came back as 1492×1986 and
-        // 668×1986: identical height, wildly different width, neither
-        // matching the real 4:5 ratio. Computing the expected size
-        // directly from the card's own CSS mm dimensions instead removes
-        // any dependency on a DOM measurement that isn't behaving
-        // consistently in this WKWebView.
-        // Only windowWidth/windowHeight (the *virtual viewport* html2canvas
-        // lays its clone out against) — explicit width/height (the
-        // *output canvas* size) used to also get forced to this same
-        // computed value, but that doesn't necessarily match the card's
-        // true rendered box to the sub-pixel, and any mismatch showed up
-        // as a thin strip of backgroundColor along an edge (reported as
-        // "ขอบเขียวของแอพติดมาด้วย" — that green is literally the
-        // backgroundColor fallback below, visible only because of that
-        // mismatch). Leaving width/height unset lets html2canvas capture
-        // the card at whatever its own actual rendered size is —
-        // reliable, since that's a real layout pass html2canvas does
-        // itself, unlike the buggy JS-side cert.scrollWidth read this
-        // replaced — while windowWidth/windowHeight still fixes the
-        // original squeeze bug by keeping the layout viewport consistent.
-        const MM_TO_PX = 96 / 25.4; // CSS spec: 1in = 96px, 1in = 25.4mm
-        const certWidthPx = Math.round(210 * MM_TO_PX);
-        const certHeightPx = Math.round(262.5 * MM_TO_PX);
-        const canvas = await html2canvas(cert, { useCORS: true, scale: 2, backgroundColor: '#1f4d39',
-          windowWidth: certWidthPx, windowHeight: certHeightPx });
+        // The .cert card is never scaled down for on-screen display (see
+        // fitCertToScreen) — it's always laid out at its true physical
+        // size (210mm × 262.5mm converted to px), with .stage scrolling
+        // to show the rest on a small screen instead of shrinking the
+        // card. That means there's no "current viewport smaller than the
+        // card" mismatch left for html2canvas to get wrong — capturing
+        // the element directly, with no windowWidth/windowHeight virtual-
+        // viewport override and no transform to undo, gives back exactly
+        // the same box every time regardless of device or orientation.
+        // (Two earlier bugs traced back to exactly that kind of capture-
+        // vs-real-layout mismatch: a squeezed/stretched photo in portrait,
+        // and — once windowWidth was forcing a layout wider than the real
+        // device viewport — a visible seam down the middle of the saved
+        // PNG where html2canvas's internal clone didn't render evenly.)
+        const canvas = await html2canvas(cert, { useCORS: true, scale: 2, backgroundColor: '#1f4d39' });
         const pngDataUrl = canvas.toDataURL('image/png');
         // Inside the native app shell, save straight to Photos — one tap,
         // no share sheet at all. This needed an actual native plugin
@@ -701,62 +678,28 @@
       } catch (err) {
         console.warn('[trt] save image failed', err);
         alert('บันทึกรูปไม่สำเร็จ ลองใช้ปุ่ม Print / Save as PDF แทนได้ครับ');
-      } finally {
-        cert.style.transform = prevTransform;
-        fitCertToScreen();
       }
     }
 
     // .cert is sized in real physical units (mm/pt) for print — correct for
-    // an actual A4 printout, but on a phone screen (the far more common way
-    // this page actually gets opened — the "บันทึกใบประกาศ" flow, TestFlight,
-    // etc.) those units render at their true physical size regardless of
-    // the tiny viewport, and nothing was scaling the card down to fit.
-    // Text that was sized to comfortably fit an A4-width photo ended up
-    // fighting for space in a viewport a fraction as wide, which is what
-    // actually produced the cramped, overlapping look — not a layout bug
-    // in the card itself. Scaling the whole card down as one rigid unit
-    // (instead of trying to redo the sizing in relative units) guarantees
-    // the on-screen look always matches the print-tested layout exactly,
-    // just smaller — nothing can overlap on screen that doesn't already
-    // overlap on the printed page.
+    // an actual A4 printout. It used to also get scaled down with a CSS
+    // transform to fit small phone screens, but that transform was the
+    // root cause of several capture bugs (a squeezed/stretched save in
+    // portrait, then a seam down the middle of the saved PNG once a
+    // virtual-viewport workaround was added on top of it) — html2canvas
+    // and the live on-screen transform were two separate, occasionally
+    // divergent ideas of what size the card "really" was. Removing the
+    // scale-to-fit entirely and letting .stage scroll/pan instead means
+    // there is only ever one true size for the card, on screen and in the
+    // saved file alike — kept as a no-op function since other code still
+    // calls it after layout-affecting changes (e.g. the elevation chart
+    // loading in).
     function fitCertToScreen() {
       const cert = document.querySelector('.cert');
-      const stage = document.querySelector('.stage');
-      if (!cert || !stage) return;
+      if (!cert) return;
       cert.style.transform = 'none';
-      const naturalWidth = cert.offsetWidth;
-      const naturalHeight = cert.offsetHeight;
-      const available = stage.clientWidth;
-      if (!naturalWidth || !naturalHeight) { stage.style.height = ''; return; }
-      // Always apply an explicit scale() — even 1, when the card already
-      // fits — instead of leaving transform as 'none' in that case. Two
-      // different code paths (no transform vs. transform: scale(x))
-      // rendering the same 4:5 photo were the one real, reproducible
-      // difference between portrait and landscape (rotating the phone
-      // changes available viewport width, which flips which branch ran) —
-      // reported as the attached photo cropping differently just from
-      // rotating the screen while viewing, with nothing else changing.
-      // Forcing the exact same code path regardless of orientation removes
-      // that divergence outright, whatever WebKit-level quirk was actually
-      // behind it.
-      const scale = Math.min(1, available / naturalWidth);
-      cert.style.transformOrigin = 'top center';
-      cert.style.transform = `scale(${scale})`;
-      // Scaling down leaves the natural (unscaled) height reserved in
-      // normal flow otherwise — a tall blank gap below the now-smaller
-      // card. Explicitly shrinking .stage's height to match closes it.
-      stage.style.height = (naturalHeight * scale) + 'px';
     }
-    window.addEventListener('resize', fitCertToScreen);
-    window.addEventListener('orientationchange', fitCertToScreen);
-    window.addEventListener('load', fitCertToScreen);
     fitCertToScreen();
-    // Printing must use the real, untransformed physical size — a phone
-    // can still trigger window.print() (Print/Save as PDF), so the scale
-    // has to come off first and go back on after.
-    window.addEventListener('beforeprint', () => { const c = document.querySelector('.cert'); if (c) c.style.transform = 'none'; });
-    window.addEventListener('afterprint', fitCertToScreen);
   </script>
 </body>
 </html>
