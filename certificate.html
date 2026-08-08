@@ -568,33 +568,35 @@
             console.warn('[trt] native photo save failed, falling back to share/download', nativeErr);
           }
         }
-        // A synthetic <a download> click is the standard web way to save a
-        // generated file, and still works fine in a real browser tab — but
-        // inside the app's own Capacitor/WKWebView shell there's no
-        // Downloads folder for it to land in, so the click just silently
-        // did nothing at all (no error, nothing to see — this is exactly
-        // what a runner reported as "กดบันทึกภาพแล้วไม่มีอะไรเกิดขึ้นเลย").
-        // navigator.share with an actual File is a standard Web API WebKit
-        // already supports inside WKWebView without needing a new native
-        // Capacitor plugin/rebuild — it opens iOS's real share sheet, and
-        // "Save Image" from there writes to Photos properly (through
-        // WebKit's own supported share flow, not the crash-prone raw
-        // long-press-on-<img> path this page disables above). Falls back
-        // to the old <a download> for a real desktop/mobile browser tab,
-        // where Web Share's file support may not exist but downloads work
-        // fine directly. Both of these stay as fallbacks for the web
-        // deploy (or an old app build that hasn't picked up photo-saver.js
-        // yet) — trtPhotoSaver only exists once this fix actually ships in
-        // a native build.
-        const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
-        const file = blob && new File([blob], 'rayong-trail-certificate.png', { type: 'image/png' });
-        if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
-          try {
-            await navigator.share({ files: [file], title: 'Rayong Trail Finisher' });
-            return;
-          } catch (shareErr) {
-            if (shareErr && shareErr.name === 'AbortError') return; // user closed the share sheet — not a failure
-            console.warn('[trt] share failed, falling back to direct download', shareErr);
+        // Below this point: not the native app (no trtPhotoSaver, or its
+        // save failed) — a real browser tab, desktop or mobile. Two
+        // genuinely different "right" behaviors here, not one:
+        //   - Desktop: a plain <a download> click already saves straight
+        //     to Downloads with zero extra dialogs, which is exactly what
+        //     a desktop user expects — going through navigator.share
+        //     instead opens the OS's own share panel (Windows' "Share",
+        //     with nearby-sharing/other-apps options) for no reason, an
+        //     unnecessary detour reported by an RD testing from a PC.
+        //   - Mobile browser (Safari/Chrome on a phone, opened as a
+        //     regular web page rather than through the installed app):
+        //     <a download> still technically works, but the natural way
+        //     to get something into Photos from a phone browser is the
+        //     native share sheet's "Save Image" — which is exactly what
+        //     the earlier in-app-crash fix already built (navigator.share
+        //     with a real File; WebKit/Chrome support this without any
+        //     native plugin), so mobile browsers get that path too.
+        const isMobileBrowser = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+        if (isMobileBrowser) {
+          const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+          const file = blob && new File([blob], 'rayong-trail-certificate.png', { type: 'image/png' });
+          if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
+            try {
+              await navigator.share({ files: [file], title: 'Rayong Trail Finisher' });
+              return;
+            } catch (shareErr) {
+              if (shareErr && shareErr.name === 'AbortError') return; // user closed the share sheet — not a failure
+              console.warn('[trt] share failed, falling back to direct download', shareErr);
+            }
           }
         }
         const link = document.createElement('a');
