@@ -493,32 +493,59 @@
     // needed everywhere it's used — live page and saved PNG both — so
     // neither has to depend on object-fit actually working right.
     const PHOTO_TARGET_RATIO = 4 / 5;
+    // Crops+scales an already-decoded bitmap (HTMLImageElement or
+    // ImageBitmap — both expose width/height and both work as a
+    // drawImage source) to PHOTO_TARGET_RATIO. Split out from resizePhoto
+    // so the two decode strategies below can share the exact same crop
+    // math — only how the source gets decoded differs between them.
+    function cropToRatio(source, srcW, srcH) {
+      const srcRatio = srcW / srcH;
+      // Center-crop to PHOTO_TARGET_RATIO first (same idea as CSS
+      // object-fit:cover — trim whichever axis is relatively too long),
+      // *then* scale the crop down uniformly by one factor — so this can
+      // never distort proportions, only crop and shrink.
+      let cropW = srcW, cropH = srcH, cropX = 0, cropY = 0;
+      if (srcRatio > PHOTO_TARGET_RATIO) {
+        cropW = Math.round(srcH * PHOTO_TARGET_RATIO);
+        cropX = Math.round((srcW - cropW) / 2);
+      } else {
+        cropH = Math.round(srcW / PHOTO_TARGET_RATIO);
+        cropY = Math.round((srcH - cropH) / 2);
+      }
+      const scale = Math.min(1, PHOTO_MAX_DIM / Math.max(cropW, cropH));
+      const w = Math.round(cropW * scale), h = Math.round(cropH * scale);
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(source, cropX, cropY, cropW, cropH, 0, 0, w, h);
+      return canvas.toDataURL('image/jpeg', PHOTO_QUALITY);
+    }
     function resizePhoto(file) {
+      // createImageBitmap({imageOrientation: 'from-image'}) explicitly
+      // tells the browser to decode with EXIF rotation applied — the old
+      // approach (plain `new Image()` off a blob: URL, reading
+      // naturalWidth/naturalHeight) leaves that to each engine's own
+      // default behavior, which desktop Safari/Chrome happen to get right
+      // but the app's WKWebView did not: a landscape photo (e.g. a wide
+      // group shot) came out center-cropped as if it were already
+      // portrait-shaped, squeezing everyone into a narrow strip — reported
+      // as "รูปมันบีบ" specifically inside the app, never on the web,
+      // which is exactly this kind of WebView-vs-Safari inconsistency.
+      // Falls back to the old Image-based path only if createImageBitmap
+      // itself isn't available at all (very old browsers).
+      if (window.createImageBitmap) {
+        return createImageBitmap(file, { imageOrientation: 'from-image' })
+          .then(bitmap => {
+            const dataUrl = cropToRatio(bitmap, bitmap.width, bitmap.height);
+            bitmap.close();
+            return dataUrl;
+          });
+      }
       return new Promise((resolve, reject) => {
         const img = new Image();
         const objectUrl = URL.createObjectURL(file);
         img.onload = () => {
           URL.revokeObjectURL(objectUrl);
-          const srcW = img.naturalWidth, srcH = img.naturalHeight;
-          const srcRatio = srcW / srcH;
-          // Center-crop to PHOTO_TARGET_RATIO first (same idea as CSS
-          // object-fit:cover — trim whichever axis is relatively too long),
-          // *then* scale the crop down uniformly by one factor — so this
-          // can never distort proportions, only crop and shrink.
-          let cropW = srcW, cropH = srcH, cropX = 0, cropY = 0;
-          if (srcRatio > PHOTO_TARGET_RATIO) {
-            cropW = Math.round(srcH * PHOTO_TARGET_RATIO);
-            cropX = Math.round((srcW - cropW) / 2);
-          } else {
-            cropH = Math.round(srcW / PHOTO_TARGET_RATIO);
-            cropY = Math.round((srcH - cropH) / 2);
-          }
-          const scale = Math.min(1, PHOTO_MAX_DIM / Math.max(cropW, cropH));
-          const w = Math.round(cropW * scale), h = Math.round(cropH * scale);
-          const canvas = document.createElement('canvas');
-          canvas.width = w; canvas.height = h;
-          canvas.getContext('2d').drawImage(img, cropX, cropY, cropW, cropH, 0, 0, w, h);
-          resolve(canvas.toDataURL('image/jpeg', PHOTO_QUALITY));
+          resolve(cropToRatio(img, img.naturalWidth, img.naturalHeight));
         };
         img.onerror = () => { URL.revokeObjectURL(objectUrl); reject(new Error('image decode failed')); };
         img.src = objectUrl;
