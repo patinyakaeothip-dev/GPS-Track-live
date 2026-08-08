@@ -2801,7 +2801,16 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
         {tab === 'route' && <RouteTab course={course} event={currentEvent}
           runner={isSpectator ? (followedRunner ? { dist: followedRunner.distance, progressKm: followedRunner.progressKm } : { dist: '22K', progressKm: 0 }) : session.runner}
           spectatorRunner={isSpectator ? followedRunner : null} livePos={effectiveLivePos}/>}
-        {tab === 'ranking' && <RankingTab snap={snap} eventId={!isSpectator ? session.runner.eventId : null} event={currentEvent}/>}
+        {/* Used to pass null here for a spectator (isSpectator true — the
+            "Follow the race" flow), same as it once did for RouteTab/
+            FriendsTab before those were fixed to use currentEventId. That
+            forced RankingTab's realRunners lookup to null, falling back to
+            the old simulated `snap` demo dataset — whose distance labels
+            (11K/22K/29K) never match a real event's own distances (e.g.
+            27K here), so the gender/distance filter always matched zero
+            rows and Ranking just rendered blank for every spectator
+            following a real event. */}
+        {tab === 'ranking' && <RankingTab snap={snap} eventId={currentEventId} event={currentEvent}/>}
         {tab === 'friends' && <FriendsTab eventId={currentEventId} event={currentEvent} followedBib={isSpectator ? session.followBib : (session.runner && session.runner.bib)} favBibs={favBibs} onAddFavorite={() => setPickingFav(true)} onRemoveFavorite={toggleFavorite}/>}
       </div>
       <div style={{ flexShrink: 0, display: 'flex', borderTop: `1px solid #d8d2c2`, background: '#fff', padding: '6px 4px 20px' }}>
