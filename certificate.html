@@ -195,7 +195,18 @@
 
   <div class="stage">
     <div class="cert">
-      <img id="user-photo" alt="" style="display:none;position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;">
+      <!-- -webkit-touch-callout:none blocks iOS's native long-press "Save
+           Image"/"Copy" context menu on this <img> — a runner reported the
+           whole app crashing when long-pressing the attached photo to save
+           it that way. That native save path goes straight through WebKit
+           on the full base64 data URL this <img> holds, outside anything
+           this page's own JS controls, so it can't be fixed/debugged from
+           here the way the earlier resize fix could. The page already has
+           an intended, working way to save/share this exact photo (the
+           "💾 บันทึกรูปภาพ" button above, canvas-rendered PNG download) — so
+           the long-press gesture is just redundant as well as crash-prone,
+           safe to disable outright rather than try to patch. -->
+      <img id="user-photo" alt="" style="display:none;position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;">
       <div class="event-kicker-wrap">
         <img src="/assets/rayong-trail-icon.png" alt=""/>
         <span class="event-kicker" id="event-kicker">RAYONG TRAIL · 2026</span>
