@@ -36,6 +36,8 @@
     <string>แอพต้องใช้ตำแหน่ง GPS ต่อเนื่องแม้ปิดหน้าจอ เพื่อความปลอดภัยระหว่างการแข่งขัน</string>
     <key>NSCameraUsageDescription</key>
     <string>แอพต้องใช้กล้องเพื่อสแกน QR code ที่จุดเช็คพอยต์ระหว่างการแข่งขัน</string>
+    <key>NSPhotoLibraryAddUsageDescription</key>
+    <string>แอพต้องการสิทธิ์เพื่อบันทึกรูปใบประกาศลงในอัลบั้มรูปภาพของคุณ</string>
     <key>CFBundleURLTypes</key>
     <array>
     <dict>

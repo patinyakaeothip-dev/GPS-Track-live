@@ -176,6 +176,10 @@
   <script src="/src/event-store.js"></script>
   <script src="/src/runner-store.js"></script>
   <script src="/src/course-geo.js"></script>
+  <!-- Only does anything inside the native app shell — see photo-saver.js.
+       Lets saveCertImage() below save straight to Photos with one tap
+       instead of needing the Share Sheet + "ดูเพิ่มเติม"/More on iOS. -->
+  <script src="/src/native/photo-saver.bundle.js"></script>
   <!-- Renders the .cert card to an actual PNG for saveCertImage() below —
        this card is now meant primarily for sharing on Facebook/Instagram
        (see the 4:5 sizing), and "print to PDF then convert to an image" was
@@ -521,6 +525,22 @@
       cert.style.transform = 'none';
       try {
         const canvas = await html2canvas(cert, { useCORS: true, scale: 2, backgroundColor: '#1f4d39' });
+        const pngDataUrl = canvas.toDataURL('image/png');
+        // Inside the native app shell, save straight to Photos — one tap,
+        // no share sheet at all. This needed an actual native plugin
+        // (@capacitor-community/media, see photo-saver.js) since no plain
+        // web API can write to the camera roll directly; it's why this
+        // specific fix needed a real app rebuild/TestFlight upload, not
+        // just a web deploy like everything else on this page.
+        if (window.trtPhotoSaver && window.trtPhotoSaver.isNative()) {
+          try {
+            await window.trtPhotoSaver.saveDataUrl(pngDataUrl);
+            alert('บันทึกรูปลงอัลบั้มแล้วครับ');
+            return;
+          } catch (nativeErr) {
+            console.warn('[trt] native photo save failed, falling back to share/download', nativeErr);
+          }
+        }
         // A synthetic <a download> click is the standard web way to save a
         // generated file, and still works fine in a real browser tab — but
         // inside the app's own Capacitor/WKWebView shell there's no
@@ -535,7 +555,10 @@
         // long-press-on-<img> path this page disables above). Falls back
         // to the old <a download> for a real desktop/mobile browser tab,
         // where Web Share's file support may not exist but downloads work
-        // fine directly.
+        // fine directly. Both of these stay as fallbacks for the web
+        // deploy (or an old app build that hasn't picked up photo-saver.js
+        // yet) — trtPhotoSaver only exists once this fix actually ships in
+        // a native build.
         const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
         const file = blob && new File([blob], 'rayong-trail-certificate.png', { type: 'image/png' });
         if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
@@ -549,7 +572,7 @@
         }
         const link = document.createElement('a');
         link.download = 'rayong-trail-certificate.png';
-        link.href = canvas.toDataURL('image/png');
+        link.href = pngDataUrl;
         link.click();
       } catch (err) {
         console.warn('[trt] save image failed', err);
