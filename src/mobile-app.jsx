@@ -1487,30 +1487,23 @@ function RouteTab({ course, runner, event, spectatorRunner, livePos }) {
   // Moves the runner dot on its own, separate from the (expensive, one-time)
   // map/route setup above — either to a real GPS fix when one's available,
   // or back to the checkpoint-interpolated point along the route otherwise.
-  // lastRawPosRef remembers the last fix that *was* fresh, so a runner's
-  // own GPS genuinely going stale (signal lost, not just finished) holds
-  // the dot at their real last-known spot instead of snapping back to
-  // wherever their last checkpoint scan/auto-checkin happened to be —
-  // which, on a winding course, can read as "teleporting" a large visible
-  // distance backward. Same idea as lastOnCourseKmRef below, just for the
-  // literal lat/lon marker instead of the elevation chart's km axis.
-  const lastRawPosRef = uR(null);
+  // Prefer any last-known GPS fix from Firestore over the checkpoint-
+  // interpolated point, even once it's gone stale (2+ min old, or tracking
+  // stopped after finish/DNF) — that reads as "GPS signal lost around
+  // here," which is what actually happened, instead of snapping back
+  // (possibly a large visible distance, on a winding course) to wherever
+  // the runner's last checkpoint scan/auto-checkin happened to be.
+  // This used to be remembered in a plain useRef instead of reading livePos
+  // directly — fine within one continuous mount, but this component
+  // remounts on every tab switch away and back (or, for FriendMapSheet,
+  // every time that sheet is reopened), which reset the ref to nothing and
+  // dropped straight to the checkpoint fallback until a fresh fix happened
+  // to land. Firestore's livePos doc already holds the real last position
+  // regardless of age, so there's no need to cache it separately here.
   uE(() => {
     if (!mapObj.current || !runnerMarkerRef.current || !course) return;
-    // A GPS fix with lat/lon present isn't necessarily *current* — once a
-    // runner finishes, tracking stops (see scanComplete's
-    // trtGpsTracker.stop()) so livePos is permanently whatever their last
-    // ping happened to be, which could be minutes or a whole checkpoint
-    // away from the finish. Only trust it while it's actually fresh;
-    // otherwise hold at the last position it *was* fresh, falling back to
-    // the checkpoint-interpolated position only if there's never been a
-    // real fix at all yet.
-    const gpsFresh = livePos && livePos.lat != null && livePos.lon != null && livePos.at && (Date.now() - livePos.at) < 2 * 60 * 1000;
-    if (gpsFresh) {
-      lastRawPosRef.current = [livePos.lat, livePos.lon];
-      runnerMarkerRef.current.setLatLng(lastRawPosRef.current);
-    } else if (lastRawPosRef.current) {
-      runnerMarkerRef.current.setLatLng(lastRawPosRef.current);
+    if (livePos && livePos.lat != null && livePos.lon != null) {
+      runnerMarkerRef.current.setLatLng([livePos.lat, livePos.lon]);
     } else {
       const idx = Math.min(course.points.length - 1, Math.round((runner.progressKm / course.totalKm) * course.points.length));
       const pos = course.points[idx];
@@ -2044,22 +2037,21 @@ function FriendMapSheet({ runner, eventId, event, onClose }) {
     setTimeout(() => map.invalidateSize(), 60);
   }, [course]);
 
-  // Same GPS-fresh/last-known-fallback rule as the runner's own Route tab
-  // (see RouteTab's lastRawPosRef) — livePos here only ever comes from
-  // Firestore (this is someone else's device), so it's only ever as fresh
-  // as their last successful sync. Holding at their last real fix instead
-  // of snapping to the checkpoint-interpolated point reads as "GPS signal
-  // lost around here" — which is what actually happened — instead of a
-  // misleading jump back to wherever they last scanned/auto-checked-in.
-  const lastRawPosRef = uR(null);
+  // Prefer any last-known GPS fix from Firestore over the checkpoint-
+  // interpolated point, even once it's gone stale — that reads as "GPS
+  // signal lost around here," which is what actually happened, instead of
+  // a misleading jump back to wherever they last scanned/auto-checked-in.
+  // This used to cache the last fresh fix in a plain useRef, but this
+  // sheet only mounts on demand (see the file note above) — every reopen
+  // started that ref empty again, so a fix that had merely gone stale
+  // (not actually missing from Firestore) still fell all the way back to
+  // the checkpoint position until a brand new fix happened to land.
+  // Firestore's livePos doc already holds the real last position
+  // regardless of age, so there's no need to remember it separately here.
   uE(() => {
     if (!mapObjRef.current || !markerRef.current || !course) return;
-    const gpsFresh = livePos && livePos.lat != null && livePos.lon != null && livePos.at && (Date.now() - livePos.at) < 2 * 60 * 1000;
-    if (gpsFresh) {
-      lastRawPosRef.current = [livePos.lat, livePos.lon];
-      markerRef.current.setLatLng(lastRawPosRef.current);
-    } else if (lastRawPosRef.current) {
-      markerRef.current.setLatLng(lastRawPosRef.current);
+    if (livePos && livePos.lat != null && livePos.lon != null) {
+      markerRef.current.setLatLng([livePos.lat, livePos.lon]);
     } else {
       const idx = Math.min(course.points.length - 1, Math.round(((runner.progressKm || 0) / course.totalKm) * course.points.length));
       const pos = course.points[idx];
