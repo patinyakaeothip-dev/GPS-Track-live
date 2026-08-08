@@ -204,7 +204,7 @@
          actually running the latest deployed code or a cached/stale copy
          of this page. Bump this string on every meaningful change to this
          file so that question can be answered by looking, not guessing. -->
-    <span style="font-size:9px;opacity:0.5;">build 2026-08-08-2</span>
+    <span style="font-size:9px;opacity:0.5;">build 2026-08-08-3</span>
     <button onclick="saveCertImage()">💾 บันทึกรูปภาพ</button>
     <button class="alt" onclick="window.print()">🖨 Print / Save as PDF</button>
     <input type="file" accept="image/*" id="photo-input" style="display:none;">
@@ -619,8 +619,20 @@
         // internal clone against a virtual viewport at least as large as
         // the card itself, regardless of the real device viewport, which
         // is the standard fix for this class of html2canvas bug.
+        //
+        // Measuring that target size from the live DOM (cert.scrollWidth/
+        // scrollHeight) turned out to be unreliable on-device — two saves
+        // of the exact same untouched card came back as 1492×1986 and
+        // 668×1986: identical height, wildly different width, neither
+        // matching the real 4:5 ratio. Computing the expected size
+        // directly from the card's own CSS mm dimensions instead removes
+        // any dependency on a DOM measurement that isn't behaving
+        // consistently in this WKWebView.
+        const MM_TO_PX = 96 / 25.4; // CSS spec: 1in = 96px, 1in = 25.4mm
+        const certWidthPx = Math.round(210 * MM_TO_PX);
+        const certHeightPx = Math.round(262.5 * MM_TO_PX);
         const canvas = await html2canvas(cert, { useCORS: true, scale: 2, backgroundColor: '#1f4d39',
-          windowWidth: cert.scrollWidth, windowHeight: cert.scrollHeight });
+          width: certWidthPx, height: certHeightPx, windowWidth: certWidthPx, windowHeight: certHeightPx });
         const pngDataUrl = canvas.toDataURL('image/png');
         // Inside the native app shell, save straight to Photos — one tap,
         // no share sheet at all. This needed an actual native plugin
