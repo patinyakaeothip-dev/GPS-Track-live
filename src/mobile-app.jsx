@@ -1510,25 +1510,19 @@ function RouteTab({ course, runner, event, spectatorRunner, livePos }) {
       runnerMarkerRef.current.setLatLng([pos[0], pos[1]]);
     }
   }, [course, runner.progressKm, livePos && livePos.lat, livePos && livePos.lon, livePos && livePos.at]);
-  // Elevation profile's "you are here" marker used to only ever move on a
-  // checkpoint scan (progressKm) even after the map dot above switched to
-  // live GPS — same GPS-preferred/checkpoint-fallback rule, just projected
-  // onto the 1-D km axis instead of plotted as raw lat/lon.
-  const gpsLiveForElevation = livePos && livePos.at && (Date.now() - livePos.at) < 2 * 60 * 1000 && livePos.lat != null;
-  const gpsProjection = (gpsLiveForElevation && course) ? nearestKmForPoint(course.points, livePos.lat, livePos.lon, runner.progressKm) : null;
-  // Falling all the way back to progressKm (only ever updated by a
-  // checkpoint scan) the moment someone strayed more than ON_COURSE_KM off
-  // the route made the dot leap *backward* to whichever checkpoint they
-  // last scanned — which could be several km behind where they actually
-  // wandered off, wrongly reading as "climbing/descending the wrong hill"
-  // for something that's supposed to show real-time up/down. Remember the
-  // last point GPS actually confirmed was on-course instead, so the dot
-  // holds there rather than snapping backward.
-  const lastOnCourseKmRef = uR(runner.progressKm);
-  uE(() => {
-    if (gpsProjection && gpsProjection.distKm < ON_COURSE_KM) lastOnCourseKmRef.current = gpsProjection.km;
-  }, [gpsProjection && gpsProjection.km, gpsProjection && gpsProjection.distKm]);
-  const elevationKm = (gpsProjection && gpsProjection.distKm < ON_COURSE_KM) ? gpsProjection.km : Math.max(lastOnCourseKmRef.current, runner.progressKm);
+  // Elevation profile's "you are here" marker — same GPS-preferred/
+  // checkpoint-fallback rule as the map dot above, just projected onto the
+  // 1-D km axis instead of plotted as raw lat/lon. Projects off of any fix
+  // livePos has, regardless of age (same reasoning as the map dot fix
+  // above — this used to gate on 2-minute freshness and remember the last
+  // on-course km in a useRef, both of which reset the moment this
+  // component remounts, e.g. a tab switch away and back). If GPS is off
+  // to the side of the course (further than ON_COURSE_KM), a projected km
+  // isn't trustworthy either way, so this falls back to the plain
+  // checkpoint progress rather than a remembered "last on-course" point.
+  const gpsProjection = (livePos && livePos.lat != null && livePos.lon != null && course)
+    ? nearestKmForPoint(course.points, livePos.lat, livePos.lon, runner.progressKm) : null;
+  const elevationKm = (gpsProjection && gpsProjection.distKm < ON_COURSE_KM) ? gpsProjection.km : runner.progressKm;
   function recenterToMe() {
     const map = mapObj.current, marker = runnerMarkerRef.current;
     if (!map || !marker) return;
@@ -2060,17 +2054,15 @@ function FriendMapSheet({ runner, eventId, event, onClose }) {
   }, [course, runner.progressKm, livePos && livePos.lat, livePos && livePos.lon, livePos && livePos.at]);
 
   const gpsFresh = livePos && livePos.at && (Date.now() - livePos.at) < 2 * 60 * 1000 && livePos.lat != null;
-  // Same GPS-preferred/checkpoint-fallback rule projected onto the 1-D km
-  // axis instead of raw lat/lon — feeds the elevation chart's "you are
-  // here" dot, same idea as RouteTab's elevationKm (including remembering
-  // the last on-course fix instead of snapping backward to whichever
-  // checkpoint they last scanned once they're off-route).
-  const gpsProjection = (gpsFresh && course) ? nearestKmForPoint(course.points, livePos.lat, livePos.lon, runner.progressKm) : null;
-  const lastOnCourseKmRef = uR(runner.progressKm || 0);
-  uE(() => {
-    if (gpsProjection && gpsProjection.distKm < ON_COURSE_KM) lastOnCourseKmRef.current = gpsProjection.km;
-  }, [gpsProjection && gpsProjection.km, gpsProjection && gpsProjection.distKm]);
-  const elevationKm = (gpsProjection && gpsProjection.distKm < ON_COURSE_KM) ? gpsProjection.km : Math.max(lastOnCourseKmRef.current, runner.progressKm || 0);
+  // Same GPS-preferred/checkpoint-fallback rule as the map dot above,
+  // projected onto the 1-D km axis instead of raw lat/lon — projects off
+  // of any fix livePos has regardless of age, same reasoning as the map
+  // dot fix above (this used to gate on gpsFresh and remember the last
+  // on-course km in a useRef, both reset by this sheet's on-demand
+  // remounting).
+  const gpsProjection = (livePos && livePos.lat != null && livePos.lon != null && course)
+    ? nearestKmForPoint(course.points, livePos.lat, livePos.lon, runner.progressKm) : null;
+  const elevationKm = (gpsProjection && gpsProjection.distKm < ON_COURSE_KM) ? gpsProjection.km : (runner.progressKm || 0);
 
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 10, background: '#fff', display: 'flex', flexDirection: 'column' }}>
