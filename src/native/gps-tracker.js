@@ -21,6 +21,11 @@ const BackgroundGeolocation = registerPlugin('BackgroundGeolocation');
 
 let watcherId = null;
 let onPing = null;
+// Identity used for every pushPing while a watcher is running — kept as
+// mutable module state (not captured once in the watcher callback's
+// closure) so a later start() call can correct it, same as onPing below.
+let currentEventId = null;
+let currentBib = null;
 let retryTimerId = null;
 let heartbeatTimerId = null;
 let lastFix = null; // { lat, lon, accuracy, speed } — most recent fix regardless of whether it was far enough to trigger a ping
@@ -142,6 +147,20 @@ async function start(eventId, bib, onPingCb) {
   // take over, even once a watcher's already running, instead of only
   // ever accepting one set at creation time.
   if (onPingCb) onPing = onPingCb;
+  // Same "most recent caller wins" treatment for eventId/bib — the very
+  // first start() call (e.g. AppShell's resume-tracking effect firing on
+  // app load, before the roster sync has patched in this runner's real
+  // bib yet) used to fall back to session.runner.bib || uid || name, and
+  // that fallback identity got permanently baked into the watcher's
+  // closure below. Every later start() call with the *real* bib was a
+  // no-op past the watcherId guard, so pings kept writing to
+  // livePos/<eventId>_<uid> forever — a doc Live Monitor/Friends never
+  // looks at, since they query by bib. Runner's own device still looked
+  // fine (it reads onPing/local state, not Firestore) which is what made
+  // this so easy to miss. Updating these on every call means a later,
+  // correct bib takes over immediately, even once the watcher's running.
+  currentEventId = eventId;
+  currentBib = bib;
   // Idempotent — the app calls this both at the exact moment a runner
   // scans start, and (separately, see mobile-app.jsx's AppShell) on every
   // app load to resume tracking for someone already mid-race after a
@@ -169,7 +188,7 @@ async function start(eventId, bib, onPingCb) {
         if (error) { console.warn('[gps-tracker] native watcher error', error); return; }
         if (!location) return;
         if (!shouldAcceptFix(location.accuracy)) { console.warn('[gps-tracker] dropping low-accuracy native fix', location.accuracy); return; }
-        pushPing(eventId, bib, location.latitude, location.longitude, { accuracy: location.accuracy, speed: location.speed ?? null });
+        pushPing(currentEventId, currentBib, location.latitude, location.longitude, { accuracy: location.accuracy, speed: location.speed ?? null });
       },
     );
     return;
@@ -180,7 +199,7 @@ async function start(eventId, bib, onPingCb) {
     watcherId = navigator.geolocation.watchPosition(
       pos => {
         if (!shouldAcceptFix(pos.coords.accuracy)) { console.warn('[gps-tracker] dropping low-accuracy browser fix', pos.coords.accuracy); return; }
-        pushPing(eventId, bib, pos.coords.latitude, pos.coords.longitude, { accuracy: pos.coords.accuracy, speed: pos.coords.speed ?? null });
+        pushPing(currentEventId, currentBib, pos.coords.latitude, pos.coords.longitude, { accuracy: pos.coords.accuracy, speed: pos.coords.speed ?? null });
       },
       err => console.warn('[gps-tracker] browser watcher error', err),
       { enableHighAccuracy: true, maximumAge: 5000 },
@@ -198,7 +217,7 @@ async function start(eventId, bib, onPingCb) {
       navigator.geolocation.getCurrentPosition(
         pos => {
           if (!shouldAcceptFix(pos.coords.accuracy)) { console.warn('[gps-tracker] dropping low-accuracy catch-up fix', pos.coords.accuracy); return; }
-          pushPing(eventId, bib, pos.coords.latitude, pos.coords.longitude, { accuracy: pos.coords.accuracy, speed: pos.coords.speed ?? null });
+          pushPing(currentEventId, currentBib, pos.coords.latitude, pos.coords.longitude, { accuracy: pos.coords.accuracy, speed: pos.coords.speed ?? null });
         },
         err => console.warn('[gps-tracker] visibility catch-up fix failed', err),
         { enableHighAccuracy: true, maximumAge: 5000 },
@@ -221,6 +240,8 @@ async function stop() {
   else navigator.geolocation.clearWatch(watcherId);
   watcherId = null;
   onPing = null;
+  currentEventId = null;
+  currentBib = null;
 }
 
 window.trtGpsTracker = { start, stop, isNative };
