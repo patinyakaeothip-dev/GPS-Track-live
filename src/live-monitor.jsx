@@ -607,14 +607,6 @@ function LiveMonitorApp() {
     return ms || (earliestStart && earliestStart.getTime()) || null;
   }, [selectedEvent, viewLabel, earliestStart]);
 
-  // Remembers each runner's last fresh GPS fix (by bib) across renders —
-  // once a fix goes stale, the dot holds at the real last-known spot
-  // instead of jumping to the checkpoint-interpolated position, which read
-  // as a misleading teleport backward on a winding course. Only reset by a
-  // fresh fix actually landing; switching events/selection doesn't clear
-  // it, but a different event's runners use different bibs in practice so
-  // stale entries here are just inert, never displayed for the wrong event.
-  const lastRawPosByBibRef = mR({});
   // Real roster → map/ranking rows. Position is each runner's last QR
   // check-in km (progressKm), and pace/staleness are derived from
   // checkin clock times reconstructed against the event's race date — same
@@ -680,15 +672,24 @@ function LiveMonitorApp() {
       // anything about the runner, so show — same as pace instead of a
       // number that looks like real live data.
       const started = status !== 'not_started';
-      // GPS wins for *where the dot sits* whenever a fix is fresh — km/pace/
-      // gradient stay derived from checkpoints regardless, since GPS alone
-      // can't tell progress along a looped course.
+      // GPS wins for *where the dot sits* whenever there's ever been a fix
+      // at all — km/pace/gradient stay derived from checkpoints regardless,
+      // since GPS alone can't tell progress along a looped course.
+      // `gpsLive` (fresh within 2 minutes) only controls the "🟢 สด" badge
+      // and off-route detection above — the position itself prefers any
+      // last-known Firestore fix over the checkpoint-interpolated point
+      // even once it's gone stale, so the dot holds at the real last-known
+      // spot instead of jumping backward to a checkpoint. This used to be
+      // cached in a plain useRef instead of reading livePosByBib directly,
+      // which meant a browser refresh (a fresh page load, so a fresh ref
+      // with nothing in it yet) lost that memory and snapped every runner
+      // back to their checkpoint position until a new fix happened to land
+      // — Firestore always has the real last position already, so there
+      // was never a need to remember it separately client-side.
       const live = livePosByBib[r.bib];
       const gpsLive = !!(live && live.at && (Date.now() - live.at) < 2 * 60 * 1000);
-      const lastRaw = lastRawPosByBibRef.current[r.bib];
-      if (gpsLive) lastRawPosByBibRef.current[r.bib] = { lat: live.lat, lon: live.lon };
-      const mapLat = gpsLive ? live.lat : (lastRaw ? lastRaw.lat : p.lat);
-      const mapLon = gpsLive ? live.lon : (lastRaw ? lastRaw.lon : p.lon);
+      const mapLat = live ? live.lat : p.lat;
+      const mapLon = live ? live.lon : p.lon;
       // The elevation chart's dot used to always project the checkpoint-
       // interpolated point (p.lat/p.lon) onto the course, ignoring a live
       // GPS fix entirely — so it sat frozen at the last checkpoint's km
