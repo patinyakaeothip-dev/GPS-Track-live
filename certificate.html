@@ -204,7 +204,7 @@
          actually running the latest deployed code or a cached/stale copy
          of this page. Bump this string on every meaningful change to this
          file so that question can be answered by looking, not guessing. -->
-    <span style="font-size:9px;opacity:0.5;">build 2026-08-08-1</span>
+    <span style="font-size:9px;opacity:0.5;">build 2026-08-08-2</span>
     <button onclick="saveCertImage()">💾 บันทึกรูปภาพ</button>
     <button class="alt" onclick="window.print()">🖨 Print / Save as PDF</button>
     <input type="file" accept="image/*" id="photo-input" style="display:none;">
@@ -534,37 +534,50 @@
       ctx.drawImage(source, 0, 0, srcW, srcH, drawX, drawY, drawW, drawH);
       return canvas.toDataURL('image/jpeg', PHOTO_QUALITY);
     }
+    // Plain `new Image()` off a blob: URL — leaves EXIF-rotation handling
+    // to the engine's own default behavior, unlike createImageBitmap's
+    // explicit imageOrientation option below. Kept as the fallback decode
+    // path (not the primary one) since it's universally supported.
+    function decodeViaImage(file) {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        const objectUrl = URL.createObjectURL(file);
+        img.onload = () => { URL.revokeObjectURL(objectUrl); resolve({ source: img, w: img.naturalWidth, h: img.naturalHeight }); };
+        img.onerror = () => { URL.revokeObjectURL(objectUrl); reject(new Error('image decode failed')); };
+        img.src = objectUrl;
+      });
+    }
     function resizePhoto(file) {
       // createImageBitmap({imageOrientation: 'from-image'}) explicitly
-      // tells the browser to decode with EXIF rotation applied — the old
-      // approach (plain `new Image()` off a blob: URL, reading
-      // naturalWidth/naturalHeight) leaves that to each engine's own
+      // tells the browser to decode with EXIF rotation applied — the
+      // decodeViaImage fallback above leaves that to each engine's own
       // default behavior, which desktop Safari/Chrome happen to get right
       // but the app's WKWebView did not: a landscape photo (e.g. a wide
       // group shot) came out center-cropped as if it were already
       // portrait-shaped, squeezing everyone into a narrow strip — reported
       // as "รูปมันบีบ" specifically inside the app, never on the web,
       // which is exactly this kind of WebView-vs-Safari inconsistency.
-      // Falls back to the old Image-based path only if createImageBitmap
-      // itself isn't available at all (very old browsers).
-      if (window.createImageBitmap) {
-        return createImageBitmap(file, { imageOrientation: 'from-image' })
-          .then(bitmap => {
-            const dataUrl = padToRatio(bitmap, bitmap.width, bitmap.height);
-            bitmap.close();
-            return dataUrl;
-          });
-      }
-      return new Promise((resolve, reject) => {
-        const img = new Image();
-        const objectUrl = URL.createObjectURL(file);
-        img.onload = () => {
-          URL.revokeObjectURL(objectUrl);
-          resolve(padToRatio(img, img.naturalWidth, img.naturalHeight));
-        };
-        img.onerror = () => { URL.revokeObjectURL(objectUrl); reject(new Error('image decode failed')); };
-        img.src = objectUrl;
-      });
+      //
+      // But createImageBitmap existing is not the same as the
+      // imageOrientation option being supported — an iOS version old
+      // enough to lack that option can reject the whole call outright
+      // (a TypeError on the options dictionary), which previously had no
+      // fallback at all: attaching a photo silently did nothing on such a
+      // device ("กดแนบรูปไม่ขึ้น"), the exact failure mode this project's
+      // other fixes keep needing "did this actually fail, or just look
+      // like it didn't?" debugging for. Always fall through to
+      // decodeViaImage on *any* failure here, not just when the API is
+      // completely absent.
+      const bitmapAttempt = window.createImageBitmap
+        ? createImageBitmap(file, { imageOrientation: 'from-image' }).then(bitmap => ({ source: bitmap, w: bitmap.width, h: bitmap.height, isBitmap: true }))
+        : Promise.reject(new Error('createImageBitmap unsupported'));
+      return bitmapAttempt
+        .catch(err => { console.warn('[trt] createImageBitmap decode failed, falling back', err); return decodeViaImage(file); })
+        .then(({ source, w, h, isBitmap }) => {
+          const dataUrl = padToRatio(source, w, h);
+          if (isBitmap) source.close();
+          return dataUrl;
+        });
     }
     document.getElementById('photo-input').addEventListener('change', async (e) => {
       const file = e.target.files && e.target.files[0];
