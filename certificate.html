@@ -14,7 +14,7 @@
       font-family: 'Geist', 'Noto Sans Thai', ui-sans-serif, system-ui, sans-serif;
       background: #d8d2c2; color: #1f2a1c; }
 
-    .toolbar { padding: 12px 20px; background: #1f4d39; color: #fff;
+    .toolbar { padding: 12px 20px calc(12px + env(safe-area-inset-bottom)); background: #1f4d39; color: #fff;
       display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
       font-size: 14px; }
     .toolbar button { padding: 8px 16px; background: #fff; color: #1f4d39;
@@ -183,15 +183,6 @@
        every other third-party lib this project already uses (React,
        Leaflet, jsQR, ...). -->
   <script src="https://unpkg.com/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
-  <div class="toolbar no-print">
-    <span>📜 ใบประกาศ</span>
-    <button onclick="saveCertImage()">💾 บันทึกรูปภาพ</button>
-    <button class="alt" onclick="window.print()">🖨 Print / Save as PDF</button>
-    <input type="file" accept="image/*" id="photo-input" style="display:none;">
-    <button id="photo-btn" onclick="document.getElementById('photo-input').click()">📷 แนบรูป</button>
-    <button class="alt" id="photo-remove-btn" onclick="removePhoto()" style="display:none;">✕ ลบรูป</button>
-    <button class="alt" onclick="window.history.back()">← กลับ</button>
-  </div>
 
   <div class="stage">
     <div class="cert">
@@ -255,6 +246,22 @@
         </div>
       </div>
     </div>
+  </div>
+
+  <!-- Was a top toolbar, one row above the photo — on a real phone that
+       sat right under the notch/Dynamic Island/status bar, so "บันทึกรูปภาพ"
+       in particular got physically covered and couldn't be tapped at all.
+       Moved below the photo instead (a normal, always-reachable spot on a
+       tall page you scroll down through) — same buttons, same behavior,
+       just relocated. -->
+  <div class="toolbar no-print">
+    <span>📜 ใบประกาศ</span>
+    <button onclick="saveCertImage()">💾 บันทึกรูปภาพ</button>
+    <button class="alt" onclick="window.print()">🖨 Print / Save as PDF</button>
+    <input type="file" accept="image/*" id="photo-input" style="display:none;">
+    <button id="photo-btn" onclick="document.getElementById('photo-input').click()">📷 แนบรูป</button>
+    <button class="alt" id="photo-remove-btn" onclick="removePhoto()" style="display:none;">✕ ลบรูป</button>
+    <button class="alt" onclick="window.history.back()">← กลับ</button>
   </div>
 
   <script>
