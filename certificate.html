@@ -14,15 +14,24 @@
       font-family: 'Geist', 'Noto Sans Thai', ui-sans-serif, system-ui, sans-serif;
       background: #d8d2c2; color: #1f2a1c; }
 
-    .toolbar { padding: calc(12px + env(safe-area-inset-top)) 20px 12px; background: #1f4d39; color: #fff;
+    /* Fixed to the bottom of the viewport (not just "below the photo" in
+       normal document flow) so it's always on-screen and tappable without
+       scrolling, on a page/card that's routinely taller than one screen —
+       the two things this page's toolbar placement needs (clear of the
+       top notch/status bar, and reachable with no scrolling) turned out to
+       need floating, not just picking one static spot in the flow. */
+    .toolbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
+      padding: 12px 20px calc(12px + env(safe-area-inset-bottom)); background: #1f4d39; color: #fff;
       display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
-      font-size: 14px; }
+      font-size: 14px; box-shadow: 0 -2px 12px rgba(0,0,0,0.25); }
     .toolbar button { padding: 8px 16px; background: #fff; color: #1f4d39;
       border: none; border-radius: 4px; font-weight: 600; cursor: pointer;
       font-family: inherit; font-size: 14px; }
     .toolbar button.alt { background: transparent; color: #fff;
       border: 1px solid rgba(255,255,255,0.4); }
-    .stage { padding: 24px; display: flex; justify-content: center; overflow-x: hidden; }
+    /* padding-bottom reserves space for the now-floating .toolbar so it
+       doesn't sit on top of/hide whatever's at the bottom of the card. */
+    .stage { padding: 24px 24px calc(90px + env(safe-area-inset-bottom)); display: flex; justify-content: center; overflow-x: hidden; }
 
     /* 210mm × 262.5mm = a 4:5 ratio — Instagram's recommended portrait post
        size (and works fine for Facebook too), instead of A4's taller 210:297
@@ -577,7 +586,21 @@
       const prevTransform = cert.style.transform;
       cert.style.transform = 'none';
       try {
-        const canvas = await html2canvas(cert, { useCORS: true, scale: 2, backgroundColor: '#1f4d39' });
+        // html2canvas has a well-documented bug where it mis-renders an
+        // element significantly larger than the *current* viewport — the
+        // .cert card is physically ~794px wide (210mm) regardless of
+        // device, but a portrait phone viewport is only ~390-430px, far
+        // smaller. Reported as the saved photo coming out squeezed/
+        // stretched specifically when the phone was held portrait while
+        // saving, but fine in landscape (a wider viewport, closer to the
+        // card's own size) — same photo, same crop, same everything else;
+        // only the viewport size at the moment of capture differed.
+        // windowWidth/windowHeight tell html2canvas to lay out its
+        // internal clone against a virtual viewport at least as large as
+        // the card itself, regardless of the real device viewport, which
+        // is the standard fix for this class of html2canvas bug.
+        const canvas = await html2canvas(cert, { useCORS: true, scale: 2, backgroundColor: '#1f4d39',
+          windowWidth: cert.scrollWidth, windowHeight: cert.scrollHeight });
         const pngDataUrl = canvas.toDataURL('image/png');
         // Inside the native app shell, save straight to Photos — one tap,
         // no share sheet at all. This needed an actual native plugin
