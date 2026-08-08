@@ -1087,13 +1087,20 @@ function checkpointLatLon(course, km) {
 }
 // 50m — generous enough to fire reliably despite typical trail GPS drift
 // (worse under tree canopy) without being so wide it could plausibly
-// overlap a neighboring checkpoint. Requiring AUTO_CHECKIN_CONFIRM_HITS
-// consecutive fixes inside the radius (not just one) is what actually
-// guards against a single bad fix causing a false check-in — one stray
-// reading lands inside the radius reasonably often on a winding trail,
-// two in a row much less so.
+// overlap a neighboring checkpoint.
 const AUTO_CHECKIN_RADIUS_KM = 0.05;
-const AUTO_CHECKIN_CONFIRM_HITS = 2;
+// Requiring 2 consecutive fixes inside the radius (not just one) used to
+// guard against a single bad fix causing a false check-in — but the
+// native watcher's own distanceFilter (50m) only delivers a new fix every
+// ~50m of movement, the same order of magnitude as this radius. A runner
+// clipping the edge of the geofence (not passing straight through its
+// center) commonly gets exactly one fix inside it before the next fix,
+// 50m further along the trail, lands back outside — hits resets to 0 and
+// the checkpoint never confirms, even though a real fix was seen inside
+// the radius (visibly, on Live Monitor) at the time. 1 hit is enough;
+// accuracy filtering (shouldAcceptFix) already screens out the kind of
+// wildly-off fix this was meant to protect against.
+const AUTO_CHECKIN_CONFIRM_HITS = 1;
 // Same idea as src/course-geo.js's nearestKmOnTrack (project a lat/lon onto
 // the recorded track, return the nearest point's km) but working against
 // this app's tuple point shape ([lat, lon, ele, km]) instead of that
