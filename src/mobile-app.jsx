@@ -1897,7 +1897,7 @@ function runnerStatusLabel(r) {
 // map. 10 is generous for the actual use case (a group of friends running
 // together) without inviting that.
 const MULTI_MAP_LIMIT = 10;
-function FriendsTab({ eventId, event, followedBib, favBibs, onAddFavorite, onRemoveFavorite }) {
+function FriendsTab({ eventId, event, followedBib, favBibs, onAddFavorite, onRemoveFavorite, onFollow }) {
   const [runners, setRunners] = uS(() => (eventId && window.runnerStore ? window.runnerStore.listRunners(eventId) : []));
   const [detailBib, setDetailBib] = uS(null);
   const [multiMode, setMultiMode] = uS(false);
@@ -1968,6 +1968,16 @@ function FriendsTab({ eventId, event, followedBib, favBibs, onAddFavorite, onRem
                     <div style={{ fontSize: 14, fontWeight: 600 }}>{r.nickname}</div>
                     <div style={{ fontFamily: C.mono, fontSize: 10.5, color: C.muted }}>bib {r.bib} · {r.distance} · {runnerStatusLabel(r)}</div>
                   </div>
+                  {/* Switches Route tab's checkpoint view to this friend
+                      directly — used to only be reachable by backing all
+                      the way out to the Event tab and re-picking a name
+                      from "follow the race" scratch. Only spectators (not
+                      a registered runner's own session) have anyone to
+                      switch to here at all — see onFollow's null for a
+                      runner's own session in AppShell. */}
+                  {!multiMode && onFollow && r.bib !== followedBib && (
+                    <button onClick={e => { e.stopPropagation(); onFollow(r.bib); }} style={{ padding: '5px 9px', background: 'transparent', border: `1px solid ${C.brand}`, borderRadius: 8, fontFamily: C.mono, fontSize: 10, fontWeight: 700, color: C.brand, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>ติดตาม</button>
+                  )}
                   {!multiMode && <span onClick={e => { e.stopPropagation(); onRemoveFavorite(r.bib); }} style={{ fontSize: 18, cursor: 'pointer', color: '#e0453e', lineHeight: 1 }}>♥</span>}
                 </div>
               );
@@ -1982,7 +1992,8 @@ function FriendsTab({ eventId, event, followedBib, favBibs, onAddFavorite, onRem
         </div>
       )}
 
-      {detail && <FriendDetailSheet runner={detail} eventId={eventId} event={event} onClose={() => setDetailBib(null)}/>}
+      {detail && <FriendDetailSheet runner={detail} eventId={eventId} event={event} onClose={() => setDetailBib(null)}
+        onFollow={onFollow && detail.bib !== followedBib ? () => { onFollow(detail.bib); setDetailBib(null); } : null}/>}
       {showMultiMap && <FriendsMultiMapSheet runners={multiRunners} eventId={eventId} event={event} onClose={() => setShowMultiMap(false)}/>}
     </div>
   );
@@ -1993,7 +2004,7 @@ function FriendsTab({ eventId, event, followedBib, favBibs, onAddFavorite, onRem
 // runner's session can only ever be a runner or a spectator, not both, so
 // following a friend from inside your own Track tab needs its own lighter
 // view rather than reusing the full follow-a-race flow.
-function FriendDetailSheet({ runner: r, eventId, event, onClose }) {
+function FriendDetailSheet({ runner: r, eventId, event, onClose, onFollow }) {
   const cks = r.checkins || [];
   const last = cks[cks.length - 1];
   const [showMap, setShowMap] = uS(false);
@@ -2018,6 +2029,7 @@ function FriendDetailSheet({ runner: r, eventId, event, onClose }) {
           ? <div style={{ fontSize: 13.5, marginBottom: 14 }}>{cpCheckinLabel(last.cp)} · <span style={{ fontFamily: C.mono, color: C.muted }}>{last.t} น.</span></div>
           : <div style={{ fontSize: 13, color: C.muted, marginBottom: 14 }}>ยังไม่มีการเช็คอิน</div>}
         <Btn variant="ghost" onClick={() => setShowMap(true)}>📍 ดูตำแหน่ง GPS บนแผนที่</Btn>
+        {onFollow && <div style={{ marginTop: 8 }}><Btn variant="primary" onClick={onFollow}>👣 ติดตามคนนี้ (Route tab)</Btn></div>}
       </div>
       {showMap && <FriendMapSheet runner={r} eventId={eventId} event={event} onClose={() => setShowMap(false)}/>}
     </Overlay>
@@ -2811,7 +2823,17 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
             rows and Ranking just rendered blank for every spectator
             following a real event. */}
         {tab === 'ranking' && <RankingTab snap={snap} eventId={currentEventId} event={currentEvent}/>}
-        {tab === 'friends' && <FriendsTab eventId={currentEventId} event={currentEvent} followedBib={isSpectator ? session.followBib : (session.runner && session.runner.bib)} favBibs={favBibs} onAddFavorite={() => setPickingFav(true)} onRemoveFavorite={toggleFavorite}/>}
+        {/* Only spectators (not a registered runner's own session) can
+            switch who Route tab's checkpoint view follows — a runner's own
+            Route tab stays about their own race regardless of who they
+            look at in Friends, same as it always has (see FriendMapSheet/
+            FriendDetailSheet for that case instead). Before this, the only
+            way to switch who "follow the race" was watching required
+            backing all the way out to the Event tab and re-picking a name
+            from scratch — Route tab kept showing whoever was picked there
+            no matter who got tapped inside Friends afterward. */}
+        {tab === 'friends' && <FriendsTab eventId={currentEventId} event={currentEvent} followedBib={isSpectator ? session.followBib : (session.runner && session.runner.bib)} favBibs={favBibs} onAddFavorite={() => setPickingFav(true)} onRemoveFavorite={toggleFavorite}
+          onFollow={isSpectator ? (bib) => persist({ ...session, followBib: bib }) : null}/>}
       </div>
       <div style={{ flexShrink: 0, display: 'flex', borderTop: `1px solid #d8d2c2`, background: '#fff', padding: '6px 4px 20px' }}>
         {TABS.map(([k, Icon, label]) => (
