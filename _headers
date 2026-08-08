@@ -9,9 +9,17 @@
 # the old code." Force revalidation on every request for anything that
 # isn't a fingerprinted third-party asset, so a hard refresh (or even a
 # normal reload) always gets the latest deployed version.
+#
+# no-cache (not no-store) used to be here — technically correct (it means
+# "revalidate before use," not "don't cache"), but the iOS app shell's
+# WKWebView disk cache kept serving a stale copy of src/mobile-app.jsx
+# across full force-quit-and-relaunch cycles anyway, well past when the
+# fix had actually deployed. no-store removes any ambiguity: nothing gets
+# stored at all, so there's no stale copy that a client's cache can choose
+# not to revalidate correctly.
 
 /*
-  Cache-Control: no-cache
+  Cache-Control: no-store
   Cross-Origin-Opener-Policy: same-origin-allow-popups
 
 /assets/*
