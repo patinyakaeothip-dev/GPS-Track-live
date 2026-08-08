@@ -525,6 +525,8 @@
   var BackgroundGeolocation = registerPlugin("BackgroundGeolocation");
   var watcherId = null;
   var onPing = null;
+  var currentEventId = null;
+  var currentBib = null;
   var retryTimerId = null;
   var heartbeatTimerId = null;
   var lastFix = null;
@@ -596,6 +598,8 @@
   }
   async function start(eventId, bib, onPingCb) {
     if (onPingCb) onPing = onPingCb;
+    currentEventId = eventId;
+    currentBib = bib;
     if (watcherId != null) return;
     retryTimerId = setInterval(flushPending, 15e3);
     window.addEventListener("online", flushPending);
@@ -623,7 +627,7 @@
             console.warn("[gps-tracker] dropping low-accuracy native fix", location.accuracy);
             return;
           }
-          pushPing(eventId, bib, location.latitude, location.longitude, { accuracy: location.accuracy, speed: location.speed ?? null });
+          pushPing(currentEventId, currentBib, location.latitude, location.longitude, { accuracy: location.accuracy, speed: location.speed ?? null });
         }
       );
       return;
@@ -635,7 +639,7 @@
             console.warn("[gps-tracker] dropping low-accuracy browser fix", pos.coords.accuracy);
             return;
           }
-          pushPing(eventId, bib, pos.coords.latitude, pos.coords.longitude, { accuracy: pos.coords.accuracy, speed: pos.coords.speed ?? null });
+          pushPing(currentEventId, currentBib, pos.coords.latitude, pos.coords.longitude, { accuracy: pos.coords.accuracy, speed: pos.coords.speed ?? null });
         },
         (err) => console.warn("[gps-tracker] browser watcher error", err),
         { enableHighAccuracy: true, maximumAge: 5e3 }
@@ -648,7 +652,7 @@
               console.warn("[gps-tracker] dropping low-accuracy catch-up fix", pos.coords.accuracy);
               return;
             }
-            pushPing(eventId, bib, pos.coords.latitude, pos.coords.longitude, { accuracy: pos.coords.accuracy, speed: pos.coords.speed ?? null });
+            pushPing(currentEventId, currentBib, pos.coords.latitude, pos.coords.longitude, { accuracy: pos.coords.accuracy, speed: pos.coords.speed ?? null });
           },
           (err) => console.warn("[gps-tracker] visibility catch-up fix failed", err),
           { enableHighAccuracy: true, maximumAge: 5e3 }
@@ -679,6 +683,8 @@
     else navigator.geolocation.clearWatch(watcherId);
     watcherId = null;
     onPing = null;
+    currentEventId = null;
+    currentBib = null;
   }
   window.trtGpsTracker = { start, stop, isNative };
 })();

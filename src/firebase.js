@@ -109,8 +109,16 @@ if (!configured) {
       const snap = await getDocs(collection(db, colName));
       return snap.docs.map(d => ({ id: d.id, ...d.data() }));
     },
-    async setDocById(colName, id, data) {
-      await setDoc(doc(db, colName, id), data);
+    // merge=true writes only the given fields (Firestore-side merge) instead
+    // of replacing the whole document — needed by callers that only have a
+    // partial patch built from a possibly-stale local cache (see
+    // runner-store.js's updateRunnerProgress). Writing that stale full
+    // object with a plain setDoc used to silently resurrect old field
+    // values (e.g. an out-of-date `checkins` missing a finish another
+    // device had already recorded) on top of whatever was actually current
+    // in Firestore.
+    async setDocById(colName, id, data, { merge = false } = {}) {
+      await setDoc(doc(db, colName, id), data, merge ? { merge: true } : undefined);
     },
     async deleteDocById(colName, id) {
       await deleteDoc(doc(db, colName, id));

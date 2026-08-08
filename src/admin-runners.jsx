@@ -10,6 +10,25 @@ const { useState: rS, useEffect: rE } = React;
 
 const R_BRAND = '#2d6a4f', R_MONO = "'JetBrains Mono',ui-monospace,monospace";
 
+// Same checkpoint-sequence helpers as mobile-app.jsx's cpSeqFor/cpLabelFor/
+// cpKmFor — small duplication accepted rather than pulling this page into a
+// shared module, same tradeoff as ADMIN_EMAILS above.
+function cpSeqFor(event) {
+  return ['start', ...((event && event.checkpoints) || []).map(c => c.id), 'finish'];
+}
+function cpLabelFor(event, cpId) {
+  if (cpId === 'start') return 'จุดสตาร์ท';
+  if (cpId === 'finish') return 'เส้นชัย';
+  const cp = event && (event.checkpoints || []).find(c => c.id === cpId);
+  return cp ? cp.label : cpId;
+}
+function cpKmFor(event, cpId, distLabel) {
+  if (cpId === 'start') return 0;
+  if (cpId === 'finish') return parseFloat(distLabel) || 0;
+  const cp = event && (event.checkpoints || []).find(c => c.id === cpId);
+  return cp ? (parseFloat(cp.km) || 0) : 0;
+}
+
 // Kept in sync with ADMIN_EMAILS in src/admin-app.jsx by hand — small
 // duplication accepted here to keep this page a standalone entry point
 // instead of depending on admin-app.jsx's internals.
@@ -109,10 +128,37 @@ function RunnerManagerApp({ adminEmail, onLogout }) {
   const [showCancelled, setShowCancelled] = rS(false);
   const [toast, setToast] = rS(null);
   const [expandedId, setExpandedId] = rS(null);
+  const [ckExpandedId, setCkExpandedId] = rS(null);
+  const [ckAddCp, setCkAddCp] = rS('');
+  const [ckAddTime, setCkAddTime] = rS('');
   function flash(msg) { setToast(msg); setTimeout(() => setToast(null), 1600); }
 
   function editRunner(r, patch) {
     window.runnerStore.updateRunnerProgress(r.id, patch);
+  }
+  // Manual checkin fix-up — a runner who missed a real scan (forgot to
+  // scan start, auto-checkin's GPS geofence never caught them at a
+  // checkpoint they physically passed) had no way to recover; auto mode
+  // in particular has no fallback QR button at all, so nothing but this
+  // could unstick them. progressKm is kept in step with the added/removed
+  // checkpoint the same way the runner's own QR-scan flow does, so
+  // Track/Route/Ranking read a consistent position afterward.
+  function addCheckin(r) {
+    if (!ckAddCp) return;
+    const t = (ckAddTime || new Date().toTimeString().slice(0, 8)).trim();
+    if (!/^\d{1,2}:\d{2}(:\d{2})?$/.test(t)) { flash('รูปแบบเวลาไม่ถูกต้อง (HH:MM หรือ HH:MM:SS)'); return; }
+    const normalizedT = t.length === 5 ? `${t}:00` : t;
+    const checkins = [...(r.checkins || []).filter(c => c.cp !== ckAddCp), { cp: ckAddCp, t: normalizedT }];
+    const km = cpKmFor(selectedEvent, ckAddCp, r.distance);
+    editRunner(r, { checkins, progressKm: Math.max(km, r.progressKm || 0) });
+    setCkAddCp(''); setCkAddTime('');
+    flash(`✓ เพิ่มเช็คอิน ${cpLabelFor(selectedEvent, ckAddCp)} ให้ #${r.bib} แล้ว`);
+  }
+  function removeCheckin(r, cp) {
+    if (!window.confirm(`ลบเช็คอิน "${cpLabelFor(selectedEvent, cp)}" ของ #${r.bib}?`)) return;
+    const checkins = (r.checkins || []).filter(c => c.cp !== cp);
+    editRunner(r, { checkins });
+    flash(`✓ ลบเช็คอิน ${cpLabelFor(selectedEvent, cp)} แล้ว`);
   }
   function cancelRunner(r) {
     if (!window.confirm(`ยกเลิกการลงทะเบียนของ "${r.nickname}" (บิบ #${r.bib})? บิบนี้จะไม่ถูกใช้ซ้ำ · ยังดูประวัติย้อนหลังได้`)) return;
@@ -225,7 +271,7 @@ function RunnerManagerApp({ adminEmail, onLogout }) {
             <div key={r.id}>
             <div style={{ display: 'grid', gridTemplateColumns: '54px 1.4fr 1fr 90px 64px 80px auto auto auto', gap: 8, alignItems: 'center',
               padding: '8px 10px', background: r.dnf ? '#fef7f7' : '#fafaf8', border: `1px solid ${r.dnf ? '#f0c9c4' : '#ece7da'}`,
-              borderRadius: expandedId === r.id ? '10px 10px 0 0' : 10 }}>
+              borderRadius: (expandedId === r.id || ckExpandedId === r.id) ? '10px 10px 0 0' : 10 }}>
               <span style={{ fontFamily: R_MONO, fontSize: 12, fontWeight: 700 }}>#{r.bib}</span>
               <input value={r.nickname} onChange={e => editRunner(r, { nickname: e.target.value })} style={inputStyle}/>
               <input value={r.phone} onChange={e => editRunner(r, { phone: e.target.value })} style={{ ...inputStyle, fontFamily: R_MONO }}/>
@@ -248,11 +294,36 @@ function RunnerManagerApp({ adminEmail, onLogout }) {
                 <option value="m">ชาย</option>
                 <option value="f">หญิง</option>
               </select>
-              <span style={{ fontFamily: R_MONO, fontSize: 10.5, color: '#5d6b59', textAlign: 'center' }}>{(r.checkins || []).length} เช็คอิน</span>
+              <button onClick={() => { setCkExpandedId(ckExpandedId === r.id ? null : r.id); setCkAddCp(''); setCkAddTime(''); }} title="แก้ไขเช็คอิน" style={{ fontFamily: R_MONO, fontSize: 10.5, color: ckExpandedId === r.id ? '#fff' : '#5d6b59', textAlign: 'center', background: ckExpandedId === r.id ? R_BRAND : 'transparent', border: `1px solid ${ckExpandedId === r.id ? R_BRAND : '#d8d2c2'}`, borderRadius: 8, padding: '6px 4px', cursor: 'pointer' }}>{(r.checkins || []).length} เช็คอิน</button>
               <button onClick={() => setExpandedId(expandedId === r.id ? null : r.id)} title="ข้อมูลฉุกเฉิน / กรุ๊ปเลือด" style={{ padding: '6px 9px', background: expandedId === r.id ? '#dc2626' : 'transparent', color: expandedId === r.id ? '#fff' : '#dc2626', border: '1px solid #dc2626', borderRadius: 8, fontFamily: R_MONO, fontSize: 10, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>🆘 ฉุกเฉิน</button>
               <button onClick={() => toggleDnf(r)} style={{ padding: '6px 9px', background: r.dnf ? '#b91c1c' : 'transparent', color: r.dnf ? '#fff' : '#b91c1c', border: '1px solid #b91c1c', borderRadius: 8, fontFamily: R_MONO, fontSize: 10, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>{r.dnf ? 'ยกเลิก DNF' : 'Mark DNF'}</button>
               <button onClick={() => cancelRunner(r)} style={{ padding: '6px 9px', background: 'transparent', color: '#5d6b59', border: '1px solid #d8d2c2', borderRadius: 8, fontFamily: R_MONO, fontSize: 10, fontWeight: 700, cursor: 'pointer' }}>ยกเลิก</button>
             </div>
+            {ckExpandedId === r.id && (
+              <div style={{ padding: '12px 14px', background: '#f4f7f4', border: '1px solid #d9e5db', borderTop: 'none', borderRadius: expandedId === r.id ? 0 : '0 0 10px 10px', fontSize: 12 }}>
+                {(r.checkins || []).length === 0 && <div style={{ color: '#5d6b59', fontFamily: R_MONO, fontSize: 11, marginBottom: 10 }}>ยังไม่มีเช็คอิน</div>}
+                {(r.checkins || []).length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 10 }}>
+                    {r.checkins.map(c => (
+                      <div key={c.cp} style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: R_MONO, fontSize: 11 }}>
+                        <span style={{ flex: 1 }}>{cpLabelFor(selectedEvent, c.cp)}</span>
+                        <span style={{ color: '#5d6b59' }}>{c.t}</span>
+                        <button onClick={() => removeCheckin(r, c.cp)} style={{ padding: '3px 7px', background: 'transparent', color: '#b91c1c', border: '1px solid #f0c9c4', borderRadius: 6, fontFamily: R_MONO, fontSize: 10, fontWeight: 700, cursor: 'pointer' }}>ลบ</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <select value={ckAddCp} onChange={e => setCkAddCp(e.target.value)} style={{ ...inputStyle, width: 'auto', fontFamily: R_MONO }}>
+                    <option value="">— เลือกจุดเช็คอิน —</option>
+                    {cpSeqFor(selectedEvent).map(cp => <option key={cp} value={cp}>{cpLabelFor(selectedEvent, cp)}</option>)}
+                  </select>
+                  <input value={ckAddTime} onChange={e => setCkAddTime(e.target.value)} placeholder={new Date().toTimeString().slice(0, 8)} style={{ ...inputStyle, width: 100, fontFamily: R_MONO }}/>
+                  <button onClick={() => addCheckin(r)} disabled={!ckAddCp} style={{ padding: '6px 12px', background: ckAddCp ? R_BRAND : '#e5e0d3', color: '#fff', border: 'none', borderRadius: 8, fontFamily: R_MONO, fontSize: 10.5, fontWeight: 700, cursor: ckAddCp ? 'pointer' : 'not-allowed' }}>+ เพิ่ม/แก้ไข</button>
+                  <span style={{ fontFamily: R_MONO, fontSize: 9.5, color: '#5d6b59' }}>เว้นเวลาไว้ = ใช้เวลาปัจจุบัน · เลือกจุดที่เช็คอินไปแล้วเพื่อแก้เวลา</span>
+                </div>
+              </div>
+            )}
             {expandedId === r.id && (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, padding: '12px 14px', background: '#fef2f2', border: '1px solid #fecaca', borderTop: 'none', borderRadius: '0 0 10px 10px', fontSize: 12 }}>
                 {/* Editable — a runner who registered before this info was

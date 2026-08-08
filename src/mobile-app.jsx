@@ -1360,7 +1360,18 @@ function TrackTab({ runner, event, onScan, onSos, onDnf, offRoute, onCancelSos }
         // work outside the app's WebView either. Navigating in place
         // keeps everything in the same context; certificate.html has its
         // own "App" link to get back.
-        <Btn variant="primary" onClick={() => { window.location.href = 'certificate.html'; }}>🏅 บันทึกใบประกาศ</Btn>
+        //
+        // Always pass ?event=&bib= (not just rely on the localStorage
+        // write from saveCertificateResult()) — this device's own
+        // `finished` state can flip true from a roster sync alone (e.g.
+        // a finish check-in scanned by course staff, or auto-checkin
+        // firing on a *different* device than the one displaying this
+        // button) without saveCertificateResult() ever having run here,
+        // which left localStorage empty and the certificate blank. The
+        // query params make certificate.html rebuild straight from the
+        // synced roster instead, the same reliable path the
+        // Results/Ranking link already uses.
+        <Btn variant="primary" onClick={() => { window.location.href = `certificate.html?event=${encodeURIComponent(runner.eventId)}&bib=${encodeURIComponent(runner.bib)}`; }}>🏅 บันทึกใบประกาศ</Btn>
       ) : !runner.dnf ? (
         <div style={{ display: 'flex', gap: 10 }}>
           {/* Auto mode has nothing for the runner to tap for mid-course
