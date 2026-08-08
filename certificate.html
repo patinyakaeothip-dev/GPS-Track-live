@@ -442,15 +442,49 @@
       if (currentPhotoKey) { try { localStorage.removeItem(currentPhotoKey); } catch (e) {} }
       applyPhoto(null);
     }
-    document.getElementById('photo-input').addEventListener('change', (e) => {
+    // A raw camera photo used straight off the file input — no resizing —
+    // used to get loaded into <img> and localStorage at full original size
+    // (a modern phone photo easily runs 4-12MB before even base64-inflating
+    // ~33% on top of that). Decoding that into a full-resolution bitmap
+    // inside a Capacitor WKWebView pushed memory high enough that iOS
+    // killed the whole app outright ("ปิดตัวลงโดยไม่ทราบสาเหตุ") — this
+    // page is the finish line, the worst possible moment for that to
+    // happen. Downscaling through a canvas first (long edge capped, then
+    // re-encoded as a modest-quality JPEG) cuts a several-MB original down
+    // to a few hundred KB before it's ever decoded to display size or
+    // written to localStorage, fixing both the memory spike and (since
+    // localStorage has its own multi-MB-per-origin quota) the silent
+    // "photo doesn't actually save" failure a too-large original could
+    // also cause.
+    const PHOTO_MAX_DIM = 1600;
+    const PHOTO_QUALITY = 0.85;
+    function resizePhoto(file) {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        const objectUrl = URL.createObjectURL(file);
+        img.onload = () => {
+          URL.revokeObjectURL(objectUrl);
+          const scale = Math.min(1, PHOTO_MAX_DIM / Math.max(img.naturalWidth, img.naturalHeight));
+          const w = Math.round(img.naturalWidth * scale), h = Math.round(img.naturalHeight * scale);
+          const canvas = document.createElement('canvas');
+          canvas.width = w; canvas.height = h;
+          canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+          resolve(canvas.toDataURL('image/jpeg', PHOTO_QUALITY));
+        };
+        img.onerror = () => { URL.revokeObjectURL(objectUrl); reject(new Error('image decode failed')); };
+        img.src = objectUrl;
+      });
+    }
+    document.getElementById('photo-input').addEventListener('change', async (e) => {
       const file = e.target.files && e.target.files[0];
       if (!file || !currentPhotoKey) return;
-      const reader = new FileReader();
-      reader.onload = () => {
-        try { localStorage.setItem(currentPhotoKey, reader.result); } catch (err) { console.warn('[trt] photo save failed', err); }
-        applyPhoto(reader.result);
-      };
-      reader.readAsDataURL(file);
+      try {
+        const dataUrl = await resizePhoto(file);
+        try { localStorage.setItem(currentPhotoKey, dataUrl); } catch (err) { console.warn('[trt] photo save failed', err); }
+        applyPhoto(dataUrl);
+      } catch (err) {
+        console.warn('[trt] photo resize failed', err);
+      }
     });
 
     // Renders the card to a real PNG and downloads it — the button most
