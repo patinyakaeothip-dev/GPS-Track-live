@@ -198,6 +198,13 @@
   <script src="https://unpkg.com/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <div class="toolbar no-print">
     <span>📜 ใบประกาศ</span>
+    <!-- Purely a debugging aid — no functional purpose. After several
+         rounds of a reported fix seemingly "not taking effect," there was
+         no way to tell from a screenshot alone whether the device was
+         actually running the latest deployed code or a cached/stale copy
+         of this page. Bump this string on every meaningful change to this
+         file so that question can be answered by looking, not guessing. -->
+    <span style="font-size:9px;opacity:0.5;">build 2026-08-08-1</span>
     <button onclick="saveCertImage()">💾 บันทึกรูปภาพ</button>
     <button class="alt" onclick="window.print()">🖨 Print / Save as PDF</button>
     <input type="file" accept="image/*" id="photo-input" style="display:none;">
