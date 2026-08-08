@@ -480,43 +480,49 @@
     // also cause.
     const PHOTO_MAX_DIM = 1600;
     const PHOTO_QUALITY = 0.85;
-    // Matches .cert's own 4:5 (width:height) ratio — the photo fills that
-    // whole card behind the text (see #user-photo's object-fit:cover CSS
-    // below). html2canvas (used by saveCertImage further down to render
-    // the card to a real PNG for saving/sharing) doesn't reliably honor
-    // object-fit — a known limitation of that library — and instead
-    // stretched a source photo whose own ratio didn't already match 4:5,
-    // squeezing/stretching it out of proportion in the saved image (a
-    // runner reported this as "รูปยาวเกินปกติ" — reproduced with a portrait
-    // phone photo, which is taller/narrower than 4:5). Center-cropping to
-    // 4:5 ourselves here means the <img> src is already the exact shape
-    // needed everywhere it's used — live page and saved PNG both — so
-    // neither has to depend on object-fit actually working right.
+    // Matches .cert's own 4:5 (width:height) ratio and its card
+    // background color (same '#1f4d39' saveCertImage below already passes
+    // html2canvas as its capture background) — the photo sits inside that
+    // whole card behind the text (see #user-photo's object-fit CSS below).
+    // Center-cropping a photo whose own ratio didn't already match 4:5
+    // used to lose most of a wide/landscape photo's actual content (e.g. a
+    // group shot cropped down to a narrow vertical strip) to fill the
+    // frame edge-to-edge — reported as wanting the *whole* photo visible
+    // instead, the way it looked when checked by rotating the phone (which
+    // incidentally changed nothing about the photo itself, just how much
+    // of the page was on-screen at once). Padding (letterboxing) to 4:5
+    // instead of cropping keeps the entire photo, filling in the leftover
+    // space with the card's own background color rather than cutting
+    // anything off. Baked in here rather than left to CSS/object-fit
+    // because html2canvas (used by saveCertImage to render the card to a
+    // real PNG) doesn't reliably honor object-fit — a known limitation of
+    // that library — so the <img> src needs to already be the exact 4:5
+    // shape needed everywhere it's used, live page and saved PNG both.
     const PHOTO_TARGET_RATIO = 4 / 5;
-    // Crops+scales an already-decoded bitmap (HTMLImageElement or
+    const PHOTO_PAD_COLOR = '#1f4d39';
+    // Pads+scales an already-decoded bitmap (HTMLImageElement or
     // ImageBitmap — both expose width/height and both work as a
     // drawImage source) to PHOTO_TARGET_RATIO. Split out from resizePhoto
-    // so the two decode strategies below can share the exact same crop
-    // math — only how the source gets decoded differs between them.
-    function cropToRatio(source, srcW, srcH) {
+    // so the two decode strategies below can share the exact same math —
+    // only how the source gets decoded differs between them.
+    function padToRatio(source, srcW, srcH) {
       const srcRatio = srcW / srcH;
-      // Center-crop to PHOTO_TARGET_RATIO first (same idea as CSS
-      // object-fit:cover — trim whichever axis is relatively too long),
-      // *then* scale the crop down uniformly by one factor — so this can
-      // never distort proportions, only crop and shrink.
-      let cropW = srcW, cropH = srcH, cropX = 0, cropY = 0;
-      if (srcRatio > PHOTO_TARGET_RATIO) {
-        cropW = Math.round(srcH * PHOTO_TARGET_RATIO);
-        cropX = Math.round((srcW - cropW) / 2);
-      } else {
-        cropH = Math.round(srcW / PHOTO_TARGET_RATIO);
-        cropY = Math.round((srcH - cropH) / 2);
-      }
-      const scale = Math.min(1, PHOTO_MAX_DIM / Math.max(cropW, cropH));
-      const w = Math.round(cropW * scale), h = Math.round(cropH * scale);
+      // Canvas is sized to PHOTO_TARGET_RATIO at up to PHOTO_MAX_DIM on
+      // its long edge, then the source is drawn at whatever size *fits
+      // inside* that (contain, not cover) and centered — same idea as CSS
+      // object-fit:contain, just actually baked into pixels instead of
+      // left to (unreliable, see above) live rendering.
+      let canvasW = PHOTO_MAX_DIM, canvasH = Math.round(PHOTO_MAX_DIM / PHOTO_TARGET_RATIO);
+      if (PHOTO_TARGET_RATIO > 1) { canvasH = PHOTO_MAX_DIM; canvasW = Math.round(PHOTO_MAX_DIM * PHOTO_TARGET_RATIO); }
+      const fitScale = Math.min(canvasW / srcW, canvasH / srcH);
+      const drawW = Math.round(srcW * fitScale), drawH = Math.round(srcH * fitScale);
+      const drawX = Math.round((canvasW - drawW) / 2), drawY = Math.round((canvasH - drawH) / 2);
       const canvas = document.createElement('canvas');
-      canvas.width = w; canvas.height = h;
-      canvas.getContext('2d').drawImage(source, cropX, cropY, cropW, cropH, 0, 0, w, h);
+      canvas.width = canvasW; canvas.height = canvasH;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = PHOTO_PAD_COLOR;
+      ctx.fillRect(0, 0, canvasW, canvasH);
+      ctx.drawImage(source, 0, 0, srcW, srcH, drawX, drawY, drawW, drawH);
       return canvas.toDataURL('image/jpeg', PHOTO_QUALITY);
     }
     function resizePhoto(file) {
@@ -535,7 +541,7 @@
       if (window.createImageBitmap) {
         return createImageBitmap(file, { imageOrientation: 'from-image' })
           .then(bitmap => {
-            const dataUrl = cropToRatio(bitmap, bitmap.width, bitmap.height);
+            const dataUrl = padToRatio(bitmap, bitmap.width, bitmap.height);
             bitmap.close();
             return dataUrl;
           });
@@ -545,7 +551,7 @@
         const objectUrl = URL.createObjectURL(file);
         img.onload = () => {
           URL.revokeObjectURL(objectUrl);
-          resolve(cropToRatio(img, img.naturalWidth, img.naturalHeight));
+          resolve(padToRatio(img, img.naturalWidth, img.naturalHeight));
         };
         img.onerror = () => { URL.revokeObjectURL(objectUrl); reject(new Error('image decode failed')); };
         img.src = objectUrl;
