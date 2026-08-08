@@ -404,7 +404,20 @@ function EventCard({ ev, isRegistered, onRunnerSpace, onFollow, onSeeResult }) {
   const closed = window.eventStatus.computeClosed(ev);
   if (status === 'past') {
     return (
-      <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 14, boxShadow: '0 1px 3px rgba(31,42,28,0.08)', overflow: 'hidden' }}>
+      // flexShrink: 0 — this card is a direct child of .list, a
+      // display:flex column (needed for `gap`), which makes every card a
+      // flex item. A flex item's automatic minimum size is normally its
+      // own content size (so it won't shrink below fitting its content) —
+      // *unless* the item itself has overflow other than visible, as this
+      // card does (to clip the rounded corners), which resets that
+      // automatic minimum to 0 per the flexbox spec. With 5+ cards not
+      // fitting the screen, that let the browser shrink every card
+      // (subtitle text, padding, all of it) to squeeze them all in rather
+      // than leaving .list's own overflow:auto to scroll — reported as
+      // cards "getting smaller" and the See Result subtitle disappearing
+      // specifically once there were enough events to overflow one
+      // screen. flexShrink: 0 opts this card out of that shrinking.
+      <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 14, boxShadow: '0 1px 3px rgba(31,42,28,0.08)', overflow: 'hidden', flexShrink: 0 }}>
         <div style={{ display: 'flex', gap: 12, alignItems: 'center', padding: 14 }}>
           {ev.logoUrl
             ? <div style={{ width: 46, height: 46, borderRadius: 12, flexShrink: 0, overflow: 'hidden' }}><img src={ev.logoUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}/></div>
@@ -431,8 +444,10 @@ function EventCard({ ev, isRegistered, onRunnerSpace, onFollow, onSeeResult }) {
     );
   }
   return (
+    // flexShrink: 0 — see the same fix's comment on the 'past' branch
+    // above; this card has overflow:hidden too, so it needs it too.
     <div style={{ background: '#fff', border: status === 'live' ? `2px solid ${C.brand}` : `1px solid ${C.border}`,
-      borderRadius: 14, boxShadow: status !== 'live' ? '0 1px 3px rgba(31,42,28,0.08)' : 'none', overflow: 'hidden' }}>
+      borderRadius: 14, boxShadow: status !== 'live' ? '0 1px 3px rgba(31,42,28,0.08)' : 'none', overflow: 'hidden', flexShrink: 0 }}>
       <div style={{ display: 'flex', gap: 12, alignItems: 'center', padding: 14 }}>
         {ev.logoUrl
           ? <div style={{ width: 46, height: 46, borderRadius: 12, flexShrink: 0, overflow: 'hidden' }}><img src={ev.logoUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}/></div>
