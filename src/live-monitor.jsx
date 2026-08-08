@@ -244,8 +244,13 @@ function LiveElevationSvg({ geo, coursePaths, distance, checkpoints, displays, s
       {zoom > 1.02 && (
         <div onClick={resetZoom} style={{ position: 'absolute', top: 4, right: 4, padding: '3px 8px', background: '#fff', border: '1px solid #d8d2c2', borderRadius: 999, fontFamily: M_MONO, fontSize: 9.5, color: '#5d6b59', cursor: 'pointer', boxShadow: '0 1px 3px rgba(31,42,28,0.1)' }}>↺ รีเซ็ตซูม</div>
       )}
-      {hoverBib && (() => {
-        const dd = displays.find(r => r.bib === hoverBib);
+      {/* Clicking a runner on the map already highlighted their elevation
+          dot (selectedBib → the bigger circle above) but the name/bib
+          tooltip only ever showed on a direct mouse-hover of that dot —
+          so a click-to-select from the map showed no label here at all.
+          Show it for either. */}
+      {(hoverBib || selectedBib) && (() => {
+        const dd = displays.find(r => r.bib === (hoverBib || selectedBib));
         if (!dd) return null;
         const leftPct = (x(dd.physKm) / w) * 100;
         return (
