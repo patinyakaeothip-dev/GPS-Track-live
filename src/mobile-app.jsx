@@ -8,6 +8,16 @@
 
 const { useState: uS, useEffect: uE, useMemo: uM, useRef: uR } = React;
 
+// Real epoch ms for a checkin record's wall-clock time (checkins[].t is
+// "HH:MM:SS", reconstructed against the event's race date) — same
+// technique live-monitor.jsx's checkinMs uses, needed here too so a GPS
+// fix and a checkpoint scan can be compared to see which is actually
+// newer (see RouteTab/FriendMapSheet's GPS-vs-checkpoint position logic).
+function eventCheckinMs(ev, checkin) {
+  const d = checkin && window.eventStatus && window.eventStatus.combineDateTime(ev && ev.raceDateISO, checkin.t);
+  return d ? d.getTime() : null;
+}
+
 const C = {
   brand: '#2d6a4f', brandDk: '#1f4d39', brandLt: '#357a5c',
   bg: '#f5f1e8', bg2: '#faf8f2', card: '#ffffff',
@@ -1533,16 +1543,26 @@ function RouteTab({ course, runner, event, spectatorRunner, livePos }) {
   // dropped straight to the checkpoint fallback until a fresh fix happened
   // to land. Firestore's livePos doc already holds the real last position
   // regardless of age, so there's no need to cache it separately here.
+  // ...UNLESS a checkpoint scan is newer than that GPS fix — a dead zone
+  // (no signal at all) between two checkpoints can leave livePos stuck on
+  // a fix from before the dead zone, and preferring it forever regardless
+  // of age meant a runner who'd clearly moved on (they scanned in at the
+  // *next* checkpoint) still showed frozen at the old GPS spot — reported
+  // as the dot sitting at the previous checkpoint while the runner was
+  // already at the next one. A checkin newer than the GPS fix is
+  // unambiguous proof of real forward progress.
+  const lastCheckinMs = eventCheckinMs(event, runner.checkins && runner.checkins[runner.checkins.length - 1]);
+  const checkinNewerThanGps = lastCheckinMs != null && (!livePos || !livePos.at || lastCheckinMs > livePos.at);
   uE(() => {
     if (!mapObj.current || !runnerMarkerRef.current || !course) return;
-    if (livePos && livePos.lat != null && livePos.lon != null) {
+    if (livePos && livePos.lat != null && livePos.lon != null && !checkinNewerThanGps) {
       runnerMarkerRef.current.setLatLng([livePos.lat, livePos.lon]);
     } else {
       const idx = Math.min(course.points.length - 1, Math.round((runner.progressKm / course.totalKm) * course.points.length));
       const pos = course.points[idx];
       runnerMarkerRef.current.setLatLng([pos[0], pos[1]]);
     }
-  }, [course, runner.progressKm, livePos && livePos.lat, livePos && livePos.lon, livePos && livePos.at]);
+  }, [course, runner.progressKm, livePos && livePos.lat, livePos && livePos.lon, livePos && livePos.at, checkinNewerThanGps]);
   // Elevation profile's "you are here" marker — same GPS-preferred/
   // checkpoint-fallback rule as the map dot above, just projected onto the
   // 1-D km axis instead of plotted as raw lat/lon. Projects off of any fix
@@ -1553,7 +1573,7 @@ function RouteTab({ course, runner, event, spectatorRunner, livePos }) {
   // to the side of the course (further than ON_COURSE_KM), a projected km
   // isn't trustworthy either way, so this falls back to the plain
   // checkpoint progress rather than a remembered "last on-course" point.
-  const gpsProjection = (livePos && livePos.lat != null && livePos.lon != null && course)
+  const gpsProjection = (livePos && livePos.lat != null && livePos.lon != null && course && !checkinNewerThanGps)
     ? nearestKmForPoint(course.points, livePos.lat, livePos.lon, runner.progressKm) : null;
   const elevationKm = (gpsProjection && gpsProjection.distKm < ON_COURSE_KM) ? gpsProjection.km : runner.progressKm;
   function recenterToMe() {
@@ -2128,16 +2148,22 @@ function FriendMapSheet({ runner, eventId, event, onClose }) {
   // the checkpoint position until a brand new fix happened to land.
   // Firestore's livePos doc already holds the real last position
   // regardless of age, so there's no need to remember it separately here.
+  // ...UNLESS a checkpoint scan is newer than that GPS fix — see the same
+  // fix's comment on RouteTab above, this sheet had the identical bug
+  // (dot stuck at the checkpoint before a GPS dead zone even after the
+  // runner clearly scanned in further along the course).
+  const lastCheckinMs = eventCheckinMs(event, runner.checkins && runner.checkins[runner.checkins.length - 1]);
+  const checkinNewerThanGps = lastCheckinMs != null && (!livePos || !livePos.at || lastCheckinMs > livePos.at);
   uE(() => {
     if (!mapObjRef.current || !markerRef.current || !course) return;
-    if (livePos && livePos.lat != null && livePos.lon != null) {
+    if (livePos && livePos.lat != null && livePos.lon != null && !checkinNewerThanGps) {
       markerRef.current.setLatLng([livePos.lat, livePos.lon]);
     } else {
       const idx = Math.min(course.points.length - 1, Math.round(((runner.progressKm || 0) / course.totalKm) * course.points.length));
       const pos = course.points[idx];
       markerRef.current.setLatLng([pos[0], pos[1]]);
     }
-  }, [course, runner.progressKm, livePos && livePos.lat, livePos && livePos.lon, livePos && livePos.at]);
+  }, [course, runner.progressKm, livePos && livePos.lat, livePos && livePos.lon, livePos && livePos.at, checkinNewerThanGps]);
 
   const gpsFresh = livePos && livePos.at && (Date.now() - livePos.at) < 2 * 60 * 1000 && livePos.lat != null;
   // Same GPS-preferred/checkpoint-fallback rule as the map dot above,
@@ -2146,7 +2172,7 @@ function FriendMapSheet({ runner, eventId, event, onClose }) {
   // dot fix above (this used to gate on gpsFresh and remember the last
   // on-course km in a useRef, both reset by this sheet's on-demand
   // remounting).
-  const gpsProjection = (livePos && livePos.lat != null && livePos.lon != null && course)
+  const gpsProjection = (livePos && livePos.lat != null && livePos.lon != null && course && !checkinNewerThanGps)
     ? nearestKmForPoint(course.points, livePos.lat, livePos.lon, runner.progressKm) : null;
   const elevationKm = (gpsProjection && gpsProjection.distKm < ON_COURSE_KM) ? gpsProjection.km : (runner.progressKm || 0);
 
