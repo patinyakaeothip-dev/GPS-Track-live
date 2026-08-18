@@ -723,6 +723,19 @@ function LiveMonitorApp() {
       // was never a need to remember it separately client-side.
       const live = livePosByBib[r.bib];
       const gpsLive = !!(live && live.at && (Date.now() - live.at) < 2 * 60 * 1000);
+      // ...UNLESS a checkpoint scan is *newer* than that last GPS fix — a
+      // GPS dead zone (tree cover, a long stretch with no signal at all)
+      // between two checkpoints can leave `live` stuck on a fix from well
+      // before the dead zone, and it staying preferred forever meant a
+      // runner who'd clearly moved on (they scanned in at the *next*
+      // checkpoint) still showed frozen at the old GPS spot indefinitely —
+      // reported as the dot sitting at WS5 while the runner was already at
+      // WS6. A checkin scan newer than the last GPS fix is unambiguous
+      // real proof of forward progress, so it wins in that case; GPS still
+      // wins whenever it's the newer of the two (the normal case), which
+      // is what actually prevents the backward-jump-on-refresh bug this
+      // GPS-preference behavior was originally added for.
+      const checkinNewerThanGps = lastAtMs != null && (!live || !live.at || lastAtMs > live.at);
       // Before livePosReady, livePosByBib is empty because the first
       // snapshot just hasn't landed yet, not because these runners have no
       // GPS — falling back to the checkpoint position in that gap made
@@ -730,8 +743,8 @@ function LiveMonitorApp() {
       // snapping to its real spot. Show nothing for the position (map/
       // elevation markers below skip a runner with no lat) until it's
       // actually known one way or the other.
-      const mapLat = live ? live.lat : (livePosReady ? p.lat : null);
-      const mapLon = live ? live.lon : (livePosReady ? p.lon : null);
+      const mapLat = (live && !checkinNewerThanGps) ? live.lat : (livePosReady ? p.lat : null);
+      const mapLon = (live && !checkinNewerThanGps) ? live.lon : (livePosReady ? p.lon : null);
       // The elevation chart's dot used to always project the checkpoint-
       // interpolated point (p.lat/p.lon) onto the course, ignoring a live
       // GPS fix entirely — so it sat frozen at the last checkpoint's km
