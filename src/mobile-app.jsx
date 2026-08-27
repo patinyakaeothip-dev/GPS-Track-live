@@ -1757,10 +1757,33 @@ function ElevationSvg({ course, progressKm, checkpoints }) {
   }
   function resetZoom() { setZoom(1); setPanKm(0); }
 
-  const path = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(p[3]).toFixed(1)},${y(p[2]).toFixed(1)}`).join(' ');
+  // Plotting every raw GPX point directly (as this used to) draws every
+  // single elevation reading exactly as recorded — including the odd
+  // barometer/GPS glitch a phone's raw elevation log can have at one spot
+  // (a real reading, just wrong), which shows up as a sharp spike straight
+  // up and back down. Live Monitor's own elevation chart never shows this
+  // because it doesn't plot raw points either — it resamples the course at
+  // N evenly-spaced, interpolated points (see LiveElevationSvg in
+  // live-monitor.jsx), which smooths a single bad point into its
+  // neighbors instead of drawing it as its own vertex. Do the same here so
+  // both charts read as the same course profile, glitch-free, regardless
+  // of which one someone's looking at.
+  const N = 400;
+  const sample = uM(() => {
+    if (!window.courseGeo) return pts.map(p => ({ lat: p[0], lon: p[1], ele: p[2], km: p[3] }));
+    const objPts = pts.map(p => ({ lat: p[0], lon: p[1], ele: p[2], km: p[3] }));
+    const out = [];
+    for (let i = 0; i <= N; i++) out.push(window.courseGeo.pointAtKm(objPts, totalKm * i / N));
+    return out;
+  }, [pts, totalKm]);
+  const path = sample.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(p.km).toFixed(1)},${y(p.ele).toFixed(1)}`).join(' ');
   const markKm = Math.min(progressKm, course.totalKm);
   const markX = x(markKm);
-  const markEle = pts.reduce((best, p) => (Math.abs(p[3] - markKm) < Math.abs(best[3] - markKm) ? p : best), pts[0])[2];
+  // Off the same smoothed sample as the path itself, not the raw nearest
+  // point — otherwise the "you are here" dot could land exactly on the
+  // same glitchy raw elevation reading the smoothing above was meant to
+  // hide, floating off the now-clean curve.
+  const markEle = sample.reduce((best, p) => (Math.abs(p.km - markKm) < Math.abs(best.km - markKm) ? p : best), sample[0]).ele;
   const markY = y(markEle);
   const marks = [[0, 'START'], ...(checkpoints || []).map(cp => [parseFloat(cp.km) || 0, cp.label]), [course.totalKm, 'FINISH']];
   // Angling the label text scales to any name length, but two checkpoints
