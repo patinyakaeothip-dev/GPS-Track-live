@@ -3234,7 +3234,13 @@ function MobileApp() {
     }
     setScreen('register');
   }
-  function afterRegister(data) {
+  // registerRunner is async now — it needs a real Firestore round-trip
+  // (window.fb.allocateNextBib) to hand out a bib number that's actually
+  // guaranteed not to collide with anyone else registering at the same
+  // moment, instead of the old instant-but-sometimes-wrong local guess.
+  // RegisterScreen already disables its submit button/guards double-taps
+  // (see its own submittedRef) for exactly this kind of async submit.
+  async function afterRegister(data) {
     let runner = { dist: data.dist, name: data.nick, checkins: [], progressKm: 0, eventId: pendingEvent && pendingEvent.id };
     if (pendingEvent) {
       window.eventStore.incrementRegistration(pendingEvent.id, data.dist);
@@ -3250,7 +3256,7 @@ function MobileApp() {
         // something to act on if this runner ever needs real help, instead
         // of that data sitting only in this device's local profile where
         // nobody else can ever see it.
-        const rosterEntry = window.runnerStore.registerRunner(pendingEvent, {
+        const rosterEntry = await window.runnerStore.registerRunner(pendingEvent, {
           distance: data.dist, nickname: data.nick, phone: data.phone, gender: data.gender,
           emgName: session.user.emgName || '', emgPhone: data.emg || session.user.emgPhone || '',
           emgName2: session.user.emgName2 || '', emgPhone2: session.user.emgPhone2 || '',

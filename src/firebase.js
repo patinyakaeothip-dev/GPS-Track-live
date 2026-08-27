@@ -12,7 +12,7 @@ import {
   getAuth, initializeAuth, indexedDBLocalPersistence, GoogleAuthProvider, OAuthProvider, signInWithPopup, signInWithRedirect, signInWithCredential, getRedirectResult, signOut, onAuthStateChanged,
 } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
 import {
-  getFirestore, collection, doc, getDocs, setDoc, deleteDoc, onSnapshot,
+  getFirestore, collection, doc, getDocs, setDoc, deleteDoc, onSnapshot, runTransaction,
 } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
 
 const cfg = window.FIREBASE_CONFIG || {};
@@ -134,6 +134,34 @@ if (!configured) {
     watchDocById(colName, id, cb) {
       return onSnapshot(doc(db, colName, id), snap => {
         cb(snap.exists() ? { id: snap.id, ...snap.data() } : null);
+      });
+    },
+    // Atomic "next number" counter, used by runner-store.js's registerRunner
+    // so bib assignment can't collide the way it used to. The old approach
+    // computed "highest existing bib + 1" from each device's own local
+    // roster cache — correct for one registration at a time, but two
+    // registrations racing each other (both computing "next" from the same
+    // not-yet-updated cache, e.g. right as an event opens) could land on the
+    // exact same number, silently producing two runners sharing one bib.
+    // A Firestore transaction serializes every allocation through one
+    // document instead: whichever caller's transaction commits first writes
+    // the incremented counter, and the Firestore SDK automatically retries
+    // any transaction that started reading a value another one has since
+    // changed — so a second, concurrent caller can't ever walk away with
+    // the same number the first one got, no matter how close together they
+    // ran. `seedNext` only matters the *first* time this counter is ever
+    // used for a given counterId (no doc there yet) — pass whatever the
+    // caller's own best-guess "next" number is (e.g. computed from existing
+    // roster data, for events that had runners before this counter
+    // existed); every call after that ignores it and just reads/increments
+    // the real stored counter.
+    async allocateNextBib(counterId, seedNext) {
+      const ref = doc(db, 'bibCounters', counterId);
+      return runTransaction(db, async (tx) => {
+        const snap = await tx.get(ref);
+        const next = (snap.exists() && typeof snap.data().next === 'number') ? snap.data().next : seedNext;
+        tx.set(ref, { next: next + 1 });
+        return next;
       });
     },
   };
