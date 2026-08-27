@@ -2538,7 +2538,13 @@ function ProfileScreen({ user, onLogout, onClose, onSave, onboard }) {
   const [bloodType, setBloodType] = uS(user.bloodType || '');
   const [medical, setMedical] = uS(user.medical || '');
   const [avatarPhoto, setAvatarPhoto] = uS(user.avatarPhoto || '');
-  const [saved, setSaved] = uS(false);
+  // 'in' → showing, 'out' → mid fade-out, null → gone. Saving used to just
+  // swap the button's own label to "✓ บันทึกแล้ว" for a moment, but that
+  // stopped being visible at all once saving also flips the screen back to
+  // read-only (see readOnly/editing below) — the button re-renders as
+  // "แก้ไขโปรไฟล์" the same instant, before anyone could read the old
+  // label. A toast isn't tied to whatever the button happens to say next.
+  const [savedToast, setSavedToast] = uS(null);
   const [saveError, setSaveError] = uS('');
   const canSubmit = !onboard || (nickname.trim() && phone.trim() && emgName.trim() && emgPhone.trim());
   // Onboarding has nothing to view yet — always starts editable. A
@@ -2562,8 +2568,9 @@ function ProfileScreen({ user, onLogout, onClose, onSave, onboard }) {
     reportOutcome(onSave({ ...user, nickname, gender, phone, emgName, emgPhone, emgName2, emgPhone2, bloodType, medical, avatarPhoto }));
     if (onboard) return;
     setEditing(false);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 1800);
+    setSavedToast('in');
+    setTimeout(() => setSavedToast('out'), 1600);
+    setTimeout(() => setSavedToast(null), 1900);
   }
   function pickPhoto(e) {
     const file = e.target.files && e.target.files[0];
@@ -2582,7 +2589,13 @@ function ProfileScreen({ user, onLogout, onClose, onSave, onboard }) {
   }
 
   return (
-    <div style={{ height: '100%', background: C.bg2, fontFamily: C.font, display: 'flex', flexDirection: 'column', padding: '40px 24px 24px' }}>
+    <div style={{ height: '100%', background: C.bg2, fontFamily: C.font, display: 'flex', flexDirection: 'column', padding: '40px 24px 24px', position: 'relative' }}>
+      {savedToast && <div style={{ position: 'absolute', top: 14, left: '50%', zIndex: 20,
+        padding: '10px 18px', background: C.brand, color: '#fff', borderRadius: 999, fontSize: 13, fontWeight: 700,
+        display: 'flex', alignItems: 'center', gap: 7, boxShadow: '0 8px 22px -4px rgba(31,42,28,0.35)',
+        animation: `${savedToast === 'in' ? 'trtToastIn' : 'trtToastOut'} 0.3s ease forwards` }}>
+        <span style={{ fontSize: 14 }}>✓</span>บันทึกโปรไฟล์เรียบร้อยแล้ว
+      </div>}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
         <div>
           <div style={{ fontSize: 20, fontWeight: 800 }}>{onboard ? 'ยินดีต้อนรับ 👋' : 'โปรไฟล์'}</div>
@@ -2636,7 +2649,7 @@ function ProfileScreen({ user, onLogout, onClose, onSave, onboard }) {
         {saveError && <div style={{ fontSize: 11.5, color: '#9b1c10', textAlign: 'center' }}>⚠ บันทึกขึ้นบัญชีไม่สำเร็จ — บันทึกไว้ในเครื่องนี้แล้ว แต่จะไม่ sync ไปเครื่องอื่นจนกว่าจะลองใหม่<br/><span style={{ fontFamily: C.mono, fontSize: 10 }}>{saveError}</span></div>}
         {readOnly
           ? <Btn onClick={() => setEditing(true)}>แก้ไขโปรไฟล์</Btn>
-          : <Btn disabled={!canSubmit} onClick={save}>{onboard ? 'เริ่มใช้งาน →' : (saved ? '✓ บันทึกแล้ว' : 'บันทึกโปรไฟล์')}</Btn>}
+          : <Btn disabled={!canSubmit} onClick={save}>{onboard ? 'เริ่มใช้งาน →' : 'บันทึกโปรไฟล์'}</Btn>}
         {!onboard && <Btn variant="ghost" onClick={onLogout}>ออกจากระบบ</Btn>}
       </div>
     </div>
@@ -3285,7 +3298,7 @@ function MobileApp() {
 
   uE(() => { const id = 'trt-mobile-style'; if (document.getElementById(id)) return;
     const st = document.createElement('style'); st.id = id;
-    st.textContent = '@keyframes trtSpin{to{transform:rotate(360deg)}} @keyframes trtFadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}} *{box-sizing:border-box} html,body{margin:0;background:#efe9dc}';
+    st.textContent = '@keyframes trtSpin{to{transform:rotate(360deg)}} @keyframes trtFadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}} @keyframes trtToastIn{0%{opacity:0;transform:translate(-50%,-8px) scale(0.96)}100%{opacity:1;transform:translate(-50%,0) scale(1)}} @keyframes trtToastOut{0%{opacity:1;transform:translate(-50%,0) scale(1)}100%{opacity:0;transform:translate(-50%,-8px) scale(0.96)}} *{box-sizing:border-box} html,body{margin:0;background:#efe9dc}';
     document.head.appendChild(st);
   }, []);
 
