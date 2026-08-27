@@ -395,7 +395,20 @@
       if (!window.eventStore || !window.runnerStore || !window.eventStatus) return null;
       const ev = (window.eventStore.loadEvents() || []).find(e => e.id === eventId);
       const runners = window.runnerStore.listRunners(eventId) || [];
-      const r = runners.find(x => x.bib === bib);
+      // Bib numbers are assigned client-side (see registerRunner in
+      // runner-store.js) and can collide if two registrations race before
+      // Firestore sync finishes — rare, but real: two roster entries can
+      // end up sharing the same bib. This page only has the bib from the
+      // URL (no unique roster id) to go on, so among any that share it,
+      // prefer whichever one actually has real checkin activity — the
+      // empty duplicate is never the one anyone actually wants a
+      // certificate for. Reported as a real finisher's certificate coming
+      // up blank because the *other*, unused registration under the same
+      // bib happened to come first in the list.
+      const candidates = runners.filter(x => x.bib === bib);
+      const r = candidates.find(x => (x.checkins || []).some(c => c.cp === 'finish'))
+        || candidates.find(x => (x.checkins || []).length)
+        || candidates[0];
       if (!ev || !r) return null;
       const combine = window.eventStatus.combineDateTime;
       function checkinMs(hhmm) { const d = combine(ev.raceDateISO, hhmm); return d ? d.getTime() : null; }
