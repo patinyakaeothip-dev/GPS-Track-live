@@ -759,7 +759,18 @@ function RegisterScreen({ event, profile, onDone, onBack }) {
             ))}
           </div>
         </Field>
-        <Field label="เบอร์ติดต่อฉุกเฉิน"><input value={emg} onChange={e => setEmg(e.target.value)} placeholder="คนใกล้ตัว · กรณีจำเป็น" style={{ ...fieldStyle(), fontFamily: C.mono }}/></Field>
+        <Field label="เบอร์ติดต่อฉุกเฉิน">
+          <input value={emg} onChange={e => setEmg(e.target.value)} placeholder="คนใกล้ตัว · กรณีจำเป็น" style={{ ...fieldStyle(), fontFamily: C.mono }}/>
+          {/* The name for this phone number only ever gets asked once, in
+              the full Profile screen (see ProfileScreen) — this form just
+              reuses whatever's already there. Showing the number alone
+              with no name attached read as "whose number is this, mine or
+              theirs?" — this line answers that without turning this quick
+              form into a second place to edit it. */}
+          {emg && (profile && profile.emgName
+            ? <div style={{ fontSize: 11.5, color: C.muted, marginTop: 4 }}>ผู้ติดต่อ: {profile.emgName}</div>
+            : <div style={{ fontSize: 11.5, color: '#7c4a03', marginTop: 4 }}>⚠ ยังไม่ได้ระบุชื่อผู้ติดต่อ — เพิ่มได้ที่หน้าโปรไฟล์</div>)}
+        </Field>
         <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginTop: 4 }}>
           <input type="checkbox" defaultChecked style={{ marginTop: 2 }}/>
           <span style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.5 }}>ยินยอมให้ระบบเก็บพิกัด GPS ระหว่างแข่งเพื่อความปลอดภัย · ลบทิ้งหลังจบงาน 7 วัน</span>
@@ -924,7 +935,7 @@ function FlagIcon({ size = 17, color = '#9b1c10' }) {
 function Field({ label, children, required }) {
   return <div><div style={{ fontFamily: C.mono, fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted, marginBottom: 5 }}>{label}{required && <span style={{ color: '#9b1c10' }}> *จำเป็น</span>}</div>{children}</div>;
 }
-function fieldStyle() { return { width: '100%', padding: '12px 14px', background: '#fff', border: '1px solid #bdb6a4', borderRadius: 10, fontSize: 14, outline: 'none', fontFamily: C.font, boxSizing: 'border-box' }; }
+function fieldStyle(readOnly) { return { width: '100%', padding: '12px 14px', background: readOnly ? '#f4f1e8' : '#fff', color: readOnly ? C.muted : C.text, border: '1px solid #bdb6a4', borderRadius: 10, fontSize: 14, outline: 'none', fontFamily: C.font, boxSizing: 'border-box' }; }
 
 // ── Screen: GPS permission ────────────────────────────────────────────────
 function GpsPermissionScreen({ onAllow, onBack }) {
@@ -2530,6 +2541,14 @@ function ProfileScreen({ user, onLogout, onClose, onSave, onboard }) {
   const [saved, setSaved] = uS(false);
   const [saveError, setSaveError] = uS('');
   const canSubmit = !onboard || (nickname.trim() && phone.trim() && emgName.trim() && emgPhone.trim());
+  // Onboarding has nothing to view yet — always starts editable. A
+  // returning runner opening their own profile used to land straight on
+  // an already-editable form with every field an open text box, which
+  // read as if just looking at your profile put it into an edit state —
+  // easy to bump a value by accident while just checking it. Fields stay
+  // read-only (view mode) until "แก้ไขโปรไฟล์" is tapped.
+  const [editing, setEditing] = uS(!!onboard);
+  const readOnly = !onboard && !editing;
 
   // onSave (updateUser) returns a promise that resolves to an error
   // string/code if the Firestore write failed, null on success — without
@@ -2542,6 +2561,7 @@ function ProfileScreen({ user, onLogout, onClose, onSave, onboard }) {
   function save() {
     reportOutcome(onSave({ ...user, nickname, gender, phone, emgName, emgPhone, emgName2, emgPhone2, bloodType, medical, avatarPhoto }));
     if (onboard) return;
+    setEditing(false);
     setSaved(true);
     setTimeout(() => setSaved(false), 1800);
   }
@@ -2583,38 +2603,40 @@ function ProfileScreen({ user, onLogout, onClose, onSave, onboard }) {
       </div>
 
       <div style={{ flex: 1, minHeight: 0, overflow: 'auto', marginTop: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <Field label="ชื่อเล่น" required={onboard}><input value={nickname} onChange={e => setNickname(e.target.value)} placeholder="เช่น ธีระ" style={fieldStyle()}/></Field>
+        <Field label="ชื่อเล่น" required={onboard}><input readOnly={readOnly} value={nickname} onChange={e => setNickname(e.target.value)} placeholder="เช่น ธีระ" style={fieldStyle(readOnly)}/></Field>
         <Field label="เพศ">
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
             {[['m', 'ชาย'], ['f', 'หญิง']].map(([v, l]) => (
-              <div key={v} onClick={() => setGender(v)} style={{ padding: 10, textAlign: 'center', borderRadius: 10, fontWeight: 600, cursor: 'pointer',
-                background: gender === v ? C.brand : '#fff', color: gender === v ? '#fff' : C.text, border: `1px solid ${gender === v ? C.brand : '#bdb6a4'}` }}>{l}</div>
+              <div key={v} onClick={() => !readOnly && setGender(v)} style={{ padding: 10, textAlign: 'center', borderRadius: 10, fontWeight: 600, cursor: readOnly ? 'default' : 'pointer',
+                background: gender === v ? C.brand : '#fff', color: gender === v ? '#fff' : C.text, border: `1px solid ${gender === v ? C.brand : '#bdb6a4'}`, opacity: readOnly && gender !== v ? 0.5 : 1 }}>{l}</div>
             ))}
           </div>
         </Field>
-        <Field label="เบอร์โทร" required={onboard}><input value={phone} onChange={e => setPhone(e.target.value)} placeholder="08X-XXX-XXXX" style={{ ...fieldStyle(), fontFamily: C.mono }}/></Field>
+        <Field label="เบอร์โทร" required={onboard}><input readOnly={readOnly} value={phone} onChange={e => setPhone(e.target.value)} placeholder="08X-XXX-XXXX" style={{ ...fieldStyle(readOnly), fontFamily: C.mono }}/></Field>
         {/* Read-only — this always reflects whichever account is actually
             signed in. It used to be a free-text field that only initialized
             from the account email but saved as plain text, so an old value
             (or a typo) would silently stick around forever on that one
             device instead of ever being corrected by the real login. */}
         <Field label="อีเมล"><div style={{ ...fieldStyle(), fontFamily: C.mono, color: C.muted, background: '#f4f1e8' }}>{user.email || '—'}</div></Field>
-        <Field label="ผู้ติดต่อฉุกเฉิน · ชื่อ" required={onboard}><input value={emgName} onChange={e => setEmgName(e.target.value)} placeholder="ชื่อคนใกล้ตัว" style={fieldStyle()}/></Field>
-        <Field label="ผู้ติดต่อฉุกเฉิน · เบอร์" required={onboard}><input value={emgPhone} onChange={e => setEmgPhone(e.target.value)} placeholder="08X-XXX-XXXX" style={{ ...fieldStyle(), fontFamily: C.mono }}/></Field>
-        <Field label="ผู้ติดต่อฉุกเฉิน คนที่ 2 · ชื่อ (ถ้ามี)"><input value={emgName2} onChange={e => setEmgName2(e.target.value)} placeholder="เผื่อคนแรกติดต่อไม่ได้" style={fieldStyle()}/></Field>
-        <Field label="ผู้ติดต่อฉุกเฉิน คนที่ 2 · เบอร์ (ถ้ามี)"><input value={emgPhone2} onChange={e => setEmgPhone2(e.target.value)} placeholder="08X-XXX-XXXX" style={{ ...fieldStyle(), fontFamily: C.mono }}/></Field>
+        <Field label="ผู้ติดต่อฉุกเฉิน · ชื่อ" required={onboard}><input readOnly={readOnly} value={emgName} onChange={e => setEmgName(e.target.value)} placeholder="ชื่อคนใกล้ตัว" style={fieldStyle(readOnly)}/></Field>
+        <Field label="ผู้ติดต่อฉุกเฉิน · เบอร์" required={onboard}><input readOnly={readOnly} value={emgPhone} onChange={e => setEmgPhone(e.target.value)} placeholder="08X-XXX-XXXX" style={{ ...fieldStyle(readOnly), fontFamily: C.mono }}/></Field>
+        <Field label="ผู้ติดต่อฉุกเฉิน คนที่ 2 · ชื่อ (ถ้ามี)"><input readOnly={readOnly} value={emgName2} onChange={e => setEmgName2(e.target.value)} placeholder="เผื่อคนแรกติดต่อไม่ได้" style={fieldStyle(readOnly)}/></Field>
+        <Field label="ผู้ติดต่อฉุกเฉิน คนที่ 2 · เบอร์ (ถ้ามี)"><input readOnly={readOnly} value={emgPhone2} onChange={e => setEmgPhone2(e.target.value)} placeholder="08X-XXX-XXXX" style={{ ...fieldStyle(readOnly), fontFamily: C.mono }}/></Field>
         <Field label="กรุ๊ปเลือด">
-          <select value={bloodType} onChange={e => setBloodType(e.target.value)} style={fieldStyle()}>
+          <select disabled={readOnly} value={bloodType} onChange={e => setBloodType(e.target.value)} style={fieldStyle(readOnly)}>
             <option value="">— ไม่ระบุ —</option>
             {['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map(bt => <option key={bt} value={bt}>{bt}</option>)}
           </select>
         </Field>
-        <Field label="โรคประจำตัว / ข้อมูลสำคัญทางการแพทย์"><input value={medical} onChange={e => setMedical(e.target.value)} placeholder="เช่น หอบหืด, แพ้ยา" style={fieldStyle()}/></Field>
+        <Field label="โรคประจำตัว / ข้อมูลสำคัญทางการแพทย์"><input readOnly={readOnly} value={medical} onChange={e => setMedical(e.target.value)} placeholder="เช่น หอบหืด, แพ้ยา" style={fieldStyle(readOnly)}/></Field>
       </div>
 
       <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
         {saveError && <div style={{ fontSize: 11.5, color: '#9b1c10', textAlign: 'center' }}>⚠ บันทึกขึ้นบัญชีไม่สำเร็จ — บันทึกไว้ในเครื่องนี้แล้ว แต่จะไม่ sync ไปเครื่องอื่นจนกว่าจะลองใหม่<br/><span style={{ fontFamily: C.mono, fontSize: 10 }}>{saveError}</span></div>}
-        <Btn disabled={!canSubmit} onClick={save}>{onboard ? 'เริ่มใช้งาน →' : (saved ? '✓ บันทึกแล้ว' : 'บันทึกโปรไฟล์')}</Btn>
+        {readOnly
+          ? <Btn onClick={() => setEditing(true)}>แก้ไขโปรไฟล์</Btn>
+          : <Btn disabled={!canSubmit} onClick={save}>{onboard ? 'เริ่มใช้งาน →' : (saved ? '✓ บันทึกแล้ว' : 'บันทึกโปรไฟล์')}</Btn>}
         {!onboard && <Btn variant="ghost" onClick={onLogout}>ออกจากระบบ</Btn>}
       </div>
     </div>
