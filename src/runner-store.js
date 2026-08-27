@@ -53,8 +53,31 @@
     return String(highest + 1);
   }
 
-  function registerRunner(ev, data) {
-    const bib = nextBib(ev.id, ev, data.distance);
+  // Async now (it used to just be a synchronous local computation) because
+  // getting a real, collision-proof bib out of window.fb.allocateNextBib
+  // means an actual Firestore round-trip when there's a backend to round-
+  // trip to. nextBib's plain "highest existing + 1" is still what's used
+  // when there's no backend (window.fb null — local demo mode, a single
+  // device with no other client to race against anyway), and is also what
+  // seeds the very first allocation of a real event's counter (see
+  // allocateNextBib's own comment) so events with runners registered
+  // before this fix shipped don't have their numbering jump or reset.
+  async function registerRunner(ev, data) {
+    const seedNext = nextBib(ev.id, ev, data.distance);
+    let bib = seedNext;
+    if (window.fb) {
+      try {
+        bib = String(await window.fb.allocateNextBib(`${ev.id}_${data.distance}`, parseInt(seedNext, 10)));
+      } catch (err) {
+        // Real backend, but the transaction itself failed (offline mid-
+        // registration, permissions, etc.) — falling all the way back to
+        // the old local guess keeps registration itself from breaking
+        // outright; it can still collide in the same rare race this was
+        // meant to close, but that's strictly no worse than before this
+        // fix existed, not a new failure mode.
+        console.warn('[runner-store] atomic bib allocation failed, falling back to local next-bib', err);
+      }
+    }
     const runner = {
       // Deliberately NOT derived from the bib — two registrations racing
       // each other (e.g. before this device's roster has finished syncing
