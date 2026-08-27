@@ -1256,7 +1256,14 @@ function saveCertificateResult(session, event, checkins) {
     let myRecord = null;
     if (window.runnerStore && event && combine) {
       const rosterRunners = window.runnerStore.listRunners(event.id);
-      myRecord = rosterRunners.find(r => r.bib === runner.bib) || null;
+      // By rosterId (this runner's own unique doc id), not bib — bib
+      // numbers are assigned client-side (see registerRunner in
+      // runner-store.js) and can collide if two registrations race before
+      // Firestore sync finishes, so more than one roster entry can share
+      // the same bib. Matching on bib alone risked silently picking a
+      // *different* runner's (empty) record instead of this one's own.
+      myRecord = (runner.rosterId ? rosterRunners.find(r => r.id === runner.rosterId) : null)
+        || rosterRunners.find(r => r.bib === runner.bib) || null;
       const times = rosterRunners
         .filter(r => r.distance === runner.dist && (r.checkins || []).some(c => c.cp === 'finish'))
         .map(r => {
