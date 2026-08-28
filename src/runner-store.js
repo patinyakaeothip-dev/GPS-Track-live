@@ -194,15 +194,44 @@
     notifyUpdated();
   }
 
+  // A fresh device (new browser profile, freshly installed native app) has
+  // an empty local roster cache until the first real Firestore sync lands
+  // — checking "is this uid already registered for this event" (see
+  // mobile-app.jsx's openRunnerSpace) against that empty cache always came
+  // back "no", wrongly sending someone who'd already registered on a
+  // *different* device straight back to the registration form. isReady/
+  // waitUntilReady let a caller hold off on that kind of "definitely not
+  // there" conclusion until at least one real sync has actually happened.
+  let storeReady = false;
+  const readyWaiters = [];
+  function markReady() {
+    if (storeReady) return;
+    storeReady = true;
+    readyWaiters.splice(0).forEach(fn => fn());
+  }
+  function isReady() { return storeReady; }
+  // timeoutMs is a safety net, not the expected path — genuinely offline
+  // with no backend at all (window.fb null) should still let callers
+  // proceed after a bounded wait instead of hanging forever.
+  function waitUntilReady(timeoutMs = 4000) {
+    if (storeReady) return Promise.resolve();
+    return new Promise(resolve => {
+      readyWaiters.push(resolve);
+      setTimeout(resolve, timeoutMs);
+    });
+  }
+
   function startFirestoreSync() {
     if (!window.fb) return;
     window.fb.listDocs('runners').then(remote => {
       const filtered = remote.filter(r => !pendingDeletes.has(r.id));
       if (filtered.length) { saveRunners(filtered); notifyUpdated(); }
-    }).catch(err => console.warn('[runner-store] Firestore initial load failed', err));
+      markReady();
+    }).catch(err => { console.warn('[runner-store] Firestore initial load failed', err); markReady(); });
     window.fb.watchCollection('runners', remote => {
       saveRunners(remote.filter(r => !pendingDeletes.has(r.id)));
       notifyUpdated();
+      markReady();
     });
   }
   function notifyUpdated() {
@@ -273,5 +302,5 @@
   if (window.fb) startSosLogFirestoreSync();
   else window.addEventListener('trt:firebase-ready', startSosLogFirestoreSync, { once: true });
 
-  Object.assign(window, { runnerStore: { listRunners, listRunnersByUid, registerRunner, updateRunnerProgress, cancelRunner, deleteRunner, renumberBibs, logSosTriggered, resolveSosLog, listSosLog } });
+  Object.assign(window, { runnerStore: { listRunners, listRunnersByUid, registerRunner, updateRunnerProgress, cancelRunner, deleteRunner, renumberBibs, logSosTriggered, resolveSosLog, listSosLog, isReady, waitUntilReady } });
 })();

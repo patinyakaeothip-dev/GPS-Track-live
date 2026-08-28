@@ -3398,7 +3398,7 @@ function MobileApp() {
     persist({ ...session, user: completed });
     setScreen('events');
   }
-  function openRunnerSpace(ev) {
+  async function openRunnerSpace(ev) {
     setPendingEvent(ev);
     if (session && session.runner && session.runner.eventId === ev.id) {
       // The syncRunner effect above already clears session.runner once it
@@ -3425,6 +3425,18 @@ function MobileApp() {
         return;
       }
       persist({ ...session, runner: null });
+    }
+    // A fresh device (native app just installed, browser data cleared)
+    // starts with an empty local roster cache until the first real
+    // Firestore sync lands — checking the uid-based lookup below against
+    // that empty cache always came back "not registered", even for
+    // someone who really did register from a different device, silently
+    // sending them through the whole registration form again. Reported
+    // directly: registered via a browser, opened the native app signed
+    // into the same account, got asked to register from scratch. Give the
+    // roster sync a real chance to land first.
+    if (window.runnerStore && window.runnerStore.waitUntilReady) {
+      await window.runnerStore.waitUntilReady();
     }
     // session.runner only ever holds one registration at a time — if this
     // runner has registered for more than one event, whichever one the
