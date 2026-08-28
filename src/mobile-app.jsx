@@ -881,14 +881,29 @@ function PersonIcon({ size = 38, onClick, photo }) {
 // Same initial-letter circle used across the friends/roster lists (add
 // friend, friends tab, friend detail) — shows the runner's own avatar photo
 // once they've set one instead of just a colored initial forever.
-function AvatarCircle({ size = 36, photo, initial, fontSize = 14 }) {
+function AvatarCircle({ size = 36, photo, initial, fontSize = 14, status }) {
+  // status: 'running' | 'finished' | undefined — small overlay badge in the
+  // LiveTrail style, bottom-right corner of the circle.
+  const badge = status ? (
+    <div style={{ position: 'absolute', right: -1, bottom: -1, width: Math.max(14, size * 0.42), height: Math.max(14, size * 0.42),
+      borderRadius: 999, background: status === 'finished' ? C.brandDk : '#f59e0b', border: '1.5px solid #fff',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: Math.max(8, size * 0.24), lineHeight: 1 }}>
+      {status === 'finished' ? '🏁' : '🏃'}
+    </div>
+  ) : null;
   if (photo) {
-    return <div style={{ width: size, height: size, borderRadius: 999, overflow: 'hidden', flexShrink: 0 }}>
-      <img src={photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}/>
+    return <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
+      <div style={{ width: size, height: size, borderRadius: 999, overflow: 'hidden' }}>
+        <img src={photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}/>
+      </div>
+      {badge}
     </div>;
   }
-  return <div style={{ width: size, height: size, borderRadius: 999, background: C.orange, color: '#fff',
-    display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize, fontWeight: 600, flexShrink: 0 }}>{initial}</div>;
+  return <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
+    <div style={{ width: size, height: size, borderRadius: 999, background: C.orange, color: '#fff',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize, fontWeight: 600 }}>{initial}</div>
+    {badge}
+  </div>;
 }
 function HomeIcon({ size = 19, dark, active }) {
   const stroke = active ? '#fff' : (dark ? '#fff' : C.muted);
@@ -2098,6 +2113,16 @@ function RankingTab({ snap, eventId, event }) {
   // and the RD's explicit call that arrival order decides placement, not
   // each runner's own chip time). This used to rank by gun-clamped chip
   // elapsed time instead, which could disagree with Results' order.
+  // rankOverall/rankGender/paceMinPerKm/diffToLeaderMs — inspired by
+  // LiveTrail's own live ranking (dual rank badges, pace, "Diff 1st"),
+  // computed entirely from data already collected here, no schema change.
+  //
+  // diffToLeaderMs deliberately isn't "vs the eventual race leader" for a
+  // runner still on course — the leader may already be several
+  // checkpoints ahead, which isn't a meaningful "how far behind am I"
+  // number. It's measured against whoever was *fastest to reach the same
+  // checkpoint this runner has actually reached* — an apples-to-apples
+  // comparison at the same point on the course.
   const rows = uM(() => {
     const combine = window.eventStatus && window.eventStatus.combineDateTime;
     const distDef = (event && event.distances || []).find(d => d.label === dist);
@@ -2109,28 +2134,87 @@ function RankingTab({ snap, eventId, event }) {
       const gunElapsedMs = (gunMs != null && finishMs != null) ? finishMs - gunMs : null;
       return { finishMs, gunElapsedMs };
     }
+    let list;
     if (realRunners) {
-      return realRunners
-        .filter(r => r.distance === dist && !r.dnf && (gender === 'all' || r.gender === gender))
-        .map(r => {
-          const finished = (r.checkins || []).some(c => c.cp === 'finish');
-          const { finishMs, gunElapsedMs } = finished ? raceTimesFor(r) : { finishMs: null, gunElapsedMs: null };
-          return { bib: r.bib, name: r.nickname, progressKm: r.progressKm, finished, finishMs, elapsedMs: gunElapsedMs };
-        })
-        .sort((a, b) => (a.finished === b.finished ? 0 : a.finished ? -1 : 1) || (a.finished ? (a.finishMs || 0) - (b.finishMs || 0) : b.progressKm - a.progressKm))
-        .slice(0, 30);
+      const distRunners = realRunners.filter(r => r.distance === dist && !r.dnf);
+      const bestAtCp = {};
+      distRunners.forEach(r => {
+        (r.checkins || []).forEach(c => {
+          const ms = combine && event ? combine(event.raceDateISO, c.t) : null;
+          if (ms != null && (bestAtCp[c.cp] == null || ms < bestAtCp[c.cp])) bestAtCp[c.cp] = ms;
+        });
+      });
+      list = distRunners.map(r => {
+        const cks = r.checkins || [];
+        const finished = cks.some(c => c.cp === 'finish');
+        const { finishMs, gunElapsedMs } = finished ? raceTimesFor(r) : { finishMs: null, gunElapsedMs: null };
+        const lastCk = cks[cks.length - 1];
+        const lastMs = lastCk && combine && event ? combine(event.raceDateISO, lastCk.t) : null;
+        const diffToLeaderMs = finished
+          ? (bestAtCp.finish != null && finishMs != null ? finishMs - bestAtCp.finish : null)
+          : (lastCk && bestAtCp[lastCk.cp] != null && lastMs != null ? lastMs - bestAtCp[lastCk.cp] : null);
+        const paceMinPerKm = (gunElapsedMs != null && r.progressKm) ? (gunElapsedMs / 60000) / r.progressKm : null;
+        return { bib: r.bib, name: r.nickname, gender: r.gender, progressKm: r.progressKm, finished, finishMs, elapsedMs: gunElapsedMs, diffToLeaderMs, paceMinPerKm };
+      });
+    } else if (snap) {
+      list = snap.runners.filter(r => r.distance === dist)
+        .map(r => ({ bib: r.bib, name: `${r.firstName} ${r.lastName}`, gender: r.gender, progressKm: r.progressKm, finished: false, finishMs: null, elapsedMs: null, diffToLeaderMs: null, paceMinPerKm: null }));
+    } else {
+      list = [];
     }
-    if (!snap) return [];
-    return snap.runners.filter(r => r.distance === dist && (gender === 'all' || r.gender === gender))
-      .sort((a, b) => (a.status === 'finished' ? 0 : 1) - (b.status === 'finished' ? 0 : 1) || b.progressKm - a.progressKm)
-      .slice(0, 30)
-      .map(r => ({ bib: r.bib, name: `${r.firstName} ${r.lastName}`, progressKm: r.progressKm }));
+    list.sort((a, b) => (a.finished === b.finished ? 0 : a.finished ? -1 : 1) || (a.finished ? (a.finishMs || 0) - (b.finishMs || 0) : b.progressKm - a.progressKm));
+    list.forEach((r, i) => { r.rankOverall = i + 1; });
+    ['m', 'f'].forEach(g => { list.filter(r => r.gender === g).forEach((r, i) => { r.rankGender = i + 1; }); });
+    return list.filter(r => gender === 'all' || r.gender === gender).slice(0, 30);
   }, [realRunners, snap, dist, gender, event]);
   function fmtElapsed(ms) {
     if (ms == null || !isFinite(ms)) return '';
     const s = Math.floor(ms / 1000);
     const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), r = s % 60;
     return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}`;
+  }
+  // "+12:34" / "-" — never shown for the actual leader (diff 0 against
+  // themself reads as noise, not information).
+  function fmtDiff(ms) {
+    if (ms == null || !isFinite(ms) || ms <= 0) return null;
+    return `+${fmtElapsed(ms)}`;
+  }
+  function fmtPace(minPerKm) {
+    if (minPerKm == null || !isFinite(minPerKm)) return null;
+    const m = Math.floor(minPerKm);
+    const s = Math.round((minPerKm - m) * 60);
+    return `${m}:${String(s).padStart(2, '0')}/กม.`;
+  }
+  // "9.4km · คาดถึง [จุดถัดไป] ~14:05" — an estimate, not a promise:
+  // extrapolates the current leader's own average pace so far (from gun
+  // time to now, over distance actually covered) forward to the next
+  // checkpoint. Real segments vary in difficulty, so this can only ever
+  // be a rough guide, not a guarantee — phrased as "คาดว่า" (expected)
+  // rather than a bare time for that reason.
+  const etaInfo = uM(() => {
+    if (!realRunners || !event) return null;
+    const distRunners = realRunners.filter(r => r.distance === dist && !r.dnf);
+    const active = distRunners.filter(r => !(r.checkins || []).some(c => c.cp === 'finish') && (r.progressKm || 0) > 0);
+    if (!active.length) return null;
+    const leader = active.reduce((best, r) => ((r.progressKm || 0) > (best.progressKm || 0) ? r : best), active[0]);
+    const combine = window.eventStatus && window.eventStatus.combineDateTime;
+    const distDef = (event.distances || []).find(d => d.label === dist);
+    const gunMs = distDef && distDef.cpTimes && combine ? combine(event.raceDateISO, distDef.cpTimes.start) : null;
+    if (gunMs == null || !leader.progressKm) return null;
+    const nowMs = Date.now();
+    const paceMinPerKm = ((nowMs - gunMs) / 60000) / leader.progressKm;
+    if (!isFinite(paceMinPerKm) || paceMinPerKm <= 0) return null;
+    const totalKm = parseFloat(dist) || 0;
+    const cps = [...(event.checkpoints || []).map(cp => ({ label: cp.label, km: parseFloat(cp.km) || 0 })), { label: 'เส้นชัย', km: totalKm }]
+      .sort((a, b) => a.km - b.km);
+    const next = cps.find(cp => cp.km > leader.progressKm);
+    if (!next) return null;
+    const etaMs = nowMs + (next.km - leader.progressKm) * paceMinPerKm * 60000;
+    return { nextLabel: next.label, leaderKm: leader.progressKm, etaMs };
+  }, [realRunners, event, dist]);
+  function fmtClock(ms) {
+    const d = new Date(ms);
+    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
   }
   return (
     <PullToRefresh onRefresh={() => refreshRealRunners.current()} style={{ flex: 1, minHeight: 0, padding: '14px 18px 90px' }}>
@@ -2147,20 +2231,46 @@ function RankingTab({ snap, eventId, event }) {
           ))}
         </div>
       </div>
-      {rows.map((r, i) => (
-        <div key={r.bib} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 4px', borderBottom: `1px solid ${C.border}` }}>
-          <span style={{ width: 26, fontFamily: C.mono, fontWeight: 700, color: i < 3 ? C.brandDk : C.muted, fontSize: 13 }}>
-            {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`}
-          </span>
-          <span style={{ flex: 1, fontSize: 13.5 }}>{r.name}</span>
-          {r.finished
-            ? <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-                <span style={{ fontFamily: C.mono, fontSize: 11, color: C.text, fontWeight: 700 }}>{fmtElapsed(r.elapsedMs)}</span>
-                <span style={{ fontFamily: C.mono, fontSize: 9.5, color: C.muted }}>{r.progressKm.toFixed(1)}K</span>
-              </span>
-            : <span style={{ fontFamily: C.mono, fontSize: 11, color: C.muted }}>{r.progressKm.toFixed(1)}K</span>}
+      {etaInfo && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, padding: '8px 12px',
+          background: '#fdf0d6', border: '1px solid #f0d9a0', borderRadius: 10, fontSize: 11, color: '#7c4a03' }}>
+          <span>🏃</span>
+          <span>ผู้นำอยู่ที่ {etaInfo.leaderKm.toFixed(1)} กม. · คาดถึง <b>{etaInfo.nextLabel}</b> เวลา <b>{fmtClock(etaInfo.etaMs)}</b> น.</span>
         </div>
-      ))}
+      )}
+      {rows.map(r => {
+        // gender==='all' shows the overall rank as the main badge; picking
+        // one gender to view shows that category's own rank instead (same
+        // idea as LiveTrail switching its own primary badge between the
+        // Overall/Women tabs) — the *other* rank still shows as a small
+        // second line either way so it's never fully hidden.
+        const primaryRank = gender === 'all' ? r.rankOverall : (r.rankGender || r.rankOverall);
+        const diffStr = fmtDiff(r.diffToLeaderMs);
+        const paceStr = fmtPace(r.paceMinPerKm);
+        return (
+          <div key={r.bib} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 4px', borderBottom: `1px solid ${C.border}` }}>
+            <span style={{ width: 26, flexShrink: 0, fontFamily: C.mono, fontWeight: 700, color: primaryRank <= 3 ? C.brandDk : C.muted, fontSize: 13 }}>
+              {primaryRank === 1 ? '🥇' : primaryRank === 2 ? '🥈' : primaryRank === 3 ? '🥉' : `#${primaryRank}`}
+            </span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</div>
+              {/* Overall + gender rank shown together, LiveTrail-style —
+                  whichever one isn't already the big badge above shows
+                  here instead of disappearing. */}
+              <div style={{ fontFamily: C.mono, fontSize: 9.5, color: C.muted, marginTop: 1 }}>
+                รวม #{r.rankOverall}{r.rankGender ? ` · ${r.gender === 'f' ? 'หญิง' : 'ชาย'} #${r.rankGender}` : ''}
+              </div>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+              {r.finished
+                ? <span style={{ fontFamily: C.mono, fontSize: 11, color: C.text, fontWeight: 700 }}>{fmtElapsed(r.elapsedMs)}</span>
+                : <span style={{ fontFamily: C.mono, fontSize: 11, color: C.muted }}>{r.progressKm.toFixed(1)}K</span>}
+              {paceStr && <span style={{ fontFamily: C.mono, fontSize: 9.5, color: C.muted }}>{paceStr}</span>}
+              {diffStr && <span style={{ fontFamily: C.mono, fontSize: 9.5, color: '#b45309' }}>{diffStr}</span>}
+            </div>
+          </div>
+        );
+      })}
     </PullToRefresh>
   );
 }
@@ -2173,6 +2283,15 @@ function runnerStatusLabel(r) {
   if ((r.checkins || []).some(c => c.cp === 'finish')) return 'เข้าเส้นชัยแล้ว';
   if ((r.checkins || []).length) return 'กำลังวิ่งอยู่';
   return 'ยังไม่เริ่ม';
+}
+// AvatarCircle's small overlay badge — undefined (no badge) before the
+// runner has any checkin yet, so the badge only ever appears once there's
+// something worth signalling.
+function runnerAvatarStatus(r) {
+  if (r.dnf) return undefined;
+  if ((r.checkins || []).some(c => c.cp === 'finish')) return 'finished';
+  if ((r.checkins || []).length) return 'running';
+  return undefined;
 }
 
 // Viewing several friends' GPS at once means one Leaflet map + N live-position
@@ -2219,7 +2338,7 @@ function FriendsTab({ eventId, event, followedBib, favBibs, onAddFavorite, onRem
         <div>
           <div style={{ fontFamily: C.mono, fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted, marginBottom: 6 }}>กำลังติดตามอยู่</div>
           <div onClick={() => setDetailBib(followed.bib)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 10, background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, boxShadow: '0 1px 3px rgba(31,42,28,0.08)', cursor: 'pointer' }}>
-            <AvatarCircle size={36} photo={followed.avatarPhoto} initial={followed.nickname[0]}/>
+            <AvatarCircle size={36} photo={followed.avatarPhoto} initial={followed.nickname[0]} status={runnerAvatarStatus(followed)}/>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 14, fontWeight: 600 }}>{followed.nickname}</div>
               <div style={{ fontFamily: C.mono, fontSize: 10.5, color: C.muted }}>bib {followed.bib} · {followed.distance} · {runnerStatusLabel(followed)}</div>
@@ -2248,7 +2367,7 @@ function FriendsTab({ eventId, event, followedBib, favBibs, onAddFavorite, onRem
                   {multiMode && (
                     <div style={{ width: 20, height: 20, borderRadius: 6, border: `1.6px solid ${checked ? C.brand : C.border}`, background: checked ? C.brand : 'transparent', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>{checked ? '✓' : ''}</div>
                   )}
-                  <AvatarCircle size={36} photo={r.avatarPhoto} initial={r.nickname[0]}/>
+                  <AvatarCircle size={36} photo={r.avatarPhoto} initial={r.nickname[0]} status={runnerAvatarStatus(r)}/>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 14, fontWeight: 600 }}>{r.nickname}</div>
                     <div style={{ fontFamily: C.mono, fontSize: 10.5, color: C.muted }}>bib {r.bib} · {r.distance} · {runnerStatusLabel(r)}</div>
@@ -2298,7 +2417,7 @@ function FriendDetailSheet({ runner: r, eventId, event, onClose, onFollow }) {
       <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)' }}/>
       <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, background: '#fff', borderRadius: '18px 18px 0 0', padding: '20px 22px 32px', boxShadow: '0 -8px 30px rgba(0,0,0,0.2)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-          <AvatarCircle size={44} fontSize={17} photo={r.avatarPhoto} initial={r.nickname[0]}/>
+          <AvatarCircle size={44} fontSize={17} photo={r.avatarPhoto} initial={r.nickname[0]} status={runnerAvatarStatus(r)}/>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 17, fontWeight: 700 }}>{r.nickname}</div>
             <div style={{ fontFamily: C.mono, fontSize: 11, color: C.muted }}>bib {r.bib} · {r.distance}</div>
@@ -2721,6 +2840,72 @@ function DnfScreen({ onCancel, onConfirm }) {
   );
 }
 
+// ── Profile: own race history, sourced entirely from this app's own past
+// events instead of an external federation/index (e.g. UTMB Index) — only
+// covers registrations made while logged in, since a guest registration has
+// no uid to link back to this account.
+function RaceHistorySection({ uid }) {
+  const rows = uM(() => {
+    if (!uid || !window.runnerStore) return [];
+    const combine = window.eventStatus && window.eventStatus.combineDateTime;
+    const mine = window.runnerStore.listRunnersByUid(uid);
+    const events = getEvents();
+    return mine
+      .map(r => {
+        const ev = events.find(e => e.id === r.eventId);
+        if (!ev || !window.eventStatus || window.eventStatus.computeStatus(ev) !== 'past') return null;
+        const finishCk = (r.checkins || []).find(c => c.cp === 'finish');
+        if (r.dnf || !finishCk) return { ev, r, finished: false, elapsedMs: null, rankOverall: null };
+        const distDef = (ev.distances || []).find(d => d.label === r.distance);
+        const gunMs = distDef && distDef.cpTimes && combine ? combine(ev.raceDateISO, distDef.cpTimes.start) : null;
+        const finishMs = combine ? combine(ev.raceDateISO, finishCk.t) : null;
+        const elapsedMs = (gunMs != null && finishMs != null) ? finishMs - gunMs : null;
+        const peers = (window.runnerStore.listRunners(ev.id) || []).filter(p => p.distance === r.distance && !p.dnf);
+        const peerTimes = peers.map(p => {
+          const pfc = (p.checkins || []).find(c => c.cp === 'finish');
+          const pfm = pfc && combine ? combine(ev.raceDateISO, pfc.t) : null;
+          return (gunMs != null && pfm != null) ? pfm - gunMs : null;
+        }).filter(ms => ms != null);
+        peerTimes.sort((a, b) => a - b);
+        const rankOverall = elapsedMs != null ? peerTimes.filter(ms => ms < elapsedMs).length + 1 : null;
+        return { ev, r, finished: true, elapsedMs, rankOverall, totalFinishers: peerTimes.length };
+      })
+      .filter(Boolean)
+      .sort((a, b) => (b.ev.raceDateISO || '').localeCompare(a.ev.raceDateISO || ''));
+  }, [uid]);
+  if (!rows.length) return null;
+  return (
+    <div>
+      <div style={{ fontFamily: C.mono, fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted, marginBottom: 6 }}>ประวัติการแข่งขัน</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {rows.map(({ ev, r, finished, elapsedMs, rankOverall, totalFinishers }) => (
+          <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 12, background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, boxShadow: '0 1px 3px rgba(31,42,28,0.08)' }}>
+            <div style={{ fontSize: 22, flexShrink: 0 }}>{finished ? '🏅' : '🚩'}</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ev.name}</div>
+              <div style={{ fontFamily: C.mono, fontSize: 10.5, color: C.muted, marginTop: 1 }}>{r.distance}{ev.raceDateISO ? ` · ${ev.raceDateISO}` : ''}</div>
+            </div>
+            <div style={{ textAlign: 'right', flexShrink: 0 }}>
+              {finished
+                ? <>
+                    <div style={{ fontFamily: C.mono, fontSize: 12, fontWeight: 700 }}>{fmtElapsedMs(elapsedMs)}</div>
+                    {rankOverall && <div style={{ fontFamily: C.mono, fontSize: 9.5, color: C.muted }}>อันดับ {rankOverall}/{totalFinishers}</div>}
+                  </>
+                : <div style={{ fontFamily: C.mono, fontSize: 11, color: C.muted }}>{runnerStatusLabel(r)}</div>}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+function fmtElapsedMs(ms) {
+  if (ms == null || !isFinite(ms) || ms < 0) return '—';
+  const totalSec = Math.floor(ms / 1000);
+  const h = Math.floor(totalSec / 3600), m = Math.floor((totalSec % 3600) / 60), s = totalSec % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
 function ProfileScreen({ user, onLogout, onClose, onSave, onboard }) {
   const [nickname, setNickname] = uS(user.nickname || user.name || '');
   const [gender, setGender] = uS(user.gender || '');
@@ -2848,6 +3033,7 @@ function ProfileScreen({ user, onLogout, onClose, onSave, onboard }) {
           </select>
         </Field>
         <Field label="โรคประจำตัว / ข้อมูลสำคัญทางการแพทย์"><input readOnly={readOnly} value={medical} onChange={e => setMedical(e.target.value)} placeholder="เช่น หอบหืด, แพ้ยา" style={fieldStyle(readOnly)}/></Field>
+        {!onboard && <RaceHistorySection uid={user.uid}/>}
       </div>
 
       <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
