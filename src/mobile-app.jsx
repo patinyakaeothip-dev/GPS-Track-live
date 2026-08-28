@@ -1859,6 +1859,18 @@ function FollowedRunnerPanel({ runner, event, livePos }) {
 
   return (
     <div style={{ background: '#fff', borderTop: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}` }}>
+      {/* Without this, a spectator switching who they follow (Friends tab,
+          or re-picking from the runner list) had nothing on this screen
+          itself saying whose dot/checkpoints they were actually looking
+          at — easy to lose track of, especially once the map and stats
+          below look the same for everyone. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 18px', borderBottom: `1px solid ${C.border}` }}>
+        <AvatarCircle size={34} photo={runner.avatarPhoto} initial={(runner.nickname || '?')[0]} status={runnerAvatarStatus(runner)}/>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{runner.nickname}</div>
+          <div style={{ fontFamily: C.mono, fontSize: 10.5, color: C.muted }}>bib {runner.bib} · {runner.distance}</div>
+        </div>
+      </div>
       <div style={{ display: 'flex', gap: 14, padding: '14px 18px', borderBottom: `1px solid ${C.border}` }}>
         <Stat label={finished ? 'เวลารวม' : 'เวลาที่วิ่งมาแล้ว'} value={fmtElapsed(finished ? totalMs : elapsedMs)}/>
         <Stat label="ความเร็วปัจจุบัน" value={paceLabel} accent={gpsLive ? C.brand : C.mute2}/>
@@ -3058,9 +3070,13 @@ function ProfileScreen({ user, onLogout, onClose, onSave, onboard }) {
 }
 
 // ── App shell with bottom tabs ────────────────────────────────────────────
-function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome, onCancelSos }) {
+function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome, onCancelSos, onBackToPicker }) {
   const isSpectator = !!session.spectator;
-  const [tab, setTab] = uS(isSpectator ? 'friends' : 'track');
+  // A spectator who just picked a runner from the list wants to see that
+  // runner's route/checkpoints right away — landing on Friends (a list of
+  // *other* people to pick from) instead made the very thing they just
+  // did feel like it went nowhere.
+  const [tab, setTab] = uS(isSpectator ? 'route' : 'track');
   const [scanning, setScanning] = uS(false);
   const [scanned, setScanned] = uS(null);
   const [pickingFav, setPickingFav] = uS(false);
@@ -3321,8 +3337,16 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
           env(safe-area-inset-top) for the notch/Dynamic Island on real
           devices — a flat 40px on top of that doubled up the gap. Fall
           back to 40px only where there's no safe-area to speak of. */}
-      <div style={{ padding: '18px 18px 10px', paddingTop: 'max(18px, env(safe-area-inset-top))', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Brand/>
+      <div style={{ padding: '18px 18px 10px', paddingTop: 'max(18px, env(safe-area-inset-top))', display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {/* Only a spectator ever has "the runner list" to go back to —
+              a runner's own session has no such picker. The bottom "Event"
+              tab already goes further back (to the event list itself), but
+              that skipped straight past the picker with no way to just
+              switch who's being followed without starting over. */}
+          {isSpectator && onBackToPicker && <BackBtn onClick={onBackToPicker} inline/>}
+          <Brand/>
+        </div>
         <PersonIcon size={30} onClick={onProfile} photo={user.avatarPhoto}/>
       </div>
       <div key={tab} style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', animation: 'trtFadeIn 0.2s ease' }}>
@@ -3823,6 +3847,10 @@ function MobileApp() {
   }}/>;
   else if (screen === 'app') body = <AppShell user={session.user} session={session} updateRunner={updateRunner}
     onSos={() => setModal('sos')} onDnf={() => setModal('dnf')} onProfile={() => setModal('profile')} onHome={() => setScreen('events')}
+    onBackToPicker={session.spectator ? () => {
+      setPendingEvent(getEvents().find(e => e.id === session.followEventId));
+      setScreen('follow-picker');
+    } : null}
     onCancelSos={() => {
       if (session.runner && session.runner.rosterId && window.runnerStore) {
         window.runnerStore.updateRunnerProgress(session.runner.rosterId, { sos: false, sosReason: '' });
