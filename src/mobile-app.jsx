@@ -2254,12 +2254,6 @@ function RankingTab({ snap, eventId, event }) {
             </span>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 13.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</div>
-              {/* Overall + gender rank shown together, LiveTrail-style —
-                  whichever one isn't already the big badge above shows
-                  here instead of disappearing. */}
-              <div style={{ fontFamily: C.mono, fontSize: 9.5, color: C.muted, marginTop: 1 }}>
-                รวม #{r.rankOverall}{r.rankGender ? ` · ${r.gender === 'f' ? 'หญิง' : 'ชาย'} #${r.rankGender}` : ''}
-              </div>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
               {r.finished
