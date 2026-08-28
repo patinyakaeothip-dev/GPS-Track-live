@@ -1813,8 +1813,21 @@ function RouteTab({ course, runner, event, spectatorRunner, livePos }) {
     const id = setTimeout(() => mapObj.current.invalidateSize(), 220);
     return () => clearTimeout(id);
   }, [mapFull]);
+  // A fullscreen overlay (map or elevation) is positioned against this
+  // outer container (position:relative, its nearest positioned ancestor).
+  // That container itself scrolls (overflow:auto) — while it's scrolled
+  // down far enough to have the Elevation section in view and the map
+  // scrolled out above it, inset:0 on the overlay lands wherever the
+  // container's own (unscrolled) top edge is, not the map/chart the user
+  // was just looking at, which read as "expanding the chart jumped me
+  // back to the map." Locking scroll to the top and switching to
+  // overflow:hidden whenever either overlay is open keeps the overlay's
+  // inset:0 aligned with what's actually on screen.
+  const scrollRef = uR(null);
+  const anyFull = mapFull || elevFull;
+  uE(() => { if (anyFull && scrollRef.current) scrollRef.current.scrollTop = 0; }, [anyFull]);
   return (
-    <div style={{ flex: 1, minHeight: 0, overflow: 'auto', overscrollBehavior: 'contain', display: 'flex', flexDirection: 'column', position: 'relative' }}>
+    <div ref={scrollRef} style={{ flex: 1, minHeight: 0, overflow: anyFull ? 'hidden' : 'auto', overscrollBehavior: 'contain', display: 'flex', flexDirection: 'column', position: 'relative' }}>
       {/* A proper full-width header row above the map, not a pill floating
           over it — the earlier version covered course/checkpoint markers
           right where a spectator's eye lands first, and stayed small
@@ -1831,7 +1844,7 @@ function RouteTab({ course, runner, event, spectatorRunner, livePos }) {
         </div>
       )}
       <div style={mapFull
-        ? { position: 'absolute', inset: 0, zIndex: 50, background: '#eee' }
+        ? { position: 'absolute', inset: 0, zIndex: 900, background: '#eee' }
         : { position: 'relative', flex: 1, minHeight: 220 }}>
         <div ref={mapRef} style={{ position: 'absolute', inset: 0, background: '#eee' }}/>
         <div onClick={() => setMapFull(v => !v)} style={{ position: 'absolute', top: 12, right: 12, zIndex: 400,
@@ -1856,7 +1869,7 @@ function RouteTab({ course, runner, event, spectatorRunner, livePos }) {
           it just left a big blank gap under the chart. */}
       {!mapFull && (
         <div style={elevFull
-          ? { position: 'absolute', inset: 0, zIndex: 50, background: '#fff', padding: '14px 18px 20px', overflow: 'auto' }
+          ? { position: 'absolute', inset: 0, zIndex: 900, background: '#fff', padding: '14px 18px 20px', overflow: 'auto' }
           : { padding: '14px 18px 20px', background: '#fff' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <Kicker>Elevation</Kicker>
