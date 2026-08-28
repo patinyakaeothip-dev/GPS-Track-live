@@ -49,7 +49,18 @@
        leave a blank gap where that bar used to be. flex:1/min-height:0 on
        #stage sizes it to whatever's actually left, nav present or not. */
     html, body { margin: 0; overflow: hidden; overscroll-behavior: none; background: #efe9dc; font-family: 'Plus Jakarta Sans','Noto Sans Thai',ui-sans-serif,system-ui,sans-serif; }
-    body { height: 100vh; display: flex; flex-direction: column; }
+    /* 100vh on mobile Safari is computed as if the address bar/bottom
+       toolbar were always hidden — when they're actually showing (the
+       normal state right after opening a link, before any scroll), the
+       real visible viewport is shorter than that, so a body sized to
+       100vh overflows past the bottom of what's actually visible. The
+       bottom tab bar (Track/Route/Ranking/Friends/Event), being the very
+       last thing in this flex column, is what ends up pushed out of
+       view — reported as the tabs missing entirely on a fresh page load
+       in Safari. 100dvh tracks the real visible viewport as browser
+       chrome shows/hides; 100vh stays first as a fallback for browsers
+       old enough not to support dvh (iOS Safari < 15.4, ~2022). */
+    body { height: 100vh; height: 100dvh; display: flex; flex-direction: column; }
     * { box-sizing: border-box; }
     /* overflow:auto (not the hidden default) so the desktop mockup frame
        can be scrolled into view instead of clipped if #phone's min-height
