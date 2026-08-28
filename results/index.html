@@ -2,7 +2,11 @@
 <html lang="th">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- viewport-fit=cover is required for env(safe-area-inset-*) below to
+       resolve to anything other than 0 — without it the page is letterboxed
+       clear of the notch/status bar instead of drawing under it, so there's
+       no actual inset to read. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" content="#2d6a4f"/>
   <title>Rayong Trail · ผลการวิ่งทั้งหมด</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -314,25 +318,38 @@
       const ago = lastAt ? Math.floor((Date.now() - lastAt) / 1000) : null;
 
       return (
-        <div style={{ maxWidth: 900, margin: '0 auto', padding: '20px 16px 60px' }}>
+        // paddingTop stacks a fixed 20px on top of the device's actual
+        // notch/status-bar inset (0 on a browser tab, real on a phone
+        // opened full-screen) — a plain 20px alone put the header directly
+        // under the status bar with nothing reserving room for it, so the
+        // clock/signal icons overlapped the event name and the back
+        // button sat half-hidden behind them.
+        <div style={{ maxWidth: 900, margin: '0 auto', padding: 'calc(20px + env(safe-area-inset-top)) 16px 60px' }}>
           {/* Header */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, paddingBottom: 16,
             borderBottom: `2px solid ${BRAND}` }}>
+            {/* Icon-only back button — was a text link ("← หน้าหลัก") that
+                doubled the overlap problem above by adding yet more header
+                content competing for the same cramped top strip. */}
+            <a href="/" aria-label="กลับหน้าหลัก" style={{ flexShrink: 0, width: 32, height: 32, borderRadius: 10,
+              border: `1.6px solid ${BORDER}`, background: '#fff', display: 'flex', alignItems: 'center',
+              justifyContent: 'center', textDecoration: 'none' }}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
+                <path d="M15 5L8 12L15 19" stroke={TEXT} strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </a>
             <img src="/assets/rayong-trail-logo.jpg" alt=""
-              style={{ width: 48, height: 'auto', borderRadius: 6 }}/>
-            <div style={{ flex: 1 }}>
+              style={{ width: 40, height: 'auto', borderRadius: 6, flexShrink: 0 }}/>
+            <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 18, fontWeight: 700, color: BRAND_DK,
-                letterSpacing: '-0.01em', lineHeight: 1.1 }}>
+                letterSpacing: '-0.01em', lineHeight: 1.1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {selectedEvent ? selectedEvent.name : 'Rayong Trail'}
               </div>
               <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '0.14em',
-                textTransform: 'uppercase', color: MUTED, marginTop: 2 }}>
+                textTransform: 'uppercase', color: MUTED, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {selectedEvent ? selectedEvent.date : ''} · ผลการวิ่ง / All Results
               </div>
             </div>
-            <a href="/" style={{ fontFamily: MONO, fontSize: 11, color: MUTED,
-              textDecoration: 'none', padding: '6px 10px', border: `1px solid ${BORDER}`,
-              borderRadius: 6 }}>← หน้าหลัก</a>
           </div>
 
           {/* Event picker */}
