@@ -182,6 +182,15 @@
     return list.map(e => pendingWrites.has(e.id) ? pendingWrites.get(e.id) : e);
   }
 
+  function pullLatest() {
+    if (!window.fb) return;
+    window.fb.listDocs('events').then(remote => {
+      const filtered = applyPendingWrites(remote.filter(e => !pendingDeletes.has(e.id)).map(fromFirestoreSafe));
+      saveEvents(filtered);
+      notifyUpdated();
+    }).catch(err => console.warn('[event-store] Firestore pull failed', err));
+  }
+
   function startFirestoreSync() {
     if (!window.fb) return;
     window.fb.listDocs('events').then(remote => {
@@ -197,6 +206,20 @@
     window.fb.watchCollection('events', remote => {
       saveEvents(applyPendingWrites(remote.filter(e => !pendingDeletes.has(e.id)).map(fromFirestoreSafe)));
       notifyUpdated();
+    });
+
+    // onSnapshot's underlying websocket doesn't survive every real-world
+    // interruption cleanly — a phone locking, the browser/WebView
+    // suspending background JS for a while, or a spotty connection can
+    // leave it silently stalled so no further pushes ever arrive, without
+    // throwing an error anywhere to say so. That read as "new events don't
+    // show up on my phone" even though nothing was actually broken — the
+    // app just never noticed its live feed had gone quiet. Forcing a fresh
+    // pull whenever the tab/app becomes visible again (foregrounding after
+    // being backgrounded) catches it up regardless of whether the listener
+    // itself recovered on its own.
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') pullLatest();
     });
   }
   function notifyUpdated() {
