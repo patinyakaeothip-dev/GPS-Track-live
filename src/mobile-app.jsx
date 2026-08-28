@@ -1798,10 +1798,49 @@ function RouteTab({ course, runner, event, spectatorRunner, livePos }) {
     if (!map || !marker) return;
     map.flyTo(marker.getLatLng(), Math.max(map.getZoom(), 15));
   }
+  // Fullscreen just changes this container's own sizing (position:absolute,
+  // inset:0 against #phone — the nearest positioned ancestor, same trick
+  // Overlay/modals already use) rather than mounting a second map/chart —
+  // Leaflet's map instance is expensive to set up and tied to mapRef's DOM
+  // node, so swapping views instead of resizing would mean tearing it down
+  // and rebuilding it every time. Leaflet does need an explicit nudge
+  // after a container resize though — it caches the size it was created
+  // at and won't otherwise notice the box around it just changed.
+  const [mapFull, setMapFull] = uS(false);
+  const [elevFull, setElevFull] = uS(false);
+  uE(() => {
+    if (!mapObj.current) return;
+    const id = setTimeout(() => mapObj.current.invalidateSize(), 220);
+    return () => clearTimeout(id);
+  }, [mapFull]);
   return (
-    <div style={{ flex: 1, minHeight: 0, overflow: 'auto', overscrollBehavior: 'contain', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ position: 'relative', flex: 1, minHeight: 260 }}>
+    <div style={{ flex: 1, minHeight: 0, overflow: 'auto', overscrollBehavior: 'contain', display: 'flex', flexDirection: 'column', position: 'relative' }}>
+      <div style={mapFull
+        ? { position: 'absolute', inset: 0, zIndex: 50, background: '#eee' }
+        : { position: 'relative', flex: 1, minHeight: 260 }}>
         <div ref={mapRef} style={{ position: 'absolute', inset: 0, background: '#eee' }}/>
+        {/* Runner identity used to live in its own white panel below the
+            map — on a small phone screen that ate a full row of vertical
+            space just to say a name/bib that fits fine as a pill floating
+            over the map itself, LiveTrail-style. */}
+        {spectatorRunner && (
+          <div style={{ position: 'absolute', top: 14, left: '50%', transform: 'translateX(-50%)', zIndex: 400,
+            display: 'flex', alignItems: 'center', gap: 10, padding: '8px 16px 8px 8px', background: '#fff',
+            borderRadius: 999, boxShadow: '0 4px 16px rgba(0,0,0,0.25)', maxWidth: 'calc(100% - 28px)' }}>
+            <AvatarCircle size={40} photo={spectatorRunner.avatarPhoto} initial={(spectatorRunner.nickname || '?')[0]} status={runnerAvatarStatus(spectatorRunner)}/>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 15, fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{spectatorRunner.nickname}</div>
+              <div style={{ fontFamily: C.mono, fontSize: 11, color: C.muted, fontWeight: 600 }}>bib {spectatorRunner.bib} · {spectatorRunner.distance}</div>
+            </div>
+          </div>
+        )}
+        <div onClick={() => setMapFull(v => !v)} style={{ position: 'absolute', top: 12, right: 12, zIndex: 400,
+          width: 36, height: 36, borderRadius: 999, background: '#fff', boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+          {mapFull
+            ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M9 3v6H3M15 3v6h6M9 21v-6H3M15 21v-6h6" stroke={C.text} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            : <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M3 9V3h6M15 3h6v6M21 15v6h-6M9 21H3v-6" stroke={C.text} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+        </div>
         <div onClick={recenterToMe} style={{ position: 'absolute', bottom: 12, right: 12, zIndex: 400,
           width: 40, height: 40, borderRadius: 999, background: '#fff', boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
           display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
@@ -1810,15 +1849,24 @@ function RouteTab({ course, runner, event, spectatorRunner, livePos }) {
           </svg>
         </div>
       </div>
-      {spectatorRunner && <FollowedRunnerPanel runner={spectatorRunner} event={event} livePos={livePos}/>}
+      {!mapFull && spectatorRunner && <FollowedRunnerPanel runner={spectatorRunner} event={event} livePos={livePos}/>}
       {/* The tab bar is a proper flexShrink:0 sibling in AppShell's own
           column layout, not something floating on top of this content —
           it already reserves its own space, so padding this deep to dodge
           it just left a big blank gap under the chart. */}
-      <div style={{ padding: '14px 18px 20px', background: '#fff' }}>
-        <Kicker>Elevation</Kicker>
-        {course && <ElevationSvg course={course} progressKm={elevationKm} checkpoints={(event && event.checkpoints) || []}/>}
-      </div>
+      {!mapFull && (
+        <div style={elevFull
+          ? { position: 'absolute', inset: 0, zIndex: 50, background: '#fff', padding: '14px 18px 20px', overflow: 'auto' }
+          : { padding: '14px 18px 20px', background: '#fff' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Kicker>Elevation</Kicker>
+            <span onClick={() => setElevFull(v => !v)} style={{ cursor: 'pointer', fontSize: 11, fontFamily: C.mono, fontWeight: 700, color: C.brand }}>
+              {elevFull ? '✕ ปิด' : '⤢ ขยาย'}
+            </span>
+          </div>
+          {course && <ElevationSvg course={course} progressKm={elevationKm} checkpoints={(event && event.checkpoints) || []} height={elevFull ? 340 : 150}/>}
+        </div>
+      )}
     </div>
   );
 }
@@ -1859,18 +1907,11 @@ function FollowedRunnerPanel({ runner, event, livePos }) {
 
   return (
     <div style={{ background: '#fff', borderTop: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}` }}>
-      {/* Without this, a spectator switching who they follow (Friends tab,
-          or re-picking from the runner list) had nothing on this screen
-          itself saying whose dot/checkpoints they were actually looking
-          at — easy to lose track of, especially once the map and stats
-          below look the same for everyone. */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 18px', borderBottom: `1px solid ${C.border}` }}>
-        <AvatarCircle size={34} photo={runner.avatarPhoto} initial={(runner.nickname || '?')[0]} status={runnerAvatarStatus(runner)}/>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 14, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{runner.nickname}</div>
-          <div style={{ fontFamily: C.mono, fontSize: 10.5, color: C.muted }}>bib {runner.bib} · {runner.distance}</div>
-        </div>
-      </div>
+      {/* Runner identity (avatar/name/bib) is shown as a pill floating over
+          the map itself now (see RouteTab) instead of its own row here — a
+          spectator switching who they follow still always has an answer to
+          "whose progress is this," just without spending a full row of
+          vertical space on it. */}
       <div style={{ display: 'flex', gap: 14, padding: '14px 18px', borderBottom: `1px solid ${C.border}` }}>
         <Stat label={finished ? 'เวลารวม' : 'เวลาที่วิ่งมาแล้ว'} value={fmtElapsed(finished ? totalMs : elapsedMs)}/>
         <Stat label="ความเร็วปัจจุบัน" value={paceLabel} accent={gpsLive ? C.brand : C.mute2}/>
@@ -1898,7 +1939,7 @@ function FollowedRunnerPanel({ runner, event, livePos }) {
 // inline SVG, not a charting library. `zoom` is how many times narrower the
 // visible km window is than the full course; `panKm` is that window's left
 // edge, always clamped so it can't scroll past either end.
-function ElevationSvg({ course, progressKm, checkpoints }) {
+function ElevationSvg({ course, progressKm, checkpoints, height = 150 }) {
   // padBottom is taller than the plot really needs so angled checkpoint
   // labels (see marks.map below) have room to run diagonally without
   // colliding with their neighbors — a long name like "WS2 Green mountain"
@@ -1908,7 +1949,10 @@ function ElevationSvg({ course, progressKm, checkpoints }) {
   // (common for water stations) — labels are also staggered onto two
   // vertical rows below (see the `row` calc in marks.map) for exactly that
   // case, so padBottom needs room for two rows' worth of diagonal text.
-  const w = 340, h = 150, pad = 6, padBottom = 66, padLeft = 28;
+  // height is only ever taller than the default (fullscreen view) — padBottom
+  // stays a fixed pixel amount either way since it just needs to fit the
+  // checkpoint labels' own text height, not scale with the chart.
+  const w = 340, h = height, pad = 6, padBottom = 66, padLeft = 28;
   const pts = course.points;
   const minE = course.minEle, maxE = course.maxEle;
   const totalKm = course.totalKm;
@@ -3337,7 +3381,7 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
           env(safe-area-inset-top) for the notch/Dynamic Island on real
           devices — a flat 40px on top of that doubled up the gap. Fall
           back to 40px only where there's no safe-area to speak of. */}
-      <div style={{ padding: '18px 18px 10px', paddingTop: 'max(18px, env(safe-area-inset-top))', display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'space-between' }}>
+      <div style={{ padding: '12px 18px 8px', paddingTop: 'max(12px, env(safe-area-inset-top))', display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           {/* Only a spectator ever has "the runner list" to go back to —
               a runner's own session has no such picker. The bottom "Event"
