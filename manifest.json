@@ -1,0 +1,14 @@
+{
+  "name": "Rayong Trail",
+  "short_name": "Rayong Trail",
+  "description": "GPS live tracking แอพติดตามนักวิ่งเทรลแบบเรียลไทม์",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#efe9dc",
+  "theme_color": "#2d6a4f",
+  "icons": [
+    { "src": "/assets/app-icon-1024.png", "sizes": "1024x1024", "type": "image/png", "purpose": "any" },
+    { "src": "/assets/app-icon-1024.png", "sizes": "1024x1024", "type": "image/png", "purpose": "maskable" }
+  ]
+}

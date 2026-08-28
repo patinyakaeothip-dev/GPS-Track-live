@@ -554,6 +554,7 @@ function EventPickerScreen({ user, session, onOpenApp, onFollow, onProfile }) {
         </div>
         <PersonIcon size={38} onClick={onProfile} photo={user.avatarPhoto}/>
       </div>
+      <InstallPrompt/>
       <div style={{ display: 'flex', gap: 6, background: '#f4f1e8', borderRadius: 12, margin: '0 18px', padding: 4 }}>
         {[['past', 'ผ่านมาแล้ว'], ['live', 'กำลังแข่ง'], ['upcoming', 'กำลังจะมาถึง']].map(([k, l]) => (
           <div key={k} onClick={() => setTab(k)} style={{ flex: 1, textAlign: 'center', padding: 9, borderRadius: 9,
@@ -573,7 +574,7 @@ function EventPickerScreen({ user, session, onOpenApp, onFollow, onProfile }) {
             onFollow={() => onFollow(ev)}
             onSeeResult={() => window.location.href = `results/?event=${encodeURIComponent(ev.id)}`} />
         ))}
-        {filtered.length === 0 && <div style={{ textAlign: 'center', color: C.muted, fontSize: 13, padding: 30 }}>ไม่มีงานในหมวดนี้</div>}
+        {filtered.length === 0 && <EmptyState icon="🏔" text="ไม่มีงานในหมวดนี้"/>}
       </div>
     </div>
   );
@@ -614,7 +615,7 @@ function FollowPickerScreen({ eventId, onBack, onPick }) {
         </div>
       </div>
       <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '0 18px 18px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {filtered.length === 0 && <div style={{ textAlign: 'center', color: C.muted, fontSize: 13, padding: 30 }}>{runners.length === 0 ? 'ยังไม่มีใครลงทะเบียนงานนี้' : 'ไม่พบนักวิ่งที่ค้นหา'}</div>}
+        {filtered.length === 0 && <EmptyState icon={runners.length === 0 ? '🏃' : '🔍'} text={runners.length === 0 ? 'ยังไม่มีใครลงทะเบียนงานนี้' : 'ไม่พบนักวิ่งที่ค้นหา'}/>}
         {filtered.map(r => (
           <div key={r.bib} onClick={() => onPick(r.bib)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 12, background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, boxShadow: '0 1px 3px rgba(31,42,28,0.08)', cursor: 'pointer' }}>
             <AvatarCircle size={36} photo={r.avatarPhoto} initial={r.nickname[0]}/>
@@ -665,7 +666,7 @@ function FavoritePickerScreen({ eventId, onBack, favBibs, onToggle }) {
         </div>
       </div>
       <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '0 18px 18px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {filtered.length === 0 && <div style={{ textAlign: 'center', color: C.muted, fontSize: 13, padding: 30 }}>{runners.length === 0 ? 'ยังไม่มีใครลงทะเบียนงานนี้' : 'ไม่พบนักวิ่งที่ค้นหา'}</div>}
+        {filtered.length === 0 && <EmptyState icon={runners.length === 0 ? '🏃' : '🔍'} text={runners.length === 0 ? 'ยังไม่มีใครลงทะเบียนงานนี้' : 'ไม่พบนักวิ่งที่ค้นหา'}/>}
         {filtered.map(r => {
           const fav = favBibs.includes(r.bib);
           return (
@@ -930,6 +931,134 @@ function FlagIcon({ size = 17, color = '#9b1c10' }) {
       <path d="M6 21V4" stroke={color} strokeWidth="2" strokeLinecap="round"/>
       <path d="M6 4.5c2-1.2 4-1.2 6 0s4 1.2 6 0v8c-2 1.2-4 1.2-6 0s-4-1.2-6 0v-8Z" stroke={color} strokeWidth="1.9" strokeLinejoin="round"/>
     </svg>
+  );
+}
+// A plain line of grey text ("ยังไม่มีเพื่อนที่ favourite") reads as
+// inert/dead-end rather than "nothing here yet, that's fine" — a big
+// icon above it (still just an emoji, no new asset/image dependency to
+// keep in sync) softens that into a proper empty state.
+function EmptyState({ icon, text, sub, style }) {
+  return (
+    <div style={{ textAlign: 'center', color: C.muted, fontSize: 13, padding: 30, ...style }}>
+      <div style={{ fontSize: 34, marginBottom: 8, opacity: 0.7 }}>{icon}</div>
+      <div>{text}</div>
+      {sub && <div style={{ fontSize: 11.5, marginTop: 4, opacity: 0.8 }}>{sub}</div>}
+    </div>
+  );
+}
+// A plain blank gap while data syncs from Firestore reads as the page
+// having frozen/failed, not "still loading" — a shimmering placeholder
+// shaped like the real content coming answers that instead. Uses a CSS
+// animation (trtShimmer, injected once by MobileApp below) instead of a
+// spinner so it reads as "content is forming" rather than "please wait".
+function SkeletonBox({ width = '100%', height = 14, radius = 6, style }) {
+  return <div style={{ width, height, borderRadius: radius,
+    background: `linear-gradient(90deg, ${C.border} 25%, #efe9dc 37%, ${C.border} 63%)`,
+    backgroundSize: '400px 100%', animation: 'trtShimmer 1.4s ease infinite', ...style }}/>;
+}
+function SkeletonCard() {
+  return (
+    <div style={{ display: 'flex', gap: 12, alignItems: 'center', padding: 14, background: '#fff', border: `1px solid ${C.border}`, borderRadius: 14 }}>
+      <SkeletonBox width={46} height={46} radius={12}/>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <SkeletonBox width="70%" height={13}/>
+        <SkeletonBox width="45%" height={10}/>
+      </div>
+    </div>
+  );
+}
+// Pulling down from the top of a scrolled-to-top list to refresh it is a
+// gesture people already know from every other mobile app — data here is
+// already kept live by Firestore listeners, so onRefresh is really just a
+// visible "yes, this is current" confirmation rather than a real re-fetch,
+// but the gesture itself is still worth having for that reassurance.
+// Deliberately not wired into anything with its own touch/pointer
+// handling (the map, ElevationSvg's pinch-zoom) — a second competing
+// touch handler on the same element would fight the first, not stack.
+function PullToRefresh({ onRefresh, children, style }) {
+  const scrollRef = uR(null);
+  const startY = uR(null);
+  const [pull, setPull] = uS(0);
+  const [refreshing, setRefreshing] = uS(false);
+  const THRESHOLD = 60;
+  function onTouchStart(e) {
+    startY.current = (scrollRef.current && scrollRef.current.scrollTop <= 0 && !refreshing) ? e.touches[0].clientY : null;
+  }
+  function onTouchMove(e) {
+    if (startY.current == null) return;
+    const dy = e.touches[0].clientY - startY.current;
+    if (dy <= 0) { setPull(0); return; }
+    setPull(Math.min(dy * 0.5, 90));
+  }
+  function onTouchEnd() {
+    if (startY.current == null) return;
+    startY.current = null;
+    if (pull >= THRESHOLD) {
+      setRefreshing(true);
+      Promise.resolve().then(onRefresh).catch(() => {}).finally(() => {
+        setTimeout(() => { setRefreshing(false); setPull(0); }, 450);
+      });
+    } else {
+      setPull(0);
+    }
+  }
+  const indicatorH = refreshing ? 42 : pull;
+  return (
+    <div ref={scrollRef} onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}
+      style={{ ...style, overflow: 'auto', position: 'relative' }}>
+      <div style={{ height: indicatorH, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+        transition: refreshing ? 'height 0.2s ease' : 'none', overflow: 'hidden' }}>
+        <div style={{ width: 18, height: 18, borderRadius: 999, border: `2.5px solid ${C.border}`, borderTopColor: C.brand,
+          opacity: Math.min(1, pull / THRESHOLD) || (refreshing ? 1 : 0),
+          animation: (refreshing || pull >= THRESHOLD) ? 'trtPullSpin 0.6s linear infinite' : 'none' }}/>
+      </div>
+      {children}
+    </div>
+  );
+}
+// Dismissible "add to home screen" banner — skipped entirely inside the
+// native Capacitor app (there's no browser tab to add) and once already
+// running installed/standalone (display-mode: standalone covers Android/
+// desktop Chrome installs; navigator.standalone is Safari's own older,
+// non-standard equivalent for iOS). Android/Chrome fire a real
+// `beforeinstallprompt` event this can hook a one-tap install button to;
+// iOS Safari never fires that event at all (Apple's own long-standing
+// platform limitation — there is no programmatic install trigger there),
+// so the only thing possible on iOS is instructing the person through the
+// manual Share-sheet steps themselves.
+const LS_INSTALL_DISMISSED_KEY = 'trt.installPromptDismissed';
+function InstallPrompt() {
+  const [deferredPrompt, setDeferredPrompt] = uS(null);
+  const [dismissed, setDismissed] = uS(() => { try { return localStorage.getItem(LS_INSTALL_DISMISSED_KEY) === '1'; } catch (_) { return false; } });
+  const isNative = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+  const isStandalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
+  const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) && !window.MSStream;
+  uE(() => {
+    function onBeforeInstall(e) { e.preventDefault(); setDeferredPrompt(e); }
+    window.addEventListener('beforeinstallprompt', onBeforeInstall);
+    return () => window.removeEventListener('beforeinstallprompt', onBeforeInstall);
+  }, []);
+  function dismiss() {
+    setDismissed(true);
+    try { localStorage.setItem(LS_INSTALL_DISMISSED_KEY, '1'); } catch (_) {}
+  }
+  if (isNative || isStandalone || dismissed) return null;
+  if (!deferredPrompt && !isIOS) return null; // Android/Chrome before the event fires yet, or an unsupported desktop browser — nothing installable to offer
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '0 18px 10px', padding: '11px 13px',
+      background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, boxShadow: '0 1px 3px rgba(31,42,28,0.08)' }}>
+      <div style={{ fontSize: 22, flexShrink: 0 }}>📲</div>
+      <div style={{ flex: 1, fontSize: 11.5, color: C.text, lineHeight: 1.5 }}>
+        {isIOS
+          ? <>เพิ่มไปหน้าจอโฮมเพื่อเปิดแอพได้เร็วขึ้น — กด <b>แชร์</b> ⬆️ ด้านล่างจอ แล้วเลือก <b>"เพิ่มไปยังหน้าจอโฮม"</b></>
+          : <>เพิ่มไปหน้าจอโฮมเพื่อเปิดแอพได้เร็วขึ้นเหมือนแอพจริง</>}
+      </div>
+      {!isIOS && deferredPrompt && (
+        <button onClick={() => { deferredPrompt.prompt(); setDeferredPrompt(null); }} style={{ flexShrink: 0, padding: '7px 12px', background: C.brand, color: '#fff',
+          border: 'none', borderRadius: 8, fontFamily: C.mono, fontSize: 10.5, fontWeight: 700, cursor: 'pointer' }}>ติดตั้ง</button>
+      )}
+      <span onClick={dismiss} style={{ flexShrink: 0, cursor: 'pointer', fontSize: 16, color: C.muted, padding: 2 }}>×</span>
+    </div>
   );
 }
 function Field({ label, children, required }) {
@@ -1890,9 +2019,16 @@ function RankingTab({ snap, eventId, event }) {
   // Spectators following the demo course (no real eventId yet) still see
   // the simulated ranking as a fallback.
   const [realRunners, setRealRunners] = uS(() => (eventId && window.runnerStore ? window.runnerStore.listRunners(eventId) : null));
+  // Lifted out of the effect below (not just a local const inside it) so
+  // the pull-to-refresh gesture on the list can call the same function —
+  // data here is already kept current by the trt:runners-updated listener,
+  // so this mostly just gives the gesture something real to do rather than
+  // being purely decorative.
+  const refreshRealRunners = uR(() => {});
   uE(() => {
     if (!eventId || !window.runnerStore) { setRealRunners(null); return; }
     const refresh = () => setRealRunners(window.runnerStore.listRunners(eventId));
+    refreshRealRunners.current = refresh;
     refresh();
     window.addEventListener('trt:runners-updated', refresh);
     return () => window.removeEventListener('trt:runners-updated', refresh);
@@ -1942,7 +2078,7 @@ function RankingTab({ snap, eventId, event }) {
     return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}`;
   }
   return (
-    <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '14px 18px 90px' }}>
+    <PullToRefresh onRefresh={() => refreshRealRunners.current()} style={{ flex: 1, minHeight: 0, padding: '14px 18px 90px' }}>
       <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
         {distLabels.map(d => (
           <div key={d} onClick={() => setDist(d)} style={{ padding: '6px 12px', borderRadius: 999, fontSize: 12, fontWeight: 700, cursor: 'pointer',
@@ -1970,7 +2106,7 @@ function RankingTab({ snap, eventId, event }) {
             : <span style={{ fontFamily: C.mono, fontSize: 11, color: C.muted }}>{r.progressKm.toFixed(1)}K</span>}
         </div>
       ))}
-    </div>
+    </PullToRefresh>
   );
 }
 
@@ -2047,7 +2183,7 @@ function FriendsTab({ eventId, event, followedBib, favBibs, onAddFavorite, onRem
             {!multiMode && <button onClick={onAddFavorite} style={{ padding: '6px 10px', background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 8, fontFamily: C.mono, fontSize: 10.5, fontWeight: 700, color: C.brand, cursor: 'pointer', whiteSpace: 'nowrap' }}>♥ เพิ่มเพื่อน</button>}
           </div>
         </div>
-        {favs.length === 0 && <div style={{ color: C.muted, fontSize: 13, textAlign: 'center', padding: 24, background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12 }}>ยังไม่มีเพื่อนที่ favourite · กด "♥ เพิ่มเพื่อน"</div>}
+        {favs.length === 0 && <EmptyState icon="💚" text="ยังไม่มีเพื่อนที่ favourite" sub={'กด "♥ เพิ่มเพื่อน"'} style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, padding: 24 }}/>}
         {favs.length > 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {favs.map(r => {
@@ -2228,7 +2364,7 @@ function FriendMapSheet({ runner, eventId, event, onClose }) {
       </div>
       <div style={{ flex: 1, minHeight: 0, overflow: 'auto', overscrollBehavior: 'contain', display: 'flex', flexDirection: 'column' }}>
         <div style={{ position: 'relative', flex: 1, minHeight: 220 }}>
-          {!course && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.muted, fontSize: 12.5 }}>กำลังโหลดแผนที่...</div>}
+          {!course && <SkeletonBox radius={0} style={{ position: 'absolute', inset: 0 }}/>}
           <div ref={mapHostRef} style={{ position: 'absolute', inset: 0, background: '#eee', display: course ? 'block' : 'none' }}/>
         </div>
         {course && (
@@ -2382,7 +2518,7 @@ function FriendsMultiMapSheet({ runners, eventId, event, onClose }) {
         <div onClick={onClose} style={{ width: 30, height: 30, borderRadius: 10, border: `1.6px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 14, flexShrink: 0 }}>✕</div>
       </div>
       <div style={{ position: 'relative', flex: 1 }}>
-        {!coursePaths && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.muted, fontSize: 12.5 }}>กำลังโหลดแผนที่...</div>}
+        {!coursePaths && <SkeletonBox radius={0} style={{ position: 'absolute', inset: 0 }}/>}
         <div ref={mapHostRef} style={{ position: 'absolute', inset: 0, background: '#eee', display: coursePaths ? 'block' : 'none' }}/>
       </div>
       <div style={{ flexShrink: 0, maxHeight: 130, overflow: 'auto', borderTop: `1px solid ${C.border}`, padding: '8px 14px' }}>
@@ -3331,7 +3467,7 @@ function MobileApp() {
 
   uE(() => { const id = 'trt-mobile-style'; if (document.getElementById(id)) return;
     const st = document.createElement('style'); st.id = id;
-    st.textContent = '@keyframes trtSpin{to{transform:rotate(360deg)}} @keyframes trtFadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}} @keyframes trtToastIn{0%{opacity:0;transform:translate(-50%,-8px) scale(0.96)}100%{opacity:1;transform:translate(-50%,0) scale(1)}} @keyframes trtToastOut{0%{opacity:1;transform:translate(-50%,0) scale(1)}100%{opacity:0;transform:translate(-50%,-8px) scale(0.96)}} *{box-sizing:border-box} html,body{margin:0;background:#efe9dc}';
+    st.textContent = '@keyframes trtSpin{to{transform:rotate(360deg)}} @keyframes trtFadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}} @keyframes trtToastIn{0%{opacity:0;transform:translate(-50%,-8px) scale(0.96)}100%{opacity:1;transform:translate(-50%,0) scale(1)}} @keyframes trtToastOut{0%{opacity:1;transform:translate(-50%,0) scale(1)}100%{opacity:0;transform:translate(-50%,-8px) scale(0.96)}} @keyframes trtShimmer{0%{background-position:-200px 0}100%{background-position:200px 0}} @keyframes trtPullSpin{to{transform:rotate(360deg)}} *{box-sizing:border-box} html,body{margin:0;background:#efe9dc}';
     document.head.appendChild(st);
   }, []);
 
