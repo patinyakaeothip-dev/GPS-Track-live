@@ -148,6 +148,7 @@
           bib: r.bib,
           gender: r.gender,
           name: r.nickname,
+          avatarPhoto: r.avatarPhoto || '',
           phone: maskPhone(r.phone),
           distance: r.distance,
           distance_original: r.distance,
@@ -461,17 +462,23 @@
       })();
       return (
         <div style={{ display: 'grid',
-          gridTemplateColumns: '46px 1fr auto auto',
+          gridTemplateColumns: '46px 32px 1fr 44px auto auto',
           gap: 10, padding: '12px 14px',
           alignItems: 'center',
           borderTop: index ? `1px solid ${BORDER}` : 'none',
           background: isFin ? '#fff' : isDnf ? '#fef7f7' : isDns ? '#f4f3ef' : isNotStarted ? '#fafaf8' : '#fffbf2',
         }}>
-          {/* Rank or status badge */}
+          {/* Rank or status badge — top-3 finishers get the same medal
+              emoji Ranking (the app's own tab) uses instead of a plain
+              "#1/#2/#3", so the two views read as the same design language. */}
           <div style={{ textAlign: 'center' }}>
             {isFin && it.rank ? (
-              <div style={{ fontSize: 16, fontWeight: 700, color: BRAND_DK,
-                fontStyle: 'italic' }}>#{it.rank}</div>
+              it.rank <= 3 ? (
+                <div style={{ fontSize: 20 }}>{it.rank === 1 ? '🥇' : it.rank === 2 ? '🥈' : '🥉'}</div>
+              ) : (
+                <div style={{ fontSize: 16, fontWeight: 700, color: BRAND_DK,
+                  fontStyle: 'italic' }}>#{it.rank}</div>
+              )
             ) : isDnf ? (
               <div style={{ fontFamily: MONO, fontSize: 10, color: '#b91c1c',
                 fontWeight: 700 }}>DNF</div>
@@ -493,6 +500,17 @@
                 fontWeight: 700 }}>RUN</div>
             )}
           </div>
+          {/* Profile photo — same AvatarCircle look the app uses (photo,
+              or an initial-letter circle when there isn't one), so a row
+              here reads as the same "person" as their app profile. */}
+          {it.avatarPhoto
+            ? <div style={{ width: 32, height: 32, borderRadius: 999, overflow: 'hidden', flexShrink: 0 }}>
+                <img src={it.avatarPhoto} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}/>
+              </div>
+            : <div style={{ width: 32, height: 32, borderRadius: 999, background: '#e07a3e', color: '#fff',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 600, flexShrink: 0 }}>
+                {(it.name || '?').slice(0, 1)}
+              </div>}
           {/* Name + meta */}
           <div style={{ minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
@@ -501,7 +519,6 @@
                 whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {it.name}
               </span>
-              {it.gender && <span style={{ fontFamily: MONO, fontSize: 10, fontWeight: 700, color: it.gender === 'f' ? '#b3467c' : '#3a86c4', flexShrink: 0 }}>{it.gender === 'f' ? 'หญิง' : 'ชาย'}</span>}
             </div>
             <div style={{ fontFamily: MONO, fontSize: 10, color: MUTED, marginTop: 2 }}>
               {it.phone}
@@ -510,6 +527,13 @@
                   ? <> · ที่ {lastLabel} · {fmtClockOfDay(it.last_at)}</>
                   : <> · ล่าสุดที่ {lastLabel} · {fmtClockOfDay(it.last_at)}</>}
             </div>
+          </div>
+          {/* Gender — its own fixed-width column (used to sit inline next
+              to the name, shifting position with name length and never
+              lining up between rows) so it reads as a proper aligned
+              column like Ranking's gender filter. */}
+          <div style={{ textAlign: 'center' }}>
+            {it.gender && <span style={{ fontFamily: MONO, fontSize: 10, fontWeight: 700, color: it.gender === 'f' ? '#b3467c' : '#3a86c4' }}>{it.gender === 'f' ? 'หญิง' : 'ชาย'}</span>}
           </div>
           {/* Distance pill */}
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end',
