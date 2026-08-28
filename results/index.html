@@ -415,6 +415,23 @@
               <div style={{ padding: 24, textAlign: 'center', fontFamily: MONO, fontSize: 11,
                 color: MUTED }}>ไม่พบนักวิ่งตามฟิลเตอร์นี้</div>
             )}
+            {/* Column headers — same grid columns as ResultRow below it, so
+                each label sits directly above its own column instead of
+                the list just starting with no explanation of what "REG"/
+                the gender letters/the pill mean. */}
+            {filtered.length > 0 && (
+              <div style={{ display: 'grid', gridTemplateColumns: '46px 32px 1fr 44px auto auto',
+                gap: 10, padding: '8px 14px', alignItems: 'center', background: '#faf9f6',
+                borderBottom: `1px solid ${BORDER}`, fontFamily: MONO, fontSize: 9.5, fontWeight: 700,
+                letterSpacing: '0.06em', textTransform: 'uppercase', color: MUTED }}>
+                <div style={{ textAlign: 'center' }}>อันดับ</div>
+                <div/>
+                <div>ชื่อ / บิบ</div>
+                <div style={{ textAlign: 'center' }}>เพศ</div>
+                <div style={{ textAlign: 'right' }}>ระยะ</div>
+                <div style={{ textAlign: 'right' }}>เวลา</div>
+              </div>
+            )}
             {filtered.map((it, i) => (
               <ResultRow key={it.id || i} it={it} index={i} now={now} eventId={eventId}/>
             ))}
