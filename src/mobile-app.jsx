@@ -1920,8 +1920,11 @@ function RouteTab({ course, runner, event, spectatorRunner, livePos }) {
       {!mapFull && spectatorRunner && (
         <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 14, padding: '14px 18px', background: '#fff', borderBottom: `1px solid ${C.border}` }}>
           <AvatarCircle size={64} fontSize={24} photo={spectatorRunner.avatarPhoto} initial={(spectatorRunner.nickname || '?')[0]} status={runnerAvatarStatus(spectatorRunner)}/>
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 21, fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{spectatorRunner.nickname}</div>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ fontSize: 21, fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{spectatorRunner.nickname}</div>
+              <RunnerStatusBadge runner={spectatorRunner}/>
+            </div>
             <div style={{ fontFamily: C.mono, fontSize: 13.5, color: C.muted, fontWeight: 700, marginTop: 2 }}>bib {spectatorRunner.bib} · {spectatorRunner.distance}</div>
           </div>
         </div>
@@ -2523,6 +2526,19 @@ function runnerAvatarStatus(r) {
   if ((r.checkins || []).some(c => c.cp === 'finish')) return 'finished';
   if ((r.checkins || []).length) return 'running';
   return undefined;
+}
+// A small pill badge for the two states worth calling out explicitly next
+// to a runner's name — DNF and finished. "กำลังวิ่งอยู่"/"ยังไม่เริ่ม" already
+// have the small running-icon overlay on the avatar itself (see
+// runnerAvatarStatus) and don't need a second, louder indicator here.
+function RunnerStatusBadge({ runner }) {
+  if (runner.dnf) return (
+    <span style={{ flexShrink: 0, padding: '2px 8px', borderRadius: 999, fontSize: 10.5, fontWeight: 700, fontFamily: C.mono, background: '#fde3e0', color: '#9b1c10' }}>DNF</span>
+  );
+  if ((runner.checkins || []).some(c => c.cp === 'finish')) return (
+    <span style={{ flexShrink: 0, padding: '2px 8px', borderRadius: 999, fontSize: 10.5, fontWeight: 700, fontFamily: C.mono, background: '#dcefe3', color: C.brandDk }}>🏁 FINISH</span>
+  );
+  return null;
 }
 
 // Viewing several friends' GPS at once means one Leaflet map + N live-position
