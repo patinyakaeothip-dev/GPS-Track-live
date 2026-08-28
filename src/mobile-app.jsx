@@ -2976,11 +2976,31 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
 // opening the runner space and on every page load/refresh — a registered
 // runner who hasn't started belongs on the pre-race countdown, not the
 // live Track screen, no matter how they got back into the app.
+// Reported as the app landing back on a race's own Track/Follow view every
+// time the browser reopens, even for an event that's completely over — the
+// saved session (which event/runner/spectator target) persists in
+// localStorage indefinitely, and this used to resume straight into 'app'
+// regardless of whether that event's own schedule had already ended.
+// computeStatus checks the event's *official* end time (see
+// event-status.js's eventWindow), not whether this one runner personally
+// finished — a runner who just crossed the line mid-event still reads as
+// 'live' here (the race overall isn't over yet), so this doesn't kick
+// someone back to the event picker the moment they finish, only once the
+// whole event's schedule has actually wrapped up.
+function eventForResume(session) {
+  const eventId = session.spectator ? session.followEventId : (session.runner && session.runner.eventId);
+  return eventId ? getEvents().find(e => e.id === eventId) : null;
+}
 function initialScreenFor(session, savedScreen) {
   if (!session) return 'splash';
-  if (session.spectator) return savedScreen === 'events' ? 'events' : 'app';
+  const ev = eventForResume(session);
+  const isPast = ev && window.eventStatus && window.eventStatus.computeStatus(ev) === 'past';
+  if (session.spectator) {
+    if (savedScreen === 'events' || isPast) return 'events';
+    return 'app';
+  }
   if (session.runner) {
-    if (savedScreen === 'events') return 'events';
+    if (savedScreen === 'events' || isPast) return 'events';
     const started = (session.runner.checkins || []).some(c => c.cp === 'start');
     // Not started and not sitting on the event picker — always the pre-race
     // countdown, never straight into Track.
