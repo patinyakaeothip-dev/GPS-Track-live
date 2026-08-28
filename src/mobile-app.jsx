@@ -1622,11 +1622,19 @@ function TrackTab({ runner, event, onScan, onSos, onDnf, offRoute, onCancelSos }
   const msToCutoff = cutoffMs != null && !stopped ? cutoffMs - Date.now() : null;
   const pastCutoff = msToCutoff != null && msToCutoff <= 0;
   const nearCutoff = msToCutoff != null && msToCutoff > 0 && msToCutoff <= 30 * 60000;
+  // Negative here means a checkin got stamped onto a date in the future
+  // relative to right now — e.g. testing against a real event whose
+  // raceDateISO is still a few days out, so every checkin's wall-clock
+  // time-of-day combines onto that future date (see eventCheckinMs /
+  // combineDateTime). Rendering the raw negative value used to print each
+  // h/m/s component with its own separate minus sign (garbage like
+  // "-24:-59:-32") instead of a single readable negative duration.
   function fmtElapsed(ms) {
-    if (ms == null) return '—';
-    const s = Math.floor(ms / 1000);
+    if (ms == null || !isFinite(ms)) return '—';
+    const neg = ms < 0;
+    const s = Math.floor(Math.abs(ms) / 1000);
     const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), r = s % 60;
-    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}`;
+    return `${neg ? '-' : ''}${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}`;
   }
 
   return (
@@ -1986,11 +1994,19 @@ function FollowedRunnerPanel({ runner, event, livePos }) {
     ? (() => { const min = 1000 / speedMps / 60; const mm = Math.floor(min); const ss = Math.round((min - mm) * 60); return `${mm}'${String(ss).padStart(2, '0')}"/กม.`; })()
     : (speedMps != null ? 'หยุดอยู่' : '—');
 
+  // Negative here means a checkin got stamped onto a date in the future
+  // relative to right now — e.g. testing against a real event whose
+  // raceDateISO is still a few days out, so every checkin's wall-clock
+  // time-of-day combines onto that future date (see eventCheckinMs /
+  // combineDateTime). Rendering the raw negative value used to print each
+  // h/m/s component with its own separate minus sign (garbage like
+  // "-24:-59:-32") instead of a single readable negative duration.
   function fmtElapsed(ms) {
-    if (ms == null) return '—';
-    const s = Math.floor(ms / 1000);
+    if (ms == null || !isFinite(ms)) return '—';
+    const neg = ms < 0;
+    const s = Math.floor(Math.abs(ms) / 1000);
     const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), r = s % 60;
-    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}`;
+    return `${neg ? '-' : ''}${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}`;
   }
 
   return (
