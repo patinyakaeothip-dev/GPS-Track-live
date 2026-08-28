@@ -3416,9 +3416,24 @@ function MobileApp() {
       // Admin, then immediately try to re-register to test again) can't
       // possibly race that: a cached session.runner is only trusted once
       // it's confirmed still active in the roster right now.
-      const cancelled = window.runnerStore && session.runner.rosterId &&
-        !window.runnerStore.listRunners(ev.id).find(r => r.id === session.runner.rosterId);
+      const rosterRec = window.runnerStore && session.runner.rosterId &&
+        window.runnerStore.listRunners(ev.id).find(r => r.id === session.runner.rosterId);
+      const cancelled = window.runnerStore && session.runner.rosterId && !rosterRec;
       if (!cancelled) {
+        // Self-healing: this device already knows for certain it's this
+        // runner's own registration (matched by rosterId, no uid lookup
+        // needed) — if the roster record's own uid is missing or stale
+        // (e.g. it got created before login finished resolving, or before
+        // uid was even part of what registerRunner saved), patch it to
+        // match now. Otherwise a *different* device logged into the same
+        // account can never find this registration via the cross-device
+        // uid lookup below, even once its own sync is fully caught up —
+        // reported directly: registered on the web, opened the native app
+        // signed into the same Google account (confirmed identical uid on
+        // both), still asked to register again.
+        if (rosterRec && session.user && session.user.uid && rosterRec.uid !== session.user.uid && window.runnerStore) {
+          window.runnerStore.updateRunnerProgress(rosterRec.id, { uid: session.user.uid });
+        }
         // A leftover session.spectator=true from an earlier "Follow the
         // race" tap (any event, any time before) doesn't get cleared by
         // anything else once a runner comes back to their *own* Runner
