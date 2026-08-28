@@ -1815,25 +1815,25 @@ function RouteTab({ course, runner, event, spectatorRunner, livePos }) {
   }, [mapFull]);
   return (
     <div style={{ flex: 1, minHeight: 0, overflow: 'auto', overscrollBehavior: 'contain', display: 'flex', flexDirection: 'column', position: 'relative' }}>
+      {/* A proper full-width header row above the map, not a pill floating
+          over it — the earlier version covered course/checkpoint markers
+          right where a spectator's eye lands first, and stayed small
+          enough to feel like an afterthought rather than "whose progress
+          is this." Hidden while the map itself goes fullscreen, same as
+          the checkpoint/elevation panels below. */}
+      {!mapFull && spectatorRunner && (
+        <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 14, padding: '14px 18px', background: '#fff', borderBottom: `1px solid ${C.border}` }}>
+          <AvatarCircle size={64} fontSize={24} photo={spectatorRunner.avatarPhoto} initial={(spectatorRunner.nickname || '?')[0]} status={runnerAvatarStatus(spectatorRunner)}/>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 21, fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{spectatorRunner.nickname}</div>
+            <div style={{ fontFamily: C.mono, fontSize: 13.5, color: C.muted, fontWeight: 700, marginTop: 2 }}>bib {spectatorRunner.bib} · {spectatorRunner.distance}</div>
+          </div>
+        </div>
+      )}
       <div style={mapFull
         ? { position: 'absolute', inset: 0, zIndex: 50, background: '#eee' }
-        : { position: 'relative', flex: 1, minHeight: 260 }}>
+        : { position: 'relative', flex: 1, minHeight: 220 }}>
         <div ref={mapRef} style={{ position: 'absolute', inset: 0, background: '#eee' }}/>
-        {/* Runner identity used to live in its own white panel below the
-            map — on a small phone screen that ate a full row of vertical
-            space just to say a name/bib that fits fine as a pill floating
-            over the map itself, LiveTrail-style. */}
-        {spectatorRunner && (
-          <div style={{ position: 'absolute', top: 14, left: '50%', transform: 'translateX(-50%)', zIndex: 400,
-            display: 'flex', alignItems: 'center', gap: 10, padding: '8px 16px 8px 8px', background: '#fff',
-            borderRadius: 999, boxShadow: '0 4px 16px rgba(0,0,0,0.25)', maxWidth: 'calc(100% - 28px)' }}>
-            <AvatarCircle size={40} photo={spectatorRunner.avatarPhoto} initial={(spectatorRunner.nickname || '?')[0]} status={runnerAvatarStatus(spectatorRunner)}/>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 15, fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{spectatorRunner.nickname}</div>
-              <div style={{ fontFamily: C.mono, fontSize: 11, color: C.muted, fontWeight: 600 }}>bib {spectatorRunner.bib} · {spectatorRunner.distance}</div>
-            </div>
-          </div>
-        )}
         <div onClick={() => setMapFull(v => !v)} style={{ position: 'absolute', top: 12, right: 12, zIndex: 400,
           width: 36, height: 36, borderRadius: 999, background: '#fff', boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
           display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
