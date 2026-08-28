@@ -2154,6 +2154,17 @@ function ElevationSvg({ course, progressKm, checkpoints, height = 150 }) {
     return out;
   }, [pts, totalKm]);
   const path = sample.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(p.km).toFixed(1)},${y(p.ele).toFixed(1)}`).join(' ');
+  // Same line, closed down to the chart's own baseline and back to the
+  // start — filled with a gradient instead of the plain white background
+  // underneath, so the profile reads as a landscape silhouette rather
+  // than a bare line on graph paper (LiveTrail's own elevation view).
+  const baseY = h - padBottom;
+  const areaPath = `${path} L${x(sample[sample.length - 1].km).toFixed(1)},${baseY} L${x(sample[0].km).toFixed(1)},${baseY} Z`;
+  // Unique per mounted chart (not a fixed string) — this component can be
+  // on screen more than once at a time (e.g. the picker's route view and
+  // a runner's own Route tab), and two <linearGradient> elements sharing
+  // one id would have the second silently win for both fills.
+  const gradId = uR(`elevGrad${Math.random().toString(36).slice(2, 9)}`).current;
   const markKm = Math.min(progressKm, course.totalKm);
   const markX = x(markKm);
   // Off the same smoothed sample as the path itself, not the raw nearest
@@ -2179,13 +2190,20 @@ function ElevationSvg({ course, progressKm, checkpoints, height = 150 }) {
     <div style={{ position: 'relative' }}>
       <svg viewBox={`0 0 ${w} ${h}`} style={{ width: '100%', height: h, marginTop: 6, touchAction: 'none', cursor: zoom > 1 ? 'grab' : 'default' }}
         onWheel={onWheel} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}>
+        <defs>
+          <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={C.brand} stopOpacity="0.45"/>
+            <stop offset="100%" stopColor={C.brand} stopOpacity="0.03"/>
+          </linearGradient>
+        </defs>
         {yTicks.map((ele, i) => (
           <g key={i}>
             <line x1={padLeft} y1={y(ele)} x2={w - pad} y2={y(ele)} stroke={C.muted} strokeWidth="1" strokeDasharray="2 3" opacity="0.25"/>
             <text x={padLeft - 4} y={y(ele) + 3} textAnchor="end" fontFamily={C.mono} fontSize="7.5" fill={C.muted}>{ele}m</text>
           </g>
         ))}
-        <path d={path} fill="none" stroke={C.brand} strokeWidth="2"/>
+        <path d={areaPath} fill={`url(#${gradId})`} stroke="none"/>
+        <path d={path} fill="none" stroke={C.brand} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round"/>
         {/* Same glide Live Monitor's own elevation chart already uses
             instead of the dot jumping instantly to each new position.
             Omitted entirely (progressKm null) for a plain course overview
