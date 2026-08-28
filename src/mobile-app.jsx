@@ -1031,6 +1031,23 @@ function PullToRefresh({ onRefresh, children, style }) {
     </div>
   );
 }
+// Captured at module scope, not inside InstallPrompt's own component state
+// — the banner unmounts once dismissed (see LS_INSTALL_DISMISSED_KEY
+// below), and a browser only ever fires beforeinstallprompt once early in
+// the page's life, not again on demand. Capturing it here means it's still
+// available later for a manual re-trigger (ProfileScreen's "ติดตั้งแอพ"
+// row) even after the banner itself is long gone, instead of the one real
+// install trigger this page ever gets being thrown away with it.
+let capturedInstallPrompt = null;
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  capturedInstallPrompt = e;
+  // The event can fire after InstallPrompt has already mounted and read
+  // capturedInstallPrompt as null — a plain module variable doesn't retrigger
+  // a re-render on its own, so nudge any currently-mounted instance to
+  // re-check it.
+  window.dispatchEvent(new Event('trt:installprompt-captured'));
+});
 // Dismissible "add to home screen" banner — skipped entirely inside the
 // native Capacitor app (there's no browser tab to add) and once already
 // running installed/standalone (display-mode: standalone covers Android/
@@ -1042,22 +1059,29 @@ function PullToRefresh({ onRefresh, children, style }) {
 // so the only thing possible on iOS is instructing the person through the
 // manual Share-sheet steps themselves.
 const LS_INSTALL_DISMISSED_KEY = 'trt.installPromptDismissed';
-function InstallPrompt() {
-  const [deferredPrompt, setDeferredPrompt] = uS(null);
-  const [dismissed, setDismissed] = uS(() => { try { return localStorage.getItem(LS_INSTALL_DISMISSED_KEY) === '1'; } catch (_) { return false; } });
+function isInstallable() {
   const isNative = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
   const isStandalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
-  const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) && !window.MSStream;
+  return !isNative && !isStandalone;
+}
+function InstallPrompt() {
+  // Seeded from the module-level capture (set by the beforeinstallprompt
+  // listener above, which can fire before or after this mounts), and
+  // re-synced whenever that listener signals a fresh capture — a plain
+  // read of the module variable wouldn't by itself trigger a re-render.
+  const [deferredPrompt, setDeferredPrompt] = uS(() => capturedInstallPrompt);
   uE(() => {
-    function onBeforeInstall(e) { e.preventDefault(); setDeferredPrompt(e); }
-    window.addEventListener('beforeinstallprompt', onBeforeInstall);
-    return () => window.removeEventListener('beforeinstallprompt', onBeforeInstall);
+    const onCaptured = () => setDeferredPrompt(capturedInstallPrompt);
+    window.addEventListener('trt:installprompt-captured', onCaptured);
+    return () => window.removeEventListener('trt:installprompt-captured', onCaptured);
   }, []);
+  const [dismissed, setDismissed] = uS(() => { try { return localStorage.getItem(LS_INSTALL_DISMISSED_KEY) === '1'; } catch (_) { return false; } });
+  const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) && !window.MSStream;
   function dismiss() {
     setDismissed(true);
     try { localStorage.setItem(LS_INSTALL_DISMISSED_KEY, '1'); } catch (_) {}
   }
-  if (isNative || isStandalone || dismissed) return null;
+  if (!isInstallable() || dismissed) return null;
   if (!deferredPrompt && !isIOS) return null; // Android/Chrome before the event fires yet, or an unsupported desktop browser — nothing installable to offer
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '0 18px 10px', padding: '11px 13px',
@@ -1069,7 +1093,7 @@ function InstallPrompt() {
           : <>เพิ่มไปหน้าจอโฮมเพื่อเปิดแอพได้เร็วขึ้นเหมือนแอพจริง</>}
       </div>
       {!isIOS && deferredPrompt && (
-        <button onClick={() => { deferredPrompt.prompt(); setDeferredPrompt(null); }} style={{ flexShrink: 0, padding: '7px 12px', background: C.brand, color: '#fff',
+        <button onClick={() => { deferredPrompt.prompt(); capturedInstallPrompt = null; setDeferredPrompt(null); }} style={{ flexShrink: 0, padding: '7px 12px', background: C.brand, color: '#fff',
           border: 'none', borderRadius: 8, fontFamily: C.mono, fontSize: 10.5, fontWeight: 700, cursor: 'pointer' }}>ติดตั้ง</button>
       )}
       <span onClick={dismiss} style={{ flexShrink: 0, cursor: 'pointer', fontSize: 16, color: C.muted, padding: 2 }}>×</span>
@@ -2808,6 +2832,22 @@ function ProfileScreen({ user, onLogout, onClose, onSave, onboard }) {
         {readOnly
           ? <Btn onClick={() => setEditing(true)}>แก้ไขโปรไฟล์</Btn>
           : <Btn disabled={!canSubmit} onClick={save}>{onboard ? 'เริ่มใช้งาน →' : 'บันทึกโปรไฟล์'}</Btn>}
+        {/* Durable way back to the install prompt for anyone who dismissed
+            the one-time banner (see InstallPrompt) and later changed their
+            mind — that banner is gone for good once closed, this isn't. */}
+        {!onboard && isInstallable() && (
+          <Btn variant="ghost" onClick={() => {
+            const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) && !window.MSStream;
+            if (isIOS) {
+              alert('กด "แชร์" ⬆️ ที่แถบด้านล่างของ Safari แล้วเลือก "เพิ่มไปยังหน้าจอโฮม" ครับ');
+            } else if (capturedInstallPrompt) {
+              capturedInstallPrompt.prompt();
+              capturedInstallPrompt = null;
+            } else {
+              alert('เบราว์เซอร์นี้ยังไม่พร้อมให้ติดตั้งตอนนี้ครับ — ลองเปิดผ่าน Chrome แล้วรอสักครู่ก่อนกดใหม่');
+            }
+          }}>📲 ติดตั้งแอพขึ้นหน้าโฮม</Btn>
+        )}
         {!onboard && <Btn variant="ghost" onClick={onLogout}>ออกจากระบบ</Btn>}
       </div>
     </div>
