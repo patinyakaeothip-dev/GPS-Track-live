@@ -239,20 +239,34 @@ const STATUS_META = {
 
 // ── Event list ──────────────────────────────────────────────────────────
 function EventList({ events, onEdit, onDelete, onCreate }) {
+  const [q, setQ] = aS('');
+  const query = q.trim().toLowerCase();
+  const filtered = query
+    ? events.filter(ev => (ev.name || '').toLowerCase().includes(query) || (ev.date || '').toLowerCase().includes(query))
+    : events;
   return (
-    <div style={{ maxWidth: 760, margin: '0 auto', padding: '24px 20px 60px', fontFamily: "'Plus Jakarta Sans','Noto Sans Thai',ui-sans-serif,system-ui,sans-serif", color: '#1f2a1c' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-        <div style={{ fontFamily: A_MONO, fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#1f2a1c', fontWeight: 600 }}>🔧 Admin · งานแข่งทั้งหมด</div>
-        <button onClick={onCreate} style={{ padding: '10px 16px', background: `linear-gradient(135deg,#357a5c 0%,#1a4a37 100%)`, color: '#fff', border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>+ สร้างงานแข่งใหม่</button>
+    <div style={{ maxWidth: 760, margin: '0 auto', padding: '0 20px 60px', fontFamily: "'Plus Jakarta Sans','Noto Sans Thai',ui-sans-serif,system-ui,sans-serif", color: '#1f2a1c' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, padding: '22px 0 18px', position: 'sticky', top: 0, background: '#efe9dc', zIndex: 3 }}>
+        <div>
+          <div style={{ fontSize: 20, fontWeight: 800 }}>🔧 Admin</div>
+          <div style={{ fontFamily: A_MONO, fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#5d6b59', marginTop: 2 }}>งานแข่งทั้งหมด · {events.length} งาน</div>
+        </div>
+        <button onClick={onCreate} style={{ padding: '10px 16px', background: `linear-gradient(135deg,#357a5c 0%,#1a4a37 100%)`, color: '#fff', border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>+ สร้างงานแข่งใหม่</button>
       </div>
-      <div style={{ fontSize: 12, color: '#5d6b59', marginBottom: 16, lineHeight: 1.6 }}>
+      <div style={{ fontSize: 12, color: '#5d6b59', marginBottom: 14, lineHeight: 1.6 }}>
         {window.fb
           ? 'ข้อมูลชุดนี้ sync ผ่าน Firebase จริง — แก้ที่นี่แล้วเห็นตรงกันทุกเครื่อง/เบราว์เซอร์ที่เปิดแอพ'
           : 'ข้อมูลชุดนี้เก็บไว้ในเบราว์เซอร์นี้เท่านั้น (ยังไม่ได้ตั้งค่า Firebase — ดู src/firebase-config.js) — เปิดแอพนักวิ่งบนเบราว์เซอร์เดียวกันจะเห็นรายการเดียวกันนี้'}
       </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '11px 13px', background: '#fff', border: '1px solid #e5e0d3', borderRadius: 10, boxShadow: '0 1px 3px rgba(31,42,28,0.08)', marginBottom: 16 }}>
+        <span style={{ fontSize: 13, color: '#8a9285' }}>🔍</span>
+        <input value={q} onChange={e => setQ(e.target.value)} placeholder="ค้นหาชื่องาน หรือวันที่" style={{ border: 'none', outline: 'none', fontSize: 13, flex: 1, fontFamily: "'Plus Jakarta Sans','Noto Sans Thai',ui-sans-serif,system-ui,sans-serif", background: 'transparent' }}/>
+        {q && <span onClick={() => setQ('')} style={{ cursor: 'pointer', fontSize: 15, color: '#8a9285', lineHeight: 1 }}>×</span>}
+      </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {events.length === 0 && <div style={{ textAlign: 'center', color: '#5d6b59', fontSize: 13, padding: 30 }}>ยังไม่มีงานแข่ง · กด "+ สร้างงานแข่งใหม่"</div>}
-        {events.map(ev => {
+        {events.length > 0 && filtered.length === 0 && <div style={{ textAlign: 'center', color: '#5d6b59', fontSize: 13, padding: 30 }}>ไม่พบงานที่ค้นหา</div>}
+        {filtered.map(ev => {
           const meta = STATUS_META[window.eventStatus.computeStatus(ev)] || STATUS_META.upcoming;
           const closed = window.eventStatus.computeClosed(ev);
           return (
