@@ -226,6 +226,22 @@ function SplashScreen({ onDone }) {
   );
 }
 
+// Shown right after login while pullProfileFromCloud is in flight for an
+// account this device doesn't already have a completed local profile for
+// (a fresh device, or one that's never finished onboarding before) —
+// landing straight on the onboarding form's empty fields in that gap read
+// as "my profile just got wiped", when the real data was just still on
+// its way. See handleLogin.
+function LoadingProfileScreen() {
+  return (
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10,
+      background: C.bg2, fontFamily: C.font }}>
+      <div style={{ width: 22, height: 22, borderRadius: 999, border: `2.5px solid ${C.border}`,
+        borderTopColor: C.brand, animation: 'trtSpin 0.9s linear infinite' }}/>
+      <div style={{ fontFamily: C.mono, fontSize: 10.5, color: C.muted }}>กำลังโหลดโปรไฟล์...</div>
+    </div>
+  );
+}
 // ── Screen: Login ─────────────────────────────────────────────────────────
 // Google refuses to complete OAuth sign-in at all inside these embedded
 // in-app browsers (Line, Facebook, Instagram, ...) — not something fixable
@@ -3217,6 +3233,9 @@ function MobileApp() {
   uE(() => { saveScreen(screen); }, [screen]);
   const [modal, setModal] = uS(null); // 'profile' | 'sos' | 'dnf'
   const [pendingEvent, setPendingEvent] = uS(null);
+  // See handleLogin's own comment — guards a slow cloud profile fetch from
+  // clobbering a fresher local onboarding submission that finished first.
+  const profileSubmittedRef = uR(false);
 
   function persist(next) { setSession(next); saveSession(next); }
 
@@ -3366,6 +3385,15 @@ function MobileApp() {
   }, [session && session.runner && session.runner.eventId, session && session.followEventId]);
 
   function handleLogin(authedUser) {
+    // Guards against a real race: pullProfileFromCloud below is a one-shot
+    // listener that can resolve at any point after this runs, completely
+    // independent of what the person does with the onboarding form in the
+    // meantime. If they finish onboarding (finishOnboard, below) before
+    // that resolves, this flag tells the pull's callback its data is now
+    // stale — without it, a slow cloud fetch landing *after* a fresh
+    // submission would silently overwrite what was just typed and saved
+    // with older data, discarding it.
+    profileSubmittedRef.current = false;
     const cached = loadProfile();
     // The local cache is scoped to this *device*, not this account — a
     // second real person signing in with their own different account on
@@ -3381,7 +3409,21 @@ function MobileApp() {
     const savedPrefs = sameAccount ? cachedPrefs : {};
     const localUser = { ...savedPrefs, ...authedUser };
     persist({ user: localUser, runner: null });
-    setScreen(sameAccount && cached.profileCompleted ? 'events' : 'onboard');
+    // A completed local profile for this exact account can be trusted
+    // immediately, no need to wait on a network round trip just to show
+    // the same thing back. Anyone else (a fresh device, or an account
+    // that's never finished onboarding here before) sees a brief loading
+    // screen instead of the onboarding form's empty fields — see
+    // LoadingProfileScreen's own comment for why that matters.
+    setScreen(sameAccount && cached.profileCompleted ? 'events' : 'loading-profile');
+
+    // Fallback for a genuinely new account (never onboarded on any
+    // device) or no connectivity at all — pullProfileFromCloud has
+    // nothing to come back with either way, so don't leave the loading
+    // screen up forever waiting for a callback that may never fire.
+    const fallbackTimer = setTimeout(() => {
+      if (!profileSubmittedRef.current) setScreen('onboard');
+    }, 4000);
 
     // The local cache above is per-browser/app-context (Safari, Chrome, the
     // native app's own WebView each have separate localStorage) — the same
@@ -3391,14 +3433,17 @@ function MobileApp() {
     // whatever's cached locally, then cache the merged result too so it's
     // available next time even offline.
     pullProfileFromCloud(authedUser.uid, (remote) => {
-      if (!remote) return;
+      clearTimeout(fallbackTimer);
+      if (profileSubmittedRef.current) return; // see the comment on the flag's declaration above
+      if (!remote) { setScreen('onboard'); return; }
       const merged = { ...localUser, ...remote };
       saveProfile(merged);
       persist({ user: merged, runner: null });
-      if (merged.profileCompleted) setScreen('events');
+      setScreen(merged.profileCompleted ? 'events' : 'onboard');
     });
   }
   function finishOnboard(nextUser) {
+    profileSubmittedRef.current = true;
     const completed = { ...nextUser, profileCompleted: true };
     saveProfile(completed);
     syncProfileToCloud(completed.uid, completed);
@@ -3563,6 +3608,7 @@ function MobileApp() {
   let body;
   if (screen === 'splash') body = <SplashScreen onDone={() => setScreen(session ? 'events' : 'login')}/>;
   else if (screen === 'login') body = <LoginScreen onLogin={handleLogin}/>;
+  else if (screen === 'loading-profile') body = <LoadingProfileScreen/>;
   else if (screen === 'onboard') body = <ProfileScreen user={session.user} onboard onSave={finishOnboard}/>;
   else if (screen === 'events') body = <EventPickerScreen user={session.user} session={session}
     onOpenApp={openRunnerSpace}
