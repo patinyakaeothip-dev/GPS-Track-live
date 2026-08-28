@@ -1984,8 +1984,20 @@ function FollowedRunnerPanel({ runner, event, livePos }) {
   const finishCk = checkins.find(c => c.cp === 'finish');
   const finished = !!finishCk;
   const finishMs = finishCk && combine ? combine(event && event.raceDateISO, finishCk.t) : null;
-  const totalMs = (startMs != null && finishMs != null) ? finishMs - startMs : null;
-  const elapsedMs = startMs && !finished ? Date.now() - startMs : null;
+  // A DNF has no finish checkin, so `finished` alone missed it entirely —
+  // this kept counting the "เวลาที่วิ่งมาแล้ว" clock up forever for a
+  // spectator watching someone who'd already withdrawn, same bug already
+  // fixed for the runner's own Track tab (see `stopped` there). Freezes at
+  // dnfAt when available; an older DNF record with no dnfAt freezes at
+  // whenever this panel first noticed instead (a ref, not Date.now() read
+  // fresh every render, which would just keep ticking forward same as the
+  // bug this is fixing).
+  const stopped = finished || runner.dnf;
+  const fallbackDnfAtRef = uR(null);
+  if (runner.dnf && !runner.dnfAt && fallbackDnfAtRef.current == null) fallbackDnfAtRef.current = Date.now();
+  const endMs = finishMs != null ? finishMs : (runner.dnf ? (runner.dnfAt || fallbackDnfAtRef.current) : null);
+  const totalMs = (startMs != null && endMs != null) ? endMs - startMs : null;
+  const elapsedMs = startMs && !stopped ? Date.now() - startMs : null;
 
   const liveAgeMs = livePos && livePos.at ? Date.now() - livePos.at : null;
   const gpsLive = liveAgeMs != null && liveAgeMs < 2 * 60 * 1000;
@@ -2017,7 +2029,7 @@ function FollowedRunnerPanel({ runner, event, livePos }) {
           "whose progress is this," just without spending a full row of
           vertical space on it. */}
       <div style={{ display: 'flex', gap: 14, padding: '14px 18px', borderBottom: `1px solid ${C.border}` }}>
-        <Stat label={finished ? 'เวลารวม' : 'เวลาที่วิ่งมาแล้ว'} value={fmtElapsed(finished ? totalMs : elapsedMs)}/>
+        <Stat label={stopped ? (finished ? 'เวลารวม' : 'DNF ที่') : 'เวลาที่วิ่งมาแล้ว'} value={fmtElapsed(stopped ? totalMs : elapsedMs)}/>
         <Stat label="ความเร็วปัจจุบัน" value={paceLabel} accent={gpsLive ? C.brand : C.mute2}/>
         <Stat label="GPS" value={gpsLive ? '🟢 สด' : (livePos ? '⚪ หลุดสัญญาณ' : '⚪ ยังไม่เริ่ม')}/>
       </div>
