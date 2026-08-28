@@ -3043,14 +3043,32 @@ function ConfirmScreen({ title, body, confirmLabel, onCancel, onConfirm }) {
 }
 function DnfScreen({ onCancel, onConfirm }) {
   const [reason, setReason] = uS(null);
+  const [otherText, setOtherText] = uS('');
   const [done, setDone] = uS(false);
+  // "อื่นๆ" (Other) had no way to actually say what happened — picking it
+  // just submitted the bare word "อื่นๆ" with nothing else for the RD to
+  // go on. Requires the free-text box filled in before it counts as a
+  // real reason, same as any other option needing to be picked first.
+  const isOther = reason === 'อื่นๆ';
+  const finalReason = isOther ? otherText.trim() : reason;
+  const canConfirm = isOther ? !!otherText.trim() : !!reason;
   if (done) {
     return (
       <div style={{ height: '100%', background: C.bg2, fontFamily: C.font, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 32, textAlign: 'center', gap: 14 }}>
         <div style={{ fontSize: 40 }}>🏳️</div>
         <div style={{ fontSize: 19, fontWeight: 800 }}>ทีมงานรับตำแหน่งล่าสุดแล้ว</div>
         <div style={{ fontSize: 13, color: C.muted }}>ขอบคุณที่แจ้งเข้ามา · ดูแลตัวเองด้วยนะครับ</div>
-        <Btn onClick={onConfirm} style={{ marginTop: 10 }}>กลับสู่หน้าแรก</Btn>
+        {/* The actual DNF write already happened the moment "ยืนยันถอนตัว"
+            was tapped below (see onConfirm there) — this button is just
+            closing the modal, same as onCancel already does, not a second
+            submission. Calling onConfirm again here used to be how this
+            screen worked (it deferred the whole write until this tap,
+            with no `reason` ever reaching it — see onConfirm's new
+            argument below), which meant backgrounding the app on this
+            "thank you" screen without tapping through lost the DNF
+            entirely; committing immediately on confirm doesn't have that
+            gap. */}
+        <Btn onClick={onCancel} style={{ marginTop: 10 }}>กลับสู่หน้าแรก</Btn>
       </div>
     );
   }
@@ -3063,9 +3081,13 @@ function DnfScreen({ onCancel, onConfirm }) {
           <div key={r} onClick={() => setReason(r)} style={{ padding: 14, borderRadius: 10, cursor: 'pointer',
             background: reason === r ? C.brand : '#fff', color: reason === r ? '#fff' : C.text, border: `1px solid ${reason === r ? C.brand : C.border}` }}>{r}</div>
         ))}
+        {isOther && (
+          <input autoFocus value={otherText} onChange={e => setOtherText(e.target.value)} placeholder="ระบุเหตุผล"
+            style={{ padding: 14, borderRadius: 10, border: `1px solid ${C.border}`, fontSize: 14, fontFamily: C.font, boxSizing: 'border-box' }}/>
+        )}
       </div>
       <div style={{ flex: 1 }}/>
-      <Btn variant="danger" disabled={!reason} onClick={() => setDone(true)}>ยืนยันถอนตัว</Btn>
+      <Btn variant="danger" disabled={!canConfirm} onClick={() => { onConfirm(finalReason); setDone(true); }}>ยืนยันถอนตัว</Btn>
       <Btn variant="ghost" onClick={onCancel} style={{ marginTop: 8 }}>ยกเลิก</Btn>
     </div>
   );
@@ -4111,7 +4133,7 @@ function MobileApp() {
           }
           return Promise.resolve(false);
         }}/></Overlay>}
-      {modal === 'dnf' && <Overlay><DnfScreen onCancel={() => setModal(null)} onConfirm={() => {
+      {modal === 'dnf' && <Overlay><DnfScreen onCancel={() => setModal(null)} onConfirm={(reason) => {
         if (window.trtGpsTracker) window.trtGpsTracker.stop();
         // dnfAt records the actual moment DNF was declared — without it,
         // TrackTab's elapsed-time clock had no "stop point" to freeze at
@@ -4119,13 +4141,20 @@ function MobileApp() {
         // from the finish checkin), so it just kept ticking up forever
         // even though Results/Ranking correctly stopped showing progress.
         const dnfAt = Date.now();
-        if (session.runner && session.runner.rosterId && window.runnerStore) window.runnerStore.updateRunnerProgress(session.runner.rosterId, { dnf: true, dnfAt });
+        // dnfReason used to be picked in the UI (including a free-text box
+        // for "อื่นๆ") but never actually reached here — onConfirm took no
+        // arguments, so whatever the runner selected/typed just vanished.
+        if (session.runner && session.runner.rosterId && window.runnerStore) window.runnerStore.updateRunnerProgress(session.runner.rosterId, { dnf: true, dnfAt, dnfReason: reason || '' });
         // Roster gets patched above, but session.runner is this device's
         // own separate copy — without also updating it here, the Track tab
         // (which reads runner.dnf straight off session.runner) would show
         // no sign anything happened once back from the confirmation screen.
-        persist({ ...session, runner: { ...session.runner, dnf: true, dnfAt } });
-        setModal(null);
+        persist({ ...session, runner: { ...session.runner, dnf: true, dnfAt, dnfReason: reason || '' } });
+        // Modal stays open here — DnfScreen shows its own "thank you"
+        // screen next (the `done` state) and closes the modal itself once
+        // the runner taps through it, same as before this fix. Closing it
+        // immediately on confirm would unmount DnfScreen before that
+        // screen ever had a chance to show.
       }}/></Overlay>}
       {modal === 'cancel-reg' && <Overlay><ConfirmScreen
         title="ยกเลิกการลงทะเบียน?" body="เบอร์บิบและข้อมูลการลงทะเบียนของคุณสำหรับงานนี้จะถูกลบ · สามารถลงทะเบียนใหม่ได้จนกว่าจะปิดรับสมัคร"
