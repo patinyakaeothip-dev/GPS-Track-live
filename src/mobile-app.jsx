@@ -612,8 +612,12 @@ function EventPickerScreen({ user, session, onOpenApp, onFollow, onProfile }) {
 }
 
 // ── Screen: Follow the race · pick a registered runner to follow ─────────
-function FollowPickerScreen({ eventId, onBack, onPick }) {
+function FollowPickerScreen({ eventId, event, onBack, onPick }) {
   const [q, setQ] = uS('');
+  const [gender, setGender] = uS('all');
+  const [view, setView] = uS('list'); // 'list' | 'route'
+  const distLabels = uM(() => (event && event.distances && event.distances.length) ? event.distances.map(d => d.label) : [], [event]);
+  const [dist, setDist] = uS('all');
   const [runners, setRunners] = uS(() => (eventId && window.runnerStore ? window.runnerStore.listRunners(eventId) : []));
   uE(() => {
     if (!eventId || !window.runnerStore) return;
@@ -626,12 +630,40 @@ function FollowPickerScreen({ eventId, onBack, onPick }) {
     const query = q.trim().toLowerCase();
     return runners
       .filter(r => !query || r.bib.includes(query) || r.nickname.toLowerCase().includes(query))
+      .filter(r => dist === 'all' || r.distance === dist)
+      .filter(r => gender === 'all' || r.gender === gender)
       .sort((a, b) => a.bib.localeCompare(b.bib, undefined, { numeric: true }))
       .slice(0, 40);
-  }, [runners, q]);
+  }, [runners, q, dist, gender]);
+  // The map/elevation overview needs one specific distance, unlike the
+  // runner list which can show every distance mixed together — falls back
+  // to the event's first distance while "ทุกระยะ" is selected so there's
+  // still something to show instead of a blank screen.
+  const routeDist = dist !== 'all' ? dist : distLabels[0];
+  const routeCourse = useCourse(event, routeDist);
+  // Race clock — counts up once the gun for `routeDist` has gone off,
+  // counts down before it, same as LiveTrail's own picker/ranking screen.
+  const [, setClockTick] = uS(0);
+  uE(() => { const id = setInterval(() => setClockTick(t => t + 1), 1000); return () => clearInterval(id); }, []);
+  const gunMs = uM(() => {
+    const combine = window.eventStatus && window.eventStatus.combineDateTime;
+    const distDef = (event && event.distances || []).find(d => d.label === routeDist);
+    return distDef && distDef.cpTimes && combine ? combine(event.raceDateISO, distDef.cpTimes.start) : null;
+  }, [event, routeDist]);
+  const totalGainM = uM(() => {
+    if (!routeCourse || !routeCourse.points || !routeCourse.points.length || !window.courseGeo) return null;
+    const pts = routeCourse.points.map(p => ({ lat: p[0], lon: p[1], ele: p[2], km: p[3] }));
+    return window.courseGeo.cumulativeGainToKm(pts, routeCourse.totalKm);
+  }, [routeCourse]);
+  function fmtElapsed(ms) {
+    if (ms == null || !isFinite(ms) || ms < 0) return '—';
+    const s = Math.floor(ms / 1000);
+    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), r = s % 60;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}`;
+  }
   return (
     <div style={{ height: '100%', background: C.bg, fontFamily: C.font, display: 'flex', flexDirection: 'column' }}>
-      <div style={{ padding: '40px 20px 14px' }}>
+      <div style={{ padding: '40px 20px 14px', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
           <BackBtn onClick={onBack} inline/>
           <Brand/>
@@ -639,25 +671,68 @@ function FollowPickerScreen({ eventId, onBack, onPick }) {
         <div style={{ fontSize: 21, fontWeight: 800, color: C.text }}>เลือกนักวิ่งที่จะติดตาม</div>
         <div style={{ fontSize: 12.5, color: C.muted, marginTop: 4 }}>เลือกจากนักวิ่งที่ลงทะเบียนในงานนี้ · ค้นหาด้วยชื่อหรือเลข BIB</div>
       </div>
-      <div style={{ padding: '0 18px 10px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '11px 13px', background: '#fff', border: `1px solid ${C.border}`, borderRadius: 10, boxShadow: '0 1px 3px rgba(31,42,28,0.08)' }}>
-          <span style={{ fontSize: 13, color: C.mute2 }}>🔍</span>
-          <input value={q} onChange={e => setQ(e.target.value)} placeholder="ชื่อ หรือ BIB" style={{ border: 'none', outline: 'none', fontSize: 13, flex: 1, fontFamily: C.font, background: 'transparent' }}/>
+      {distLabels.length > 0 && (
+        <div style={{ padding: '0 18px 10px', flexShrink: 0, display: 'flex', gap: 6, overflowX: 'auto' }}>
+          {['all', ...distLabels].map(d => (
+            <div key={d} onClick={() => setDist(d)} style={{ padding: '6px 12px', borderRadius: 999, fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap',
+              background: dist === d ? C.brand : '#fff', color: dist === d ? '#fff' : C.text, border: `1px solid ${dist === d ? C.brand : C.border}` }}>{d === 'all' ? 'ทุกระยะ' : d}</div>
+          ))}
+        </div>
+      )}
+      {gunMs != null && (
+        <div style={{ textAlign: 'center', fontFamily: C.mono, fontSize: 20, fontWeight: 700, flexShrink: 0,
+          color: Date.now() >= gunMs ? C.brandDk : '#b45309', marginBottom: 10 }}>
+          {Date.now() >= gunMs ? fmtElapsed(Date.now() - gunMs) : `เริ่มในอีก ${fmtElapsed(gunMs - Date.now())}`}
+        </div>
+      )}
+      <div style={{ padding: '0 18px 10px', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ display: 'flex', flex: 1, background: '#fff', border: `1px solid ${C.border}`, borderRadius: 10, padding: 3 }}>
+          {[['list', '📋 รายชื่อ'], ['route', '🗺️ เส้นทาง']].map(([k, l]) => (
+            <div key={k} onClick={() => setView(k)} style={{ flex: 1, textAlign: 'center', padding: '7px 0', borderRadius: 8, cursor: 'pointer',
+              fontSize: 12, fontWeight: 700, background: view === k ? C.brand : 'transparent', color: view === k ? '#fff' : C.muted }}>{l}</div>
+          ))}
         </div>
       </div>
-      <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '0 18px 18px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {filtered.length === 0 && <EmptyState icon={runners.length === 0 ? '🏃' : '🔍'} text={runners.length === 0 ? 'ยังไม่มีใครลงทะเบียนงานนี้' : 'ไม่พบนักวิ่งที่ค้นหา'}/>}
-        {filtered.map(r => (
-          <div key={r.bib} onClick={() => onPick(r.bib)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 12, background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, boxShadow: '0 1px 3px rgba(31,42,28,0.08)', cursor: 'pointer' }}>
-            <AvatarCircle size={36} photo={r.avatarPhoto} initial={r.nickname[0]}/>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 14, fontWeight: 600 }}>{r.nickname}</div>
-              <div style={{ fontFamily: C.mono, fontSize: 10.5, color: C.muted }}>bib {r.bib} · {r.distance}</div>
-            </div>
-            <span style={{ fontSize: 16, color: C.mute2 }}>›</span>
+      {view === 'route' && routeCourse && (
+        <div style={{ padding: '0 18px 10px', flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px',
+            background: '#fff', border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 11.5, color: C.muted }}>
+            <span>📏 {routeCourse.totalKm.toFixed(1)} กม.</span>
+            {totalGainM != null && <span>⛰️ D+ {totalGainM.toLocaleString()} ม.</span>}
           </div>
-        ))}
-      </div>
+        </div>
+      )}
+      {view === 'route'
+        ? <RouteOverviewMap course={routeCourse} event={event}/>
+        : (
+          <>
+            <div style={{ padding: '0 18px 10px', flexShrink: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '11px 13px', background: '#fff', border: `1px solid ${C.border}`, borderRadius: 10, boxShadow: '0 1px 3px rgba(31,42,28,0.08)' }}>
+                <span style={{ fontSize: 13, color: C.mute2 }}>🔍</span>
+                <input value={q} onChange={e => setQ(e.target.value)} placeholder="ชื่อ หรือ BIB" style={{ border: 'none', outline: 'none', fontSize: 13, flex: 1, fontFamily: C.font, background: 'transparent' }}/>
+              </div>
+              <div style={{ display: 'flex', gap: 4, marginTop: 8 }}>
+                {[['all', 'ทั้งหมด'], ['m', 'ชาย'], ['f', 'หญิง']].map(([k, l]) => (
+                  <div key={k} onClick={() => setGender(k)} style={{ flex: 1, textAlign: 'center', padding: '6px 0', borderRadius: 999, fontSize: 11.5, fontWeight: 700, cursor: 'pointer',
+                    background: gender === k ? C.bg : 'transparent', color: gender === k ? C.brandDk : C.muted, border: `1px solid ${gender === k ? C.brand : C.border}` }}>{l}</div>
+                ))}
+              </div>
+            </div>
+            <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '0 18px 18px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {filtered.length === 0 && <EmptyState icon={runners.length === 0 ? '🏃' : '🔍'} text={runners.length === 0 ? 'ยังไม่มีใครลงทะเบียนงานนี้' : 'ไม่พบนักวิ่งที่ค้นหา'}/>}
+              {filtered.map(r => (
+                <div key={r.bib} onClick={() => onPick(r.bib)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 12, background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, boxShadow: '0 1px 3px rgba(31,42,28,0.08)', cursor: 'pointer' }}>
+                  <AvatarCircle size={36} photo={r.avatarPhoto} initial={r.nickname[0]} status={runnerAvatarStatus(r)}/>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 14, fontWeight: 600 }}>{r.nickname}</div>
+                    <div style={{ fontFamily: C.mono, fontSize: 10.5, color: C.muted }}>bib {r.bib} · {r.distance}</div>
+                  </div>
+                  <span style={{ fontSize: 16, color: C.mute2 }}>›</span>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
     </div>
   );
 }
@@ -2154,17 +2229,6 @@ function RankingTab({ snap, eventId, event }) {
   const distLabels = (event && event.distances && event.distances.length) ? event.distances.map(d => d.label) : ['11K', '22K', '29K'];
   const [dist, setDist] = uS(distLabels[0]);
   const [gender, setGender] = uS('all');
-  const [view, setView] = uS('ranking'); // 'ranking' | 'route'
-  const [q, setQ] = uS('');
-  const [showSearch, setShowSearch] = uS(false);
-  // The course for whichever distance is currently selected here — separate
-  // from AppShell's own `course` (tied to the signed-in runner's own
-  // distance, or the followed friend's), since a spectator browsing
-  // Ranking can flip between every distance an event offers. Fetched
-  // unconditionally (not just while the Route sub-tab is open) so the map
-  // is already ready the moment someone switches to it instead of a blank
-  // flash while it loads.
-  const routeCourse = useCourse(event, dist);
   // When we know the real event (registered runner), rank the real roster
   // (src/runner-store.js) the same way Results does — finished first by
   // elapsed progress, then by checkpoint progress — instead of the fully
@@ -2299,124 +2363,56 @@ function RankingTab({ snap, eventId, event }) {
     const d = new Date(ms);
     return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
   }
-  // Race clock — counts up once the selected distance's gun has gone off,
-  // counts down before it. Re-render once a second is the only reason this
-  // needs its own tick; every other value here is fine recomputing lazily
-  // off React's normal render cycle.
-  const [, setClockTick] = uS(0);
-  uE(() => { const id = setInterval(() => setClockTick(t => t + 1), 1000); return () => clearInterval(id); }, []);
-  const gunMs = uM(() => {
-    const combine = window.eventStatus && window.eventStatus.combineDateTime;
-    const distDef = (event && event.distances || []).find(d => d.label === dist);
-    return distDef && distDef.cpTimes && combine ? combine(event.raceDateISO, distDef.cpTimes.start) : null;
-  }, [event, dist]);
-  const totalGainM = uM(() => {
-    if (!routeCourse || !routeCourse.points || !routeCourse.points.length || !window.courseGeo) return null;
-    const pts = routeCourse.points.map(p => ({ lat: p[0], lon: p[1], ele: p[2], km: p[3] }));
-    return window.courseGeo.cumulativeGainToKm(pts, routeCourse.totalKm);
-  }, [routeCourse]);
-  const filteredRows = uM(() => {
-    const query = q.trim().toLowerCase();
-    if (!query) return rows;
-    return rows.filter(r => r.name.toLowerCase().includes(query) || String(r.bib).toLowerCase().includes(query));
-  }, [rows, q]);
-  const activeFilterCount = (gender !== 'all' ? 1 : 0) + (q.trim() ? 1 : 0);
   return (
-    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-      <div style={{ padding: '14px 18px 0' }}>
-        <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
-          {distLabels.map(d => (
-            <div key={d} onClick={() => setDist(d)} style={{ padding: '6px 12px', borderRadius: 999, fontSize: 12, fontWeight: 700, cursor: 'pointer',
-              background: dist === d ? C.brand : '#fff', color: dist === d ? '#fff' : C.text, border: `1px solid ${dist === d ? C.brand : C.border}` }}>{d}</div>
+    <PullToRefresh onRefresh={() => refreshRealRunners.current()} style={{ flex: 1, minHeight: 0, padding: '14px 18px 90px' }}>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+        {distLabels.map(d => (
+          <div key={d} onClick={() => setDist(d)} style={{ padding: '6px 12px', borderRadius: 999, fontSize: 12, fontWeight: 700, cursor: 'pointer',
+            background: dist === d ? C.brand : '#fff', color: dist === d ? '#fff' : C.text, border: `1px solid ${dist === d ? C.brand : C.border}` }}>{d}</div>
+        ))}
+        <div style={{ flex: 1 }}/>
+        <div style={{ display: 'flex', gap: 4 }}>
+          {[['all', 'ทั้งหมด'], ['m', 'ชาย'], ['f', 'หญิง']].map(([k, l]) => (
+            <div key={k} onClick={() => setGender(k)} style={{ padding: '6px 10px', borderRadius: 999, fontSize: 11, fontWeight: 600, cursor: 'pointer',
+              background: gender === k ? C.bg : 'transparent', color: gender === k ? C.brandDk : C.muted }}>{l}</div>
           ))}
         </div>
-        {/* Counts up once the gun for this distance has actually gone off,
-            counts down before it — same clock LiveTrail shows at the top
-            of its own Ranking screen. */}
-        {gunMs != null && (
-          <div style={{ textAlign: 'center', fontFamily: C.mono, fontSize: 20, fontWeight: 700,
-            color: Date.now() >= gunMs ? C.brandDk : '#b45309', marginBottom: 10 }}>
-            {Date.now() >= gunMs ? fmtElapsed(Date.now() - gunMs) : `เริ่มในอีก ${fmtElapsed(gunMs - Date.now())}`}
-          </div>
-        )}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-          <div style={{ display: 'flex', flex: 1, background: C.bg, borderRadius: 10, padding: 3 }}>
-            {[['ranking', '🏅 อันดับ'], ['route', '🗺️ เส้นทาง']].map(([k, l]) => (
-              <div key={k} onClick={() => setView(k)} style={{ flex: 1, textAlign: 'center', padding: '7px 0', borderRadius: 8, cursor: 'pointer',
-                fontSize: 12, fontWeight: 700, background: view === k ? '#fff' : 'transparent', color: view === k ? C.brandDk : C.muted,
-                boxShadow: view === k ? '0 1px 3px rgba(31,42,28,0.15)' : 'none' }}>{l}</div>
-            ))}
-          </div>
-          <div onClick={() => setShowSearch(v => !v)} style={{ position: 'relative', width: 34, height: 34, flexShrink: 0, borderRadius: 10,
-            border: `1px solid ${showSearch || activeFilterCount ? C.brand : C.border}`, background: showSearch ? C.brand : '#fff',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-            <span style={{ fontSize: 14 }}>🔍</span>
-            {activeFilterCount > 0 && !showSearch && <span style={{ position: 'absolute', top: -4, right: -4, width: 15, height: 15, borderRadius: 999,
-              background: '#e0453e', color: '#fff', fontSize: 9, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{activeFilterCount}</span>}
-          </div>
+      </div>
+      {etaInfo && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, padding: '8px 12px',
+          background: '#fdf0d6', border: '1px solid #f0d9a0', borderRadius: 10, fontSize: 11, color: '#7c4a03' }}>
+          <span>🏃</span>
+          <span>ผู้นำอยู่ที่ {etaInfo.leaderKm.toFixed(1)} กม. · คาดถึง <b>{etaInfo.nextLabel}</b> เวลา <b>{fmtClock(etaInfo.etaMs)}</b> น.</span>
         </div>
-        {showSearch && (
-          <div style={{ marginBottom: 10, padding: 10, background: '#fff', border: `1px solid ${C.border}`, borderRadius: 10 }}>
-            <input value={q} onChange={e => setQ(e.target.value)} placeholder="ค้นหาชื่อ หรือ BIB" style={{ width: '100%', border: `1px solid ${C.border}`,
-              borderRadius: 8, padding: '8px 10px', fontSize: 13, fontFamily: C.font, marginBottom: 8, boxSizing: 'border-box' }}/>
-            <div style={{ display: 'flex', gap: 4 }}>
-              {[['all', 'ทั้งหมด'], ['m', 'ชาย'], ['f', 'หญิง']].map(([k, l]) => (
-                <div key={k} onClick={() => setGender(k)} style={{ flex: 1, textAlign: 'center', padding: '6px 0', borderRadius: 999, fontSize: 11.5, fontWeight: 700, cursor: 'pointer',
-                  background: gender === k ? C.bg : 'transparent', color: gender === k ? C.brandDk : C.muted, border: `1px solid ${gender === k ? C.brand : C.border}` }}>{l}</div>
-              ))}
+      )}
+      {rows.map(r => {
+        // gender==='all' shows the overall rank as the main badge; picking
+        // one gender to view shows that category's own rank instead (same
+        // idea as LiveTrail switching its own primary badge between the
+        // Overall/Women tabs) — the *other* rank still shows as a small
+        // second line either way so it's never fully hidden.
+        const primaryRank = gender === 'all' ? r.rankOverall : (r.rankGender || r.rankOverall);
+        const diffStr = fmtDiff(r.diffToLeaderMs);
+        const paceStr = fmtPace(r.paceMinPerKm);
+        return (
+          <div key={r.bib} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 4px', borderBottom: `1px solid ${C.border}` }}>
+            <span style={{ width: 26, flexShrink: 0, fontFamily: C.mono, fontWeight: 700, color: primaryRank <= 3 ? C.brandDk : C.muted, fontSize: 13 }}>
+              {primaryRank === 1 ? '🥇' : primaryRank === 2 ? '🥈' : primaryRank === 3 ? '🥉' : `#${primaryRank}`}
+            </span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</div>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+              {r.finished
+                ? <span style={{ fontFamily: C.mono, fontSize: 11, color: C.text, fontWeight: 700 }}>{fmtElapsed(r.elapsedMs)}</span>
+                : <span style={{ fontFamily: C.mono, fontSize: 11, color: C.muted }}>{r.progressKm.toFixed(1)}K</span>}
+              {paceStr && <span style={{ fontFamily: C.mono, fontSize: 9.5, color: C.muted }}>{paceStr}</span>}
+              {diffStr && <span style={{ fontFamily: C.mono, fontSize: 9.5, color: '#b45309' }}>{diffStr}</span>}
             </div>
           </div>
-        )}
-        {view === 'ranking' && routeCourse && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, padding: '8px 12px',
-            background: '#fff', border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 11.5, color: C.muted }}>
-            <span>📏 {routeCourse.totalKm.toFixed(1)} กม.</span>
-            {totalGainM != null && <span>⛰️ D+ {totalGainM.toLocaleString()} ม.</span>}
-          </div>
-        )}
-      </div>
-      {view === 'route'
-        ? <RouteOverviewMap course={routeCourse} event={event}/>
-        : (
-          <PullToRefresh onRefresh={() => refreshRealRunners.current()} style={{ flex: 1, minHeight: 0, padding: '0 18px 90px' }}>
-            {etaInfo && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, padding: '8px 12px',
-                background: '#fdf0d6', border: '1px solid #f0d9a0', borderRadius: 10, fontSize: 11, color: '#7c4a03' }}>
-                <span>🏃</span>
-                <span>ผู้นำอยู่ที่ {etaInfo.leaderKm.toFixed(1)} กม. · คาดถึง <b>{etaInfo.nextLabel}</b> เวลา <b>{fmtClock(etaInfo.etaMs)}</b> น.</span>
-              </div>
-            )}
-            {filteredRows.length === 0 && <EmptyState icon="🔍" text="ไม่พบนักวิ่งที่ค้นหา"/>}
-            {filteredRows.map(r => {
-              // gender==='all' shows the overall rank as the main badge; picking
-              // one gender to view shows that category's own rank instead (same
-              // idea as LiveTrail switching its own primary badge between the
-              // Overall/Women tabs) — the *other* rank still shows as a small
-              // second line either way so it's never fully hidden.
-              const primaryRank = gender === 'all' ? r.rankOverall : (r.rankGender || r.rankOverall);
-              const diffStr = fmtDiff(r.diffToLeaderMs);
-              const paceStr = fmtPace(r.paceMinPerKm);
-              return (
-                <div key={r.bib} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 4px', borderBottom: `1px solid ${C.border}` }}>
-                  <span style={{ width: 26, flexShrink: 0, fontFamily: C.mono, fontWeight: 700, color: primaryRank <= 3 ? C.brandDk : C.muted, fontSize: 13 }}>
-                    {primaryRank === 1 ? '🥇' : primaryRank === 2 ? '🥈' : primaryRank === 3 ? '🥉' : `#${primaryRank}`}
-                  </span>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</div>
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-                    {r.finished
-                      ? <span style={{ fontFamily: C.mono, fontSize: 11, color: C.text, fontWeight: 700 }}>{fmtElapsed(r.elapsedMs)}</span>
-                      : <span style={{ fontFamily: C.mono, fontSize: 11, color: C.muted }}>{r.progressKm.toFixed(1)}K</span>}
-                    {paceStr && <span style={{ fontFamily: C.mono, fontSize: 9.5, color: C.muted }}>{paceStr}</span>}
-                    {diffStr && <span style={{ fontFamily: C.mono, fontSize: 9.5, color: '#b45309' }}>{diffStr}</span>}
-                  </div>
-                </div>
-              );
-            })}
-          </PullToRefresh>
-        )}
-    </div>
+        );
+      })}
+    </PullToRefresh>
   );
 }
 
@@ -4001,7 +3997,7 @@ function MobileApp() {
     onOpenApp={openRunnerSpace}
     onFollow={(ev) => { setPendingEvent(ev); setScreen('follow-picker'); }}
     onProfile={() => setModal('profile')}/>;
-  else if (screen === 'follow-picker') body = <FollowPickerScreen eventId={pendingEvent && pendingEvent.id} onBack={() => setScreen('events')} onPick={(bib) => {
+  else if (screen === 'follow-picker') body = <FollowPickerScreen eventId={pendingEvent && pendingEvent.id} event={pendingEvent} onBack={() => setScreen('events')} onPick={(bib) => {
     persist({ ...session, spectator: true, followBib: bib, followEventId: pendingEvent && pendingEvent.id, runner: null });
     setScreen('app');
   }}/>;
