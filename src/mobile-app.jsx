@@ -2083,8 +2083,11 @@ function ElevationSvg({ course, progressKm, checkpoints, height = 150 }) {
         ))}
         <path d={path} fill="none" stroke={C.brand} strokeWidth="2"/>
         {/* Same glide Live Monitor's own elevation chart already uses
-            instead of the dot jumping instantly to each new position. */}
-        <circle cx={markX} cy={markY} r="5.5" fill={C.orange} stroke="#fff" strokeWidth="2" style={{ transition: 'cx 0.6s ease, cy 0.6s ease' }}/>
+            instead of the dot jumping instantly to each new position.
+            Omitted entirely (progressKm null) for a plain course overview
+            with no specific runner to mark — a dot pinned at km 0 there
+            would misleadingly read as "someone is here." */}
+        {progressKm != null && <circle cx={markX} cy={markY} r="5.5" fill={C.orange} stroke="#fff" strokeWidth="2" style={{ transition: 'cx 0.6s ease, cy 0.6s ease' }}/>}
         {marks.map(([km, label], i) => {
           const isEdge = label === 'START' || label === 'FINISH';
           // Checkpoint labels are "WS1 เขามะกอก"-shaped — split into the
@@ -2138,6 +2141,17 @@ function RankingTab({ snap, eventId, event }) {
   const distLabels = (event && event.distances && event.distances.length) ? event.distances.map(d => d.label) : ['11K', '22K', '29K'];
   const [dist, setDist] = uS(distLabels[0]);
   const [gender, setGender] = uS('all');
+  const [view, setView] = uS('ranking'); // 'ranking' | 'route'
+  const [q, setQ] = uS('');
+  const [showSearch, setShowSearch] = uS(false);
+  // The course for whichever distance is currently selected here — separate
+  // from AppShell's own `course` (tied to the signed-in runner's own
+  // distance, or the followed friend's), since a spectator browsing
+  // Ranking can flip between every distance an event offers. Fetched
+  // unconditionally (not just while the Route sub-tab is open) so the map
+  // is already ready the moment someone switches to it instead of a blank
+  // flash while it loads.
+  const routeCourse = useCourse(event, dist);
   // When we know the real event (registered runner), rank the real roster
   // (src/runner-store.js) the same way Results does — finished first by
   // elapsed progress, then by checkpoint progress — instead of the fully
@@ -2272,56 +2286,168 @@ function RankingTab({ snap, eventId, event }) {
     const d = new Date(ms);
     return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
   }
+  // Race clock — counts up once the selected distance's gun has gone off,
+  // counts down before it. Re-render once a second is the only reason this
+  // needs its own tick; every other value here is fine recomputing lazily
+  // off React's normal render cycle.
+  const [, setClockTick] = uS(0);
+  uE(() => { const id = setInterval(() => setClockTick(t => t + 1), 1000); return () => clearInterval(id); }, []);
+  const gunMs = uM(() => {
+    const combine = window.eventStatus && window.eventStatus.combineDateTime;
+    const distDef = (event && event.distances || []).find(d => d.label === dist);
+    return distDef && distDef.cpTimes && combine ? combine(event.raceDateISO, distDef.cpTimes.start) : null;
+  }, [event, dist]);
+  const totalGainM = uM(() => {
+    if (!routeCourse || !routeCourse.points || !routeCourse.points.length || !window.courseGeo) return null;
+    const pts = routeCourse.points.map(p => ({ lat: p[0], lon: p[1], ele: p[2], km: p[3] }));
+    return window.courseGeo.cumulativeGainToKm(pts, routeCourse.totalKm);
+  }, [routeCourse]);
+  const filteredRows = uM(() => {
+    const query = q.trim().toLowerCase();
+    if (!query) return rows;
+    return rows.filter(r => r.name.toLowerCase().includes(query) || String(r.bib).toLowerCase().includes(query));
+  }, [rows, q]);
+  const activeFilterCount = (gender !== 'all' ? 1 : 0) + (q.trim() ? 1 : 0);
   return (
-    <PullToRefresh onRefresh={() => refreshRealRunners.current()} style={{ flex: 1, minHeight: 0, padding: '14px 18px 90px' }}>
-      <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
-        {distLabels.map(d => (
-          <div key={d} onClick={() => setDist(d)} style={{ padding: '6px 12px', borderRadius: 999, fontSize: 12, fontWeight: 700, cursor: 'pointer',
-            background: dist === d ? C.brand : '#fff', color: dist === d ? '#fff' : C.text, border: `1px solid ${dist === d ? C.brand : C.border}` }}>{d}</div>
-        ))}
-        <div style={{ flex: 1 }}/>
-        <div style={{ display: 'flex', gap: 4 }}>
-          {[['all', 'ทั้งหมด'], ['m', 'ชาย'], ['f', 'หญิง']].map(([k, l]) => (
-            <div key={k} onClick={() => setGender(k)} style={{ padding: '6px 10px', borderRadius: 999, fontSize: 11, fontWeight: 600, cursor: 'pointer',
-              background: gender === k ? C.bg : 'transparent', color: gender === k ? C.brandDk : C.muted }}>{l}</div>
+    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+      <div style={{ padding: '14px 18px 0' }}>
+        <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+          {distLabels.map(d => (
+            <div key={d} onClick={() => setDist(d)} style={{ padding: '6px 12px', borderRadius: 999, fontSize: 12, fontWeight: 700, cursor: 'pointer',
+              background: dist === d ? C.brand : '#fff', color: dist === d ? '#fff' : C.text, border: `1px solid ${dist === d ? C.brand : C.border}` }}>{d}</div>
           ))}
         </div>
-      </div>
-      {etaInfo && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, padding: '8px 12px',
-          background: '#fdf0d6', border: '1px solid #f0d9a0', borderRadius: 10, fontSize: 11, color: '#7c4a03' }}>
-          <span>🏃</span>
-          <span>ผู้นำอยู่ที่ {etaInfo.leaderKm.toFixed(1)} กม. · คาดถึง <b>{etaInfo.nextLabel}</b> เวลา <b>{fmtClock(etaInfo.etaMs)}</b> น.</span>
+        {/* Counts up once the gun for this distance has actually gone off,
+            counts down before it — same clock LiveTrail shows at the top
+            of its own Ranking screen. */}
+        {gunMs != null && (
+          <div style={{ textAlign: 'center', fontFamily: C.mono, fontSize: 20, fontWeight: 700,
+            color: Date.now() >= gunMs ? C.brandDk : '#b45309', marginBottom: 10 }}>
+            {Date.now() >= gunMs ? fmtElapsed(Date.now() - gunMs) : `เริ่มในอีก ${fmtElapsed(gunMs - Date.now())}`}
+          </div>
+        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+          <div style={{ display: 'flex', flex: 1, background: C.bg, borderRadius: 10, padding: 3 }}>
+            {[['ranking', '🏅 อันดับ'], ['route', '🗺️ เส้นทาง']].map(([k, l]) => (
+              <div key={k} onClick={() => setView(k)} style={{ flex: 1, textAlign: 'center', padding: '7px 0', borderRadius: 8, cursor: 'pointer',
+                fontSize: 12, fontWeight: 700, background: view === k ? '#fff' : 'transparent', color: view === k ? C.brandDk : C.muted,
+                boxShadow: view === k ? '0 1px 3px rgba(31,42,28,0.15)' : 'none' }}>{l}</div>
+            ))}
+          </div>
+          <div onClick={() => setShowSearch(v => !v)} style={{ position: 'relative', width: 34, height: 34, flexShrink: 0, borderRadius: 10,
+            border: `1px solid ${showSearch || activeFilterCount ? C.brand : C.border}`, background: showSearch ? C.brand : '#fff',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+            <span style={{ fontSize: 14 }}>🔍</span>
+            {activeFilterCount > 0 && !showSearch && <span style={{ position: 'absolute', top: -4, right: -4, width: 15, height: 15, borderRadius: 999,
+              background: '#e0453e', color: '#fff', fontSize: 9, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{activeFilterCount}</span>}
+          </div>
         </div>
-      )}
-      {rows.map(r => {
-        // gender==='all' shows the overall rank as the main badge; picking
-        // one gender to view shows that category's own rank instead (same
-        // idea as LiveTrail switching its own primary badge between the
-        // Overall/Women tabs) — the *other* rank still shows as a small
-        // second line either way so it's never fully hidden.
-        const primaryRank = gender === 'all' ? r.rankOverall : (r.rankGender || r.rankOverall);
-        const diffStr = fmtDiff(r.diffToLeaderMs);
-        const paceStr = fmtPace(r.paceMinPerKm);
-        return (
-          <div key={r.bib} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 4px', borderBottom: `1px solid ${C.border}` }}>
-            <span style={{ width: 26, flexShrink: 0, fontFamily: C.mono, fontWeight: 700, color: primaryRank <= 3 ? C.brandDk : C.muted, fontSize: 13 }}>
-              {primaryRank === 1 ? '🥇' : primaryRank === 2 ? '🥈' : primaryRank === 3 ? '🥉' : `#${primaryRank}`}
-            </span>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 13.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</div>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-              {r.finished
-                ? <span style={{ fontFamily: C.mono, fontSize: 11, color: C.text, fontWeight: 700 }}>{fmtElapsed(r.elapsedMs)}</span>
-                : <span style={{ fontFamily: C.mono, fontSize: 11, color: C.muted }}>{r.progressKm.toFixed(1)}K</span>}
-              {paceStr && <span style={{ fontFamily: C.mono, fontSize: 9.5, color: C.muted }}>{paceStr}</span>}
-              {diffStr && <span style={{ fontFamily: C.mono, fontSize: 9.5, color: '#b45309' }}>{diffStr}</span>}
+        {showSearch && (
+          <div style={{ marginBottom: 10, padding: 10, background: '#fff', border: `1px solid ${C.border}`, borderRadius: 10 }}>
+            <input value={q} onChange={e => setQ(e.target.value)} placeholder="ค้นหาชื่อ หรือ BIB" style={{ width: '100%', border: `1px solid ${C.border}`,
+              borderRadius: 8, padding: '8px 10px', fontSize: 13, fontFamily: C.font, marginBottom: 8, boxSizing: 'border-box' }}/>
+            <div style={{ display: 'flex', gap: 4 }}>
+              {[['all', 'ทั้งหมด'], ['m', 'ชาย'], ['f', 'หญิง']].map(([k, l]) => (
+                <div key={k} onClick={() => setGender(k)} style={{ flex: 1, textAlign: 'center', padding: '6px 0', borderRadius: 999, fontSize: 11.5, fontWeight: 700, cursor: 'pointer',
+                  background: gender === k ? C.bg : 'transparent', color: gender === k ? C.brandDk : C.muted, border: `1px solid ${gender === k ? C.brand : C.border}` }}>{l}</div>
+              ))}
             </div>
           </div>
-        );
-      })}
-    </PullToRefresh>
+        )}
+        {view === 'ranking' && routeCourse && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, padding: '8px 12px',
+            background: '#fff', border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 11.5, color: C.muted }}>
+            <span>📏 {routeCourse.totalKm.toFixed(1)} กม.</span>
+            {totalGainM != null && <span>⛰️ D+ {totalGainM.toLocaleString()} ม.</span>}
+          </div>
+        )}
+      </div>
+      {view === 'route'
+        ? <RouteOverviewMap course={routeCourse} event={event}/>
+        : (
+          <PullToRefresh onRefresh={() => refreshRealRunners.current()} style={{ flex: 1, minHeight: 0, padding: '0 18px 90px' }}>
+            {etaInfo && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, padding: '8px 12px',
+                background: '#fdf0d6', border: '1px solid #f0d9a0', borderRadius: 10, fontSize: 11, color: '#7c4a03' }}>
+                <span>🏃</span>
+                <span>ผู้นำอยู่ที่ {etaInfo.leaderKm.toFixed(1)} กม. · คาดถึง <b>{etaInfo.nextLabel}</b> เวลา <b>{fmtClock(etaInfo.etaMs)}</b> น.</span>
+              </div>
+            )}
+            {filteredRows.length === 0 && <EmptyState icon="🔍" text="ไม่พบนักวิ่งที่ค้นหา"/>}
+            {filteredRows.map(r => {
+              // gender==='all' shows the overall rank as the main badge; picking
+              // one gender to view shows that category's own rank instead (same
+              // idea as LiveTrail switching its own primary badge between the
+              // Overall/Women tabs) — the *other* rank still shows as a small
+              // second line either way so it's never fully hidden.
+              const primaryRank = gender === 'all' ? r.rankOverall : (r.rankGender || r.rankOverall);
+              const diffStr = fmtDiff(r.diffToLeaderMs);
+              const paceStr = fmtPace(r.paceMinPerKm);
+              return (
+                <div key={r.bib} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 4px', borderBottom: `1px solid ${C.border}` }}>
+                  <span style={{ width: 26, flexShrink: 0, fontFamily: C.mono, fontWeight: 700, color: primaryRank <= 3 ? C.brandDk : C.muted, fontSize: 13 }}>
+                    {primaryRank === 1 ? '🥇' : primaryRank === 2 ? '🥈' : primaryRank === 3 ? '🥉' : `#${primaryRank}`}
+                  </span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</div>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                    {r.finished
+                      ? <span style={{ fontFamily: C.mono, fontSize: 11, color: C.text, fontWeight: 700 }}>{fmtElapsed(r.elapsedMs)}</span>
+                      : <span style={{ fontFamily: C.mono, fontSize: 11, color: C.muted }}>{r.progressKm.toFixed(1)}K</span>}
+                    {paceStr && <span style={{ fontFamily: C.mono, fontSize: 9.5, color: C.muted }}>{paceStr}</span>}
+                    {diffStr && <span style={{ fontFamily: C.mono, fontSize: 9.5, color: '#b45309' }}>{diffStr}</span>}
+                  </div>
+                </div>
+              );
+            })}
+          </PullToRefresh>
+        )}
+    </div>
+  );
+}
+
+// Static route/elevation overview for whichever distance is selected in
+// Ranking — no runner marker or live position, just the course itself
+// (unlike RouteTab, which is always about one specific runner's progress).
+function RouteOverviewMap({ course, event }) {
+  const mapRef = uR(null);
+  const mapObj = uR(null);
+  uE(() => {
+    if (!course || !window.L || !mapRef.current) return;
+    if (mapObj.current) { mapObj.current.remove(); mapObj.current = null; }
+    const L = window.L;
+    const pts = course.points.map(p => [p[0], p[1]]);
+    const map = L.map(mapRef.current, { zoomControl: false, attributionControl: false }).fitBounds(pts);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+    L.polyline(pts, { color: C.brand, weight: 4 }).addTo(map);
+    function nearestPoint(km) {
+      let best = course.points[0], bestDiff = Infinity;
+      for (const p of course.points) {
+        const diff = Math.abs(p[3] - km);
+        if (diff < bestDiff) { bestDiff = diff; best = p; }
+      }
+      return best;
+    }
+    function addCpMarker(km, label, color) {
+      const p = nearestPoint(km);
+      L.marker([p[0], p[1]], { icon: L.divIcon({ className: '', iconSize: null, html:
+        `<div style="transform:translate(-50%,-100%);background:${color};color:#fff;font:700 10px 'JetBrains Mono',monospace;padding:3px 7px;border-radius:999px;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.35);white-space:nowrap;">${label}</div>` }) }).addTo(map);
+    }
+    addCpMarker(0, 'START', C.brand);
+    ((event && event.checkpoints) || []).forEach(cp => addCpMarker(parseFloat(cp.km) || 0, cp.label, C.orange));
+    addCpMarker(course.totalKm, 'FINISH', '#9b1c10');
+    mapObj.current = map;
+    return () => { map.remove(); mapObj.current = null; };
+  }, [course, event]);
+  return (
+    <div style={{ flex: 1, minHeight: 0, overflow: 'auto', overscrollBehavior: 'contain', display: 'flex', flexDirection: 'column' }}>
+      <div ref={mapRef} style={{ flex: 1, minHeight: 220, background: '#eee' }}/>
+      <div style={{ padding: '14px 18px 90px', background: '#fff' }}>
+        <Kicker>Elevation</Kicker>
+        {course && <ElevationSvg course={course} progressKm={null} checkpoints={(event && event.checkpoints) || []}/>}
+      </div>
+    </div>
   );
 }
 
