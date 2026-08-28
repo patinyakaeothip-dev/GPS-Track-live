@@ -412,6 +412,19 @@ function EventCard({ ev, isRegistered, onRunnerSpace, onFollow, onSeeResult }) {
   // just a snapshot from whenever Admin last hit save.
   const status = window.eventStatus.computeStatus(ev);
   const closed = window.eventStatus.computeClosed(ev);
+  // Family/friends could only start setting up who to follow once an
+  // event actually went 'live' — meaning the first time anyone could pick
+  // a runner to track was the exact busy moment the gun went off, instead
+  // of calmly the night before. Opening just the Follow button up to 24h
+  // early (not touching computeStatus/the 'live' status itself — that
+  // still flips exactly at gun time everywhere else, so the "LIVE" badge
+  // below and everything else that reads status stay accurate) covers a
+  // race with a pre-dawn start without the button just being available
+  // for days beforehand.
+  const FOLLOW_EARLY_MS = 24 * 60 * 60 * 1000;
+  const eventStart = status === 'upcoming' ? window.eventStatus.eventWindow(ev).start : null;
+  const followOpensSoon = !!(eventStart && (eventStart.getTime() - Date.now()) <= FOLLOW_EARLY_MS);
+  const canFollow = status === 'live' || followOpensSoon;
   if (status === 'past') {
     return (
       // flexShrink: 0 — this card is a direct child of .list, a
@@ -479,10 +492,12 @@ function EventCard({ ev, isRegistered, onRunnerSpace, onFollow, onSeeResult }) {
             {isRegistered ? 'ไปหน้าติดตามของฉัน' : closed ? 'ปิดรับสมัครแล้ว' : (status === 'live' ? 'ไปหน้าติดตามของฉัน' : 'ดูสถานะการลงทะเบียน')}
           </div>
         </button>
-        {status === 'live' && (
+        {canFollow && (
           <button onClick={onFollow} style={{ flex: 1, padding: 13, background: C.brand, color: '#fff', border: 'none', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>
             🔗 Follow the race
-            <div style={{ fontFamily: C.mono, fontSize: 9, fontWeight: 600, opacity: 0.85, marginTop: 1 }}>ดูเพื่อนที่ในงานนี้</div>
+            <div style={{ fontFamily: C.mono, fontSize: 9, fontWeight: 600, opacity: 0.85, marginTop: 1 }}>
+              {status === 'live' ? 'ดูเพื่อนที่ในงานนี้' : 'ตั้งค่าล่วงหน้าก่อนสตาร์ท'}
+            </div>
           </button>
         )}
       </div>
