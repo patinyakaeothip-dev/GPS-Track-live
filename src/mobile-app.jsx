@@ -2949,15 +2949,23 @@ function FriendDetailSheet({ runner: r, eventId, event, onClose, onFollow, embed
           whatever else is on screen) sits directly under the notch/Dynamic
           Island with nothing else reserving that space — embedded already
           has AppShell's own header doing that above it. */}
-      <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 12, padding: '16px 18px',
+      <div style={{ flexShrink: 0, position: 'relative', display: 'flex', alignItems: 'center', padding: '16px 18px',
         paddingTop: embedded ? 16 : 'max(16px, env(safe-area-inset-top))', borderBottom: `1px solid ${C.border}` }}>
-        {!embedded && <div onClick={onClose} style={{ width: 30, height: 30, borderRadius: 10, border: `1.6px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 14, flexShrink: 0 }}>‹</div>}
-        {/* Bib chip — LiveTrail centers this at the very top of its own
-            runner detail page; ours sits in the header row since there's
-            no separate heart/share row here to give it its own line. */}
-        <div style={{ margin: embedded ? '0' : '0 auto', padding: '4px 12px', border: `1.5px solid ${C.border}`, borderRadius: 6,
-          fontFamily: C.mono, fontSize: 15, fontWeight: 800, color: C.text, background: '#fafaf8' }}>{r.bib}</div>
-        {!embedded && <div style={{ width: 30, flexShrink: 0 }}/>}
+        {!embedded && <div onClick={onClose} style={{ width: 30, height: 30, borderRadius: 10, border: `1.6px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 14, flexShrink: 0, zIndex: 1 }}>‹</div>}
+        {/* Bib chip — a race-plate look (border + a small bolt dot in each
+            corner) like LiveTrail's own, centered absolutely against the
+            whole row so the back button on one side (only present when
+            not embedded) can't push it off-center. */}
+        <div style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)',
+          padding: '5px 16px', border: `1.5px solid ${C.border}`, borderRadius: 6,
+          fontFamily: C.mono, fontSize: 15, fontWeight: 800, color: C.text, background: '#fafaf8' }}>
+          {['tl', 'tr', 'bl', 'br'].map(pos => (
+            <span key={pos} style={{ position: 'absolute', width: 4, height: 4, borderRadius: 999, background: C.mute2,
+              top: pos[0] === 't' ? 3 : 'auto', bottom: pos[0] === 'b' ? 3 : 'auto',
+              left: pos[1] === 'l' ? 3 : 'auto', right: pos[1] === 'r' ? 3 : 'auto' }}/>
+          ))}
+          {r.bib}
+        </div>
       </div>
       <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 12, padding: '14px 18px', borderBottom: `1px solid ${C.border}` }}>
         <AvatarCircle size={48} fontSize={18} photo={r.avatarPhoto} initial={r.nickname[0]} status={runnerAvatarStatus(r)}/>
