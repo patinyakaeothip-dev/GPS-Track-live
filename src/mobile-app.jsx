@@ -1896,6 +1896,22 @@ function RouteTab({ course, runner, event, spectatorRunner, livePos }) {
     const id = setTimeout(() => mapObj.current.invalidateSize(), 220);
     return () => clearTimeout(id);
   }, [mapFull]);
+  // The landscape elevation view's rotate trick only makes sense on an
+  // actually-portrait viewport (a real phone) — its 100vh/100vw box
+  // assumes the viewport is taller than it is wide, so it can swap those
+  // into a landscape box after rotating. On an already-landscape viewport
+  // (a desktop browser window testing this page), 100vh is *shorter* than
+  // 100vw, the opposite of what a phone has — rotating that squashed the
+  // whole chart into a tiny sliver in one corner with the rest of the
+  // screen blank. Track the real viewport shape and only rotate when it's
+  // actually portrait; a landscape viewport just shows the chart large,
+  // unrotated, which already reads fine there.
+  const [isPortrait, setIsPortrait] = uS(() => window.innerHeight > window.innerWidth);
+  uE(() => {
+    function check() { setIsPortrait(window.innerHeight > window.innerWidth); }
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
   // A fullscreen overlay (map or elevation) is positioned against this
   // outer container (position:relative, its nearest positioned ancestor).
   // That container itself scrolls (overflow:auto) — while it's scrolled
@@ -1969,9 +1985,21 @@ function RouteTab({ course, runner, event, spectatorRunner, livePos }) {
           <div onClick={() => setElevFull(false)} style={{ position: 'fixed', top: 14, right: 14, zIndex: 1001,
             width: 34, height: 34, borderRadius: 999, background: '#fff', border: `1px solid ${C.border}`, boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
             display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 15 }}>✕</div>
-          <div style={{ position: 'fixed', top: '50%', left: '50%', width: '100vh', height: '100vw', transform: 'translate(-50%, -50%) rotate(90deg)', padding: '0 16px', boxSizing: 'border-box' }}>
+          <div style={isPortrait
+            ? { position: 'fixed', top: '50%', left: '50%', width: '100vh', height: '100vw', transform: 'translate(-50%, -50%) rotate(90deg)', padding: '0 16px', boxSizing: 'border-box' }
+            : { position: 'fixed', inset: 0, padding: '16px 40px 16px 16px', boxSizing: 'border-box', display: 'flex', flexDirection: 'column' }}>
             <Kicker>Elevation</Kicker>
-            {course && <ElevationSvg course={course} progressKm={elevationKm} checkpoints={(event && event.checkpoints) || []} width={900} interactive={false}/>}
+            {/* Explicit CSS height (not the default 100%) — this chart sits
+                inside plain auto-height block wrappers here (the rotated
+                box isn't a flex container in the portrait case), and
+                percentage height doesn't resolve against an auto-height
+                ancestor. That silently fell back to some tiny intrinsic
+                size instead of actually filling the screen — the "whole
+                profile" rendered as a sliver in one corner instead of
+                filling the view. calc() against the real viewport unit
+                each orientation actually has room in fixes that. */}
+            {course && <ElevationSvg course={course} progressKm={elevationKm} checkpoints={(event && event.checkpoints) || []} width={900}
+              heightCss={isPortrait ? 'calc(100vh - 90px)' : 'calc(100vh - 70px)'} interactive={false}/>}
           </div>
         </div>
       )}
@@ -2145,7 +2173,7 @@ function CheckpointSplitsList({ runner, event }) {
 // inline SVG, not a charting library. `zoom` is how many times narrower the
 // visible km window is than the full course; `panKm` is that window's left
 // edge, always clamped so it can't scroll past either end.
-function ElevationSvg({ course, progressKm, checkpoints, height = 150, interactive = true, width = 340 }) {
+function ElevationSvg({ course, progressKm, checkpoints, height = 150, interactive = true, width = 340, heightCss }) {
   // padBottom is taller than the plot really needs so angled checkpoint
   // labels (see marks.map below) have room to run diagonally without
   // colliding with their neighbors — a long name like "WS2 Green mountain"
@@ -2290,7 +2318,7 @@ function ElevationSvg({ course, progressKm, checkpoints, height = 150, interacti
   });
   return (
     <div style={{ position: 'relative' }}>
-      <svg viewBox={`0 0 ${w} ${h}`} style={{ width: '100%', height: interactive ? h : '100%', marginTop: interactive ? 6 : 0, touchAction: 'none', cursor: interactive && zoom > 1 ? 'grab' : 'default' }}
+      <svg viewBox={`0 0 ${w} ${h}`} style={{ width: '100%', height: heightCss || (interactive ? h : '100%'), marginTop: interactive ? 6 : 0, touchAction: 'none', cursor: interactive && zoom > 1 ? 'grab' : 'default' }}
         {...(interactive ? { onWheel, onPointerDown, onPointerMove, onPointerUp, onPointerCancel: onPointerUp } : {})}>
         <defs>
           <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
