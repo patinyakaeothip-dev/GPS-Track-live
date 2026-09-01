@@ -98,11 +98,12 @@
       bloodType: data.bloodType || '',
       email: data.email || '',
       medical: data.medical || '',
-      // Only ever collected from Profile (optional there too) — used
-      // solely to compute an age-category ranking, nothing else. A blank
-      // value here just means this runner doesn't show up in that
-      // ranking's age-category filter, same as a blank gender already
-      // means "not shown in the ชาย/หญิง split."
+      // Only ever collected from Profile — required there for anyone
+      // onboarding fresh, but `|| ''` still covers an account that
+      // completed onboarding before this field existed. A blank value
+      // here just means this runner doesn't show up in Ranking's
+      // age-category filter, same as a blank gender already means "not
+      // shown in the ชาย/หญิง split."
       birthYear: data.birthYear || '',
       uid: data.uid || '',
       avatarPhoto: data.avatarPhoto || '',
