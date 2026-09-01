@@ -2274,10 +2274,32 @@ function ElevationSvg({ course, progressKm, checkpoints, height = 150 }) {
   );
 }
 
+// 10-year brackets ("20-29", "30-39", ...) off "racing age" (this race
+// year minus birth year, no month/day precision needed — good enough for
+// an amateur trail race's age-category ranking, and asking only for birth
+// *year* on Profile is one less sensitive field than a full DOB). Under
+// 20 and 70+ are open-ended since a 5-10 person race doesn't have enough
+// spread at the extremes to bother splitting further.
+function ageCategoryFor(birthYear, raceYear) {
+  const by = parseInt(birthYear, 10);
+  if (!by || !raceYear) return null;
+  const age = raceYear - by;
+  if (!isFinite(age) || age < 0 || age > 110) return null;
+  if (age < 20) return '<20';
+  if (age >= 70) return '70+';
+  const lo = Math.floor(age / 10) * 10;
+  return `${lo}-${lo + 9}`;
+}
+
 function RankingTab({ snap, eventId, event }) {
   const distLabels = (event && event.distances && event.distances.length) ? event.distances.map(d => d.label) : ['11K', '22K', '29K'];
   const [dist, setDist] = uS(distLabels[0]);
   const [gender, setGender] = uS('all');
+  const [category, setCategory] = uS('all');
+  const raceYear = uM(() => {
+    const y = event && event.raceDateISO ? parseInt(event.raceDateISO.slice(0, 4), 10) : null;
+    return y || new Date().getFullYear();
+  }, [event]);
   // When we know the real event (registered runner), rank the real roster
   // (src/runner-store.js) the same way Results does — finished first by
   // elapsed progress, then by checkpoint progress — instead of the fully
@@ -2350,19 +2372,33 @@ function RankingTab({ snap, eventId, event }) {
           ? (bestAtCp.finish != null && finishMs != null ? finishMs - bestAtCp.finish : null)
           : (lastCk && bestAtCp[lastCk.cp] != null && lastMs != null ? lastMs - bestAtCp[lastCk.cp] : null);
         const paceMinPerKm = (gunElapsedMs != null && r.progressKm) ? (gunElapsedMs / 60000) / r.progressKm : null;
-        return { bib: r.bib, name: r.nickname, gender: r.gender, progressKm: r.progressKm, finished, finishMs, elapsedMs: gunElapsedMs, diffToLeaderMs, paceMinPerKm };
+        return { bib: r.bib, name: r.nickname, gender: r.gender, category: ageCategoryFor(r.birthYear, raceYear), progressKm: r.progressKm, finished, finishMs, elapsedMs: gunElapsedMs, diffToLeaderMs, paceMinPerKm };
       });
     } else if (snap) {
       list = snap.runners.filter(r => r.distance === dist)
-        .map(r => ({ bib: r.bib, name: `${r.firstName} ${r.lastName}`, gender: r.gender, progressKm: r.progressKm, finished: false, finishMs: null, elapsedMs: null, diffToLeaderMs: null, paceMinPerKm: null }));
+        .map(r => ({ bib: r.bib, name: `${r.firstName} ${r.lastName}`, gender: r.gender, category: null, progressKm: r.progressKm, finished: false, finishMs: null, elapsedMs: null, diffToLeaderMs: null, paceMinPerKm: null }));
     } else {
       list = [];
     }
     list.sort((a, b) => (a.finished === b.finished ? 0 : a.finished ? -1 : 1) || (a.finished ? (a.finishMs || 0) - (b.finishMs || 0) : b.progressKm - a.progressKm));
     list.forEach((r, i) => { r.rankOverall = i + 1; });
     ['m', 'f'].forEach(g => { list.filter(r => r.gender === g).forEach((r, i) => { r.rankGender = i + 1; }); });
-    return list.filter(r => gender === 'all' || r.gender === gender).slice(0, 30);
-  }, [realRunners, snap, dist, gender, event]);
+    // Only among runners who actually filled in a birth year — someone
+    // without one just has no rankCategory (null), same treatment as a
+    // blank gender already gets for rankGender.
+    const categories = [...new Set(list.map(r => r.category).filter(Boolean))];
+    categories.forEach(cat => { list.filter(r => r.category === cat).forEach((r, i) => { r.rankCategory = i + 1; }); });
+    return list.filter(r => (gender === 'all' || r.gender === gender) && (category === 'all' || r.category === category)).slice(0, 30);
+  }, [realRunners, snap, dist, gender, category, raceYear, event]);
+  // Only offer categories that actually have someone in them for this
+  // distance — an empty "50-59" pill nobody can ever tap into is just
+  // clutter.
+  const availableCategories = uM(() => {
+    if (!realRunners) return [];
+    const set = new Set(realRunners.filter(r => r.distance === dist && !r.dnf).map(r => ageCategoryFor(r.birthYear, raceYear)).filter(Boolean));
+    const order = ['<20', '20-29', '30-39', '40-49', '50-59', '60-69', '70+'];
+    return order.filter(c => set.has(c));
+  }, [realRunners, dist, raceYear]);
   function fmtElapsed(ms) {
     if (ms == null || !isFinite(ms)) return '';
     const s = Math.floor(ms / 1000);
@@ -2427,6 +2463,19 @@ function RankingTab({ snap, eventId, event }) {
           ))}
         </div>
       </div>
+      {/* Only shows up once at least one registered runner for this
+          distance has a birth year on file — nothing to filter by
+          otherwise. Existing accounts self-heal this onto their roster
+          record the next time they open their own Runner Space (see
+          openRunnerSpace), once they've filled it in on Profile. */}
+      {availableCategories.length > 0 && (
+        <div style={{ display: 'flex', gap: 4, marginBottom: 10, overflowX: 'auto' }}>
+          {[['all', 'ทุกช่วงอายุ'], ...availableCategories.map(c => [c, c])].map(([k, l]) => (
+            <div key={k} onClick={() => setCategory(k)} style={{ padding: '5px 10px', borderRadius: 999, fontSize: 10.5, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
+              background: category === k ? C.brandDk : 'transparent', color: category === k ? '#fff' : C.muted, border: `1px solid ${category === k ? C.brandDk : C.border}` }}>{l}</div>
+          ))}
+        </div>
+      )}
       {etaInfo && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, padding: '8px 12px',
           background: '#fdf0d6', border: '1px solid #f0d9a0', borderRadius: 10, fontSize: 11, color: '#7c4a03' }}>
@@ -2435,12 +2484,14 @@ function RankingTab({ snap, eventId, event }) {
         </div>
       )}
       {rows.map(r => {
-        // gender==='all' shows the overall rank as the main badge; picking
-        // one gender to view shows that category's own rank instead (same
-        // idea as LiveTrail switching its own primary badge between the
-        // Overall/Women tabs) — the *other* rank still shows as a small
-        // second line either way so it's never fully hidden.
-        const primaryRank = gender === 'all' ? r.rankOverall : (r.rankGender || r.rankOverall);
+        // Filtering to a specific age category is the strongest signal of
+        // what someone wants to see ranked by — that wins over gender,
+        // which wins over the plain overall rank. Whichever one isn't the
+        // big badge still shows on the small line under the name (see
+        // r.category below) so nothing's ever fully hidden.
+        const primaryRank = category !== 'all' ? (r.rankCategory || r.rankOverall)
+          : gender !== 'all' ? (r.rankGender || r.rankOverall)
+          : r.rankOverall;
         const diffStr = fmtDiff(r.diffToLeaderMs);
         const paceStr = fmtPace(r.paceMinPerKm);
         return (
@@ -3189,6 +3240,13 @@ function ProfileScreen({ user, onLogout, onClose, onSave, onboard }) {
   const [emgPhone2, setEmgPhone2] = uS(user.emgPhone2 || '');
   const [bloodType, setBloodType] = uS(user.bloodType || '');
   const [medical, setMedical] = uS(user.medical || '');
+  // Optional, used only to compute the age-category ranking (Ranking tab).
+  // A runner who never fills this in just doesn't show up in that
+  // ranking's age-category filter — same as leaving gender blank already
+  // means "not shown in the ชาย/หญิง split." Year only (not a full
+  // birthdate) — enough for a race-day age bracket, and one less
+  // sensitive field to ask for than a full DOB.
+  const [birthYear, setBirthYear] = uS(user.birthYear || '');
   const [avatarPhoto, setAvatarPhoto] = uS(user.avatarPhoto || '');
   // 'in' → showing, 'out' → mid fade-out, null → gone. Saving used to just
   // swap the button's own label to "✓ บันทึกแล้ว" for a moment, but that
@@ -3217,7 +3275,7 @@ function ProfileScreen({ user, onLogout, onClose, onSave, onboard }) {
     if (result && result.then) result.then(err => setSaveError(err || ''));
   }
   function save() {
-    reportOutcome(onSave({ ...user, nickname, gender, phone, emgName, emgPhone, emgName2, emgPhone2, bloodType, medical, avatarPhoto }));
+    reportOutcome(onSave({ ...user, nickname, gender, phone, emgName, emgPhone, emgName2, emgPhone2, bloodType, medical, avatarPhoto, birthYear }));
     if (onboard) return;
     setEditing(false);
     setSavedToast('in');
@@ -3236,7 +3294,7 @@ function ProfileScreen({ user, onLogout, onClose, onSave, onboard }) {
       // never synced anywhere else and even reverted back on next load.
       // Not during onboarding — onSave there marks onboarding complete,
       // which shouldn't happen before the required fields are filled in.
-      if (!onboard) reportOutcome(onSave({ ...user, nickname, gender, phone, emgName, emgPhone, emgName2, emgPhone2, bloodType, medical, avatarPhoto: dataUrl }));
+      if (!onboard) reportOutcome(onSave({ ...user, nickname, gender, phone, emgName, emgPhone, emgName2, emgPhone2, bloodType, medical, avatarPhoto: dataUrl, birthYear }));
     });
   }
 
@@ -3293,6 +3351,10 @@ function ProfileScreen({ user, onLogout, onClose, onSave, onboard }) {
             <option value="">— ไม่ระบุ —</option>
             {['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map(bt => <option key={bt} value={bt}>{bt}</option>)}
           </select>
+        </Field>
+        <Field label="ปีเกิด (ค.ศ.) — ไม่บังคับ, ใช้จัดอันดับตามช่วงอายุ">
+          <input readOnly={readOnly} type="number" inputMode="numeric" value={birthYear}
+            onChange={e => setBirthYear(e.target.value.slice(0, 4))} placeholder="เช่น 1990" style={{ ...fieldStyle(readOnly), fontFamily: C.mono }}/>
         </Field>
         <Field label="โรคประจำตัว / ข้อมูลสำคัญทางการแพทย์"><input readOnly={readOnly} value={medical} onChange={e => setMedical(e.target.value)} placeholder="เช่น หอบหืด, แพ้ยา" style={fieldStyle(readOnly)}/></Field>
         {!onboard && <RaceHistorySection uid={user.uid}/>}
@@ -3939,6 +4001,14 @@ function MobileApp() {
         if (rosterRec && session.user && session.user.uid && rosterRec.uid !== session.user.uid && window.runnerStore) {
           window.runnerStore.updateRunnerProgress(rosterRec.id, { uid: session.user.uid });
         }
+        // Same idea for birthYear — added to Profile after age-category
+        // ranking shipped, so anyone who registered before then (or who
+        // just never filled it in until now) has no way for that value to
+        // reach their existing roster record on its own; registerRunner
+        // only ever copies it once, at registration time.
+        if (rosterRec && session.user && session.user.birthYear && !rosterRec.birthYear && window.runnerStore) {
+          window.runnerStore.updateRunnerProgress(rosterRec.id, { birthYear: session.user.birthYear });
+        }
         // A leftover session.spectator=true from an earlier "Follow the
         // race" tap (any event, any time before) doesn't get cleared by
         // anything else once a runner comes back to their *own* Runner
@@ -4012,7 +4082,7 @@ function MobileApp() {
           emgName2: session.user.emgName2 || '', emgPhone2: session.user.emgPhone2 || '',
           bloodType: session.user.bloodType || '', medical: session.user.medical || '',
           email: session.user.email || '', uid: session.user.uid,
-          avatarPhoto: session.user.avatarPhoto || '',
+          avatarPhoto: session.user.avatarPhoto || '', birthYear: session.user.birthYear || '',
         });
         runner = { ...runner, bib: rosterEntry.bib, rosterId: rosterEntry.id };
       }
