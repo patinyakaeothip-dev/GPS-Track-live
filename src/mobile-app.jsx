@@ -3264,13 +3264,6 @@ function ProfileScreen({ user, onLogout, onClose, onSave, onboard }) {
         <div>
           <div style={{ fontSize: 16, fontWeight: 700 }}>{nickname || user.name}</div>
           <div style={{ fontFamily: C.mono, fontSize: 11, color: C.muted }}>{user.provider || 'google'} · เข้าสู่ระบบแล้ว</div>
-          {/* Temporary — lets two devices compare their actual Firebase
-              uid by eye instead of guessing whether "signed in with the
-              same Google account on both" really produced the same
-              account-recognition identity underneath. Remove once the
-              already-registered-but-still-asked-to-register-again report
-              is confirmed resolved. */}
-          <div style={{ fontFamily: C.mono, fontSize: 8.5, color: C.muted, opacity: 0.5, marginTop: 1, wordBreak: 'break-all' }}>uid: {user.uid || '—'}</div>
         </div>
       </div>
 
