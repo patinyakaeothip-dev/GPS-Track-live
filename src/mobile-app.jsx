@@ -1999,7 +1999,7 @@ function RouteTab({ course, runner, event, spectatorRunner, livePos }) {
                 filling the view. calc() against the real viewport unit
                 each orientation actually has room in fixes that. */}
             {course && <ElevationSvg course={course} progressKm={elevationKm} checkpoints={(event && event.checkpoints) || []} width={900}
-              heightCss={isPortrait ? 'calc(100vh - 90px)' : 'calc(100vh - 70px)'} interactive={false}/>}
+              heightCss={isPortrait ? 'calc(100vw - 90px)' : 'calc(100vh - 70px)'} interactive={false}/>}
           </div>
         </div>
       )}
@@ -2318,7 +2318,16 @@ function ElevationSvg({ course, progressKm, checkpoints, height = 150, interacti
   });
   return (
     <div style={{ position: 'relative' }}>
-      <svg viewBox={`0 0 ${w} ${h}`} style={{ width: '100%', height: heightCss || (interactive ? h : '100%'), marginTop: interactive ? 6 : 0, touchAction: 'none', cursor: interactive && zoom > 1 ? 'grab' : 'default' }}
+      {/* preserveAspectRatio="none" only for the non-interactive fullscreen
+          view — its rendered box aspect (screen-shaped) rarely matches the
+          fixed viewBox aspect (w:h), and the default "meet" behavior
+          letterboxes to preserve it exactly, leaving blank bars instead of
+          actually filling the screen. Stretching slightly distorts slope
+          steepness but that's the right trade here — this view is "see the
+          whole shape at a glance," not the precise-reading zoomed view
+          (which stays true-aspect, interactive=true, elsewhere). */}
+      <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio={interactive ? 'xMidYMid meet' : 'none'}
+        style={{ width: '100%', height: heightCss || (interactive ? h : '100%'), marginTop: interactive ? 6 : 0, touchAction: 'none', cursor: interactive && zoom > 1 ? 'grab' : 'default' }}
         {...(interactive ? { onWheel, onPointerDown, onPointerMove, onPointerUp, onPointerCancel: onPointerUp } : {})}>
         <defs>
           <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
