@@ -1778,6 +1778,18 @@ function TrackTab({ runner, event, onScan, onSos, onDnf, offRoute, onCancelSos }
 function Stat({ label, value, accent }) {
   return <div style={{ flex: 1 }}><Kicker>{label}</Kicker><div style={{ fontSize: 15, fontWeight: 700, color: accent || C.text, marginTop: 2 }}>{value}</div></div>;
 }
+// LiveTrail-style boxed section — a left accent bar + caps title, white
+// card floating on the screen's own bg color instead of everything
+// running edge-to-edge — used to group the runner detail screen's info
+// into distinct blocks the way LiveTrail's own "RUNNER INFO" section does.
+function FramedSection({ title, children }) {
+  return (
+    <div style={{ background: '#fff', borderRadius: 10, borderLeft: `3px solid ${C.brand}`, padding: '14px 16px', boxShadow: '0 1px 3px rgba(31,42,28,0.06)' }}>
+      <div style={{ fontFamily: C.mono, fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 700, color: C.brandDk, marginBottom: 10 }}>{title}</div>
+      {children}
+    </div>
+  );
+}
 
 function RouteTab({ course, runner, event, spectatorRunner, livePos }) {
   const mapRef = uR(null);
@@ -2864,20 +2876,73 @@ function FriendDetailSheet({ runner: r, eventId, event, onClose, onFollow, embed
   const cks = r.checkins || [];
   const last = cks[cks.length - 1];
   const TABS = [['info', 'ℹ️ ข้อมูล'], ['splits', '⏱ Splits'], ['map', '🗺️ แผนที่'], ['trophy', '🏆 ประวัติ']];
+  const course = useCourse(event, r.distance);
+  const combine = window.eventStatus && window.eventStatus.combineDateTime;
+  // Average pace and "diff to leader" — same math RankingTab already uses
+  // (measured at the same checkpoint both runners have actually reached,
+  // not a raw live gap), scoped down to just this one runner instead of
+  // ranking the whole field. Rest time deliberately excluded — our data
+  // model only stores one checkin per checkpoint (no separate arrival/
+  // departure), so "time spent resting" genuinely isn't measurable, not
+  // just left out for space.
+  const { avgPaceLabel, diffToLeaderMs } = uM(() => {
+    if (!event || !window.runnerStore) return { avgPaceLabel: '—', diffToLeaderMs: null };
+    const distDef = (event.distances || []).find(d => d.label === r.distance);
+    const gunMs = distDef && distDef.cpTimes && combine ? combine(event.raceDateISO, distDef.cpTimes.start) : null;
+    const peers = window.runnerStore.listRunners(eventId).filter(p => p.distance === r.distance && !p.dnf);
+    const bestAtCp = {};
+    peers.forEach(p => (p.checkins || []).forEach(c => {
+      const ms = combine ? combine(event.raceDateISO, c.t, gunMs) : null;
+      if (ms != null && (bestAtCp[c.cp] == null || ms < bestAtCp[c.cp])) bestAtCp[c.cp] = ms;
+    }));
+    const finished = cks.some(c => c.cp === 'finish');
+    const finishCk = cks.find(c => c.cp === 'finish');
+    const finishMs = finishCk && combine ? combine(event.raceDateISO, finishCk.t, gunMs) : null;
+    const endMs = finished ? finishMs : (r.dnf ? null : Date.now());
+    const elapsedMs = (gunMs != null && endMs != null) ? endMs - gunMs : null;
+    const pace = (elapsedMs != null && r.progressKm) ? (elapsedMs / 60000) / r.progressKm : null;
+    const paceLabel = (pace != null && isFinite(pace) && pace > 0)
+      ? `${Math.floor(pace)}'${String(Math.round((pace - Math.floor(pace)) * 60)).padStart(2, '0')}"/กม.`
+      : '—';
+    const lastMs = last && combine ? combine(event.raceDateISO, last.t, gunMs) : null;
+    const diff = finished
+      ? (bestAtCp.finish != null && finishMs != null ? finishMs - bestAtCp.finish : null)
+      : (last && bestAtCp[last.cp] != null && lastMs != null ? lastMs - bestAtCp[last.cp] : null);
+    return { avgPaceLabel: paceLabel, diffToLeaderMs: diff };
+  }, [event, eventId, r, cks, last, combine]);
+  function fmtDiff(ms) {
+    if (ms == null || !isFinite(ms) || ms <= 0) return '—';
+    const s = Math.floor(ms / 1000);
+    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+    return `+${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+  }
   return (
     <div style={embedded
       ? { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }
       : { position: 'absolute', inset: 0, zIndex: 10, background: '#fff', display: 'flex', flexDirection: 'column', animation: 'trtFadeIn 0.18s ease' }}>
-      <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 12, padding: '16px 18px', borderBottom: `1px solid ${C.border}` }}>
+      {/* Not embedded (opened as an overlay from Friends, straight over
+          whatever else is on screen) sits directly under the notch/Dynamic
+          Island with nothing else reserving that space — embedded already
+          has AppShell's own header doing that above it. */}
+      <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 12, padding: '16px 18px',
+        paddingTop: embedded ? 16 : 'max(16px, env(safe-area-inset-top))', borderBottom: `1px solid ${C.border}` }}>
+        {!embedded && <div onClick={onClose} style={{ width: 30, height: 30, borderRadius: 10, border: `1.6px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 14, flexShrink: 0 }}>‹</div>}
+        {/* Bib chip — LiveTrail centers this at the very top of its own
+            runner detail page; ours sits in the header row since there's
+            no separate heart/share row here to give it its own line. */}
+        <div style={{ margin: embedded ? '0' : '0 auto', padding: '4px 12px', border: `1.5px solid ${C.border}`, borderRadius: 6,
+          fontFamily: C.mono, fontSize: 15, fontWeight: 800, color: C.text, background: '#fafaf8' }}>{r.bib}</div>
+        {!embedded && <div style={{ width: 30, flexShrink: 0 }}/>}
+      </div>
+      <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 12, padding: '14px 18px', borderBottom: `1px solid ${C.border}` }}>
         <AvatarCircle size={48} fontSize={18} photo={r.avatarPhoto} initial={r.nickname[0]} status={runnerAvatarStatus(r)}/>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <div style={{ fontSize: 17, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.nickname}</div>
             <RunnerStatusBadge runner={r}/>
           </div>
-          <div style={{ fontFamily: C.mono, fontSize: 11, color: C.muted }}>bib {r.bib} · {r.distance}</div>
+          <div style={{ fontFamily: C.mono, fontSize: 11, color: C.muted }}>{r.distance}{r.gender ? ` · ${r.gender === 'f' ? 'หญิง' : 'ชาย'}` : ''}</div>
         </div>
-        {!embedded && <div onClick={onClose} style={{ width: 30, height: 30, borderRadius: 10, border: `1.6px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 14, flexShrink: 0 }}>✕</div>}
       </div>
       <div style={{ flexShrink: 0, display: 'flex', borderBottom: `1px solid ${C.border}` }}>
         {TABS.map(([k, l]) => (
@@ -2885,17 +2950,31 @@ function FriendDetailSheet({ runner: r, eventId, event, onClose, onFollow, embed
             fontSize: 11.5, fontWeight: 700, color: tab === k ? C.brandDk : C.muted, borderBottom: `2px solid ${tab === k ? C.brand : 'transparent'}` }}>{l}</div>
         ))}
       </div>
-      <div style={{ flex: 1, minHeight: 0, overflow: 'auto', overscrollBehavior: 'contain' }}>
+      <div style={{ flex: 1, minHeight: 0, overflow: 'auto', overscrollBehavior: 'contain', background: C.bg }}>
         {tab === 'info' && (
-          <div style={{ padding: '18px 22px' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
-              <Stat label="ระยะที่วิ่งไปแล้ว" value={`${(r.progressKm || 0).toFixed(1)} กม.`}/>
-              <Stat label="สถานะ" value={runnerStatusLabel(r)}/>
-            </div>
-            <div style={{ fontFamily: C.mono, fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted, marginBottom: 6 }}>เช็คอินล่าสุด</div>
-            {last
-              ? <div style={{ fontSize: 13.5, marginBottom: 18 }}>{cpCheckinLabel(last.cp)} · <span style={{ fontFamily: C.mono, color: C.muted }}>{last.t} น.</span></div>
-              : <div style={{ fontSize: 13, color: C.muted, marginBottom: 18 }}>ยังไม่มีการเช็คอิน</div>}
+          <div style={{ padding: '18px 18px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {event && event.name && <div style={{ fontSize: 19, fontWeight: 800, color: C.text }}>{event.name}</div>}
+            {course && (
+              <FramedSection title="เส้นทาง">
+                <ElevationSvg course={course} progressKm={r.progressKm || 0} checkpoints={(event && event.checkpoints) || []} height={110}/>
+              </FramedSection>
+            )}
+            <FramedSection title="สถานะปัจจุบัน">
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                <Stat label="ระยะที่วิ่งไปแล้ว" value={`${(r.progressKm || 0).toFixed(1)} กม.`}/>
+                <Stat label="สถานะ" value={runnerStatusLabel(r)}/>
+              </div>
+              <div style={{ fontFamily: C.mono, fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted, margin: '14px 0 6px' }}>เช็คอินล่าสุด</div>
+              {last
+                ? <div style={{ fontSize: 13.5 }}>{cpCheckinLabel(last.cp)} · <span style={{ fontFamily: C.mono, color: C.muted }}>{last.t} น.</span></div>
+                : <div style={{ fontSize: 13, color: C.muted }}>ยังไม่มีการเช็คอิน</div>}
+            </FramedSection>
+            <FramedSection title="RUNNER INFO">
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                <Stat label="เพซเฉลี่ย" value={avgPaceLabel}/>
+                <Stat label="ห่างจากที่ 1" value={fmtDiff(diffToLeaderMs)}/>
+              </div>
+            </FramedSection>
             {/* Not shown when embedded — this screen already *is* the main
                 Route tab at that point, so "set as main tracked runner"
                 would be a no-op. */}
