@@ -3256,7 +3256,7 @@ function ProfileScreen({ user, onLogout, onClose, onSave, onboard }) {
   // label. A toast isn't tied to whatever the button happens to say next.
   const [savedToast, setSavedToast] = uS(null);
   const [saveError, setSaveError] = uS('');
-  const canSubmit = !onboard || (nickname.trim() && phone.trim() && emgName.trim() && emgPhone.trim());
+  const canSubmit = !onboard || (nickname.trim() && phone.trim() && emgName.trim() && emgPhone.trim() && birthYear.trim());
   // Onboarding has nothing to view yet — always starts editable. A
   // returning runner opening their own profile used to land straight on
   // an already-editable form with every field an open text box, which
@@ -3352,7 +3352,7 @@ function ProfileScreen({ user, onLogout, onClose, onSave, onboard }) {
             {['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map(bt => <option key={bt} value={bt}>{bt}</option>)}
           </select>
         </Field>
-        <Field label="ปีเกิด (ค.ศ.) — ไม่บังคับ, ใช้จัดอันดับตามช่วงอายุ">
+        <Field label="ปีเกิด (ค.ศ.)" required={onboard}>
           <input readOnly={readOnly} type="number" inputMode="numeric" value={birthYear}
             onChange={e => setBirthYear(e.target.value.slice(0, 4))} placeholder="เช่น 1990" style={{ ...fieldStyle(readOnly), fontFamily: C.mono }}/>
         </Field>
