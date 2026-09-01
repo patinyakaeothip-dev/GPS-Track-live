@@ -2939,6 +2939,7 @@ function FriendDetailSheet({ runner: r, eventId, event, onClose, onFollow, embed
   const TABS = [['info', 'ℹ️ ข้อมูล'], ['splits', '⏱ Splits'], ['map', '🗺️ แผนที่'], ['trophy', '🏆 ประวัติ']];
   const course = useCourse(event, r.distance);
   const combine = window.eventStatus && window.eventStatus.combineDateTime;
+  const headerAgeCategory = ageCategoryFor(r.birthYear, event && event.raceDateISO ? parseInt(event.raceDateISO.slice(0, 4), 10) : new Date().getFullYear());
   // Average pace and "diff to leader" — same math RankingTab already uses
   // (measured at the same checkpoint both runners have actually reached,
   // not a raw live gap), scoped down to just this one runner instead of
@@ -3007,11 +3008,21 @@ function FriendDetailSheet({ runner: r, eventId, event, onClose, onFollow, embed
         <AvatarCircle size={48} fontSize={18} photo={r.avatarPhoto} initial={r.nickname[0]} status={runnerAvatarStatus(r)}/>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            {r.nationality && <span style={{ fontSize: 16, flexShrink: 0 }}>{flagEmoji(r.nationality)}</span>}
             <div style={{ fontSize: 17, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.nickname}</div>
             <RunnerStatusBadge runner={r}/>
           </div>
-          <div style={{ fontFamily: C.mono, fontSize: 11, color: C.muted }}>{r.distance}{r.gender ? ` · ${r.gender === 'f' ? 'หญิง' : 'ชาย'}` : ''}</div>
+          {/* Flag + age category + distance/gender all on this one line —
+              matches LiveTrail's own "🇫🇷🇮🇹 M1 H" row under the name.
+              Age category only shows once a birth year is on file (same
+              "not everyone has filled this in" treatment as Ranking's own
+              age-category filter). */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: C.mono, fontSize: 11, color: C.muted }}>
+            {r.nationality && <span style={{ fontSize: 14 }}>{flagEmoji(r.nationality)}</span>}
+            <span>
+              {headerAgeCategory ? `${headerAgeCategory} · ` : ''}
+              {r.distance}{r.gender ? ` · ${r.gender === 'f' ? 'หญิง' : 'ชาย'}` : ''}
+            </span>
+          </div>
         </div>
       </div>
       <div style={{ flexShrink: 0, display: 'flex', borderBottom: `1px solid ${C.border}` }}>
