@@ -609,9 +609,32 @@ function EventCard({ ev, isRegistered, onRunnerSpace, onFollow, onSeeResult }) {
 }
 
 // ── Screen: Settings ───────────────────────────────────────────────────────
+// Real brand marks (inline SVG, not emoji) — 📘/📷 read as "a generic phone
+// icon" and "a generic camera icon" rather than Facebook/Instagram
+// specifically, which is exactly what got flagged.
+function FacebookIcon({ size = 22 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24"><circle cx="12" cy="12" r="12" fill="#1877F2"/>
+      <path fill="#fff" d="M15.5 12.5h-2.2V20h-3.1v-7.5H8.6V9.9h1.6V8.3c0-2 .9-3.3 3.4-3.3h2.1v2.6h-1.3c-1 0-1.1.4-1.1 1.1v1.2h2.4l-.2 2.6z"/></svg>
+  );
+}
+function InstagramIcon({ size = 22 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24">
+      <defs><radialGradient id="igGrad" cx="30%" cy="107%" r="150%">
+        <stop offset="0%" stopColor="#fdf497"/><stop offset="10%" stopColor="#fdf497"/>
+        <stop offset="45%" stopColor="#fd5949"/><stop offset="60%" stopColor="#d6249f"/>
+        <stop offset="90%" stopColor="#285AEB"/></radialGradient></defs>
+      <rect width="24" height="24" rx="6" fill="url(#igGrad)"/>
+      <rect x="6" y="6" width="12" height="12" rx="4" fill="none" stroke="#fff" strokeWidth="1.6"/>
+      <circle cx="12" cy="12" r="3.1" fill="none" stroke="#fff" strokeWidth="1.6"/>
+      <circle cx="16.1" cy="7.9" r="0.9" fill="#fff"/>
+    </svg>
+  );
+}
 const SOCIAL_LINKS = [
-  ['facebook', '📘', 'Facebook', 'RayongTrailRunning', 'https://www.facebook.com/RayongTrailRunning'],
-  ['instagram', '📷', 'Instagram', 'ติดตามเรา', 'https://www.instagram.com/rayongtrailrunning'],
+  ['facebook', FacebookIcon, 'Facebook', 'RayongTrailRunning', 'https://www.facebook.com/RayongTrailRunning'],
+  ['instagram', InstagramIcon, 'Instagram', 'ติดตามเรา', 'https://www.instagram.com/rayongtrailrunning'],
 ];
 function SettingsToggle({ label, options, value, onChange }) {
   return (
@@ -637,10 +660,10 @@ function SettingsScreen({ onBack }) {
       </div>
       <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '10px 18px 24px', display: 'flex', flexDirection: 'column', gap: 10 }}>
         <div style={{ display: 'flex', gap: 10 }}>
-          {SOCIAL_LINKS.map(([k, icon, name, sub, url]) => (
+          {SOCIAL_LINKS.map(([k, Icon, name, sub, url]) => (
             <a key={k} href={url} target="_blank" rel="noopener noreferrer" style={{ flex: 1, textDecoration: 'none', color: 'inherit' }}>
               <div style={{ padding: 14, background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, boxShadow: '0 1px 3px rgba(31,42,28,0.08)' }}>
-                <div style={{ fontSize: 22 }}>{icon}</div>
+                <Icon size={24}/>
                 <div style={{ fontSize: 13, fontWeight: 700, marginTop: 8 }}>{name}</div>
                 <div style={{ fontSize: 10.5, color: C.muted, marginTop: 2 }}>{sub}</div>
               </div>
