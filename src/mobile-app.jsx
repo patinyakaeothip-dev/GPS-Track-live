@@ -3623,26 +3623,54 @@ function RaceHistorySection({ uid }) {
         )}
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {shown.map(({ ev, r, finished, elapsedMs, rankOverall, totalFinishers }) => (
-          <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 12, background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, boxShadow: '0 1px 3px rgba(31,42,28,0.08)' }}>
-            <div style={{ fontSize: 22, flexShrink: 0 }}>{finished ? '🏅' : '🚩'}</div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 13.5, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ev.name}</div>
-              <div style={{ fontFamily: C.mono, fontSize: 10.5, color: C.muted, marginTop: 1 }}>{r.distance}{ev.raceDateISO ? ` · ${ev.raceDateISO}` : ''}</div>
-            </div>
-            <div style={{ textAlign: 'right', flexShrink: 0 }}>
-              {finished
-                ? <>
-                    <div style={{ fontFamily: C.mono, fontSize: 12, fontWeight: 700 }}>{fmtElapsedMs(elapsedMs)}</div>
-                    {rankOverall && <div style={{ fontFamily: C.mono, fontSize: 9.5, color: C.muted }}>อันดับ {rankOverall}/{totalFinishers}</div>}
-                  </>
-                : <div style={{ fontFamily: C.mono, fontSize: 11, color: C.muted }}>{runnerStatusLabel(r)}</div>}
-            </div>
+        {shown.map(row => <RaceHistoryRow key={row.r.id} {...row}/>)}
+      </div>
+    </div>
+  );
+}
+// One race-history card — a separate component (not inlined in the .map()
+// above) because it needs its own useCourse call to get this specific
+// race's real distance/elevation-gain, and every row needs that same hook
+// call made consistently for React's rules of hooks to hold.
+function RaceHistoryRow({ ev, r, finished, elapsedMs, rankOverall, totalFinishers }) {
+  const course = useCourse(ev, r.distance);
+  const gainM = uM(() => {
+    if (!course || !course.points || !course.points.length || !window.courseGeo) return null;
+    const pts = course.points.map(p => ({ lat: p[0], lon: p[1], ele: p[2], km: p[3] }));
+    return window.courseGeo.cumulativeGainToKm(pts, course.totalKm);
+  }, [course]);
+  const stats = [
+    ['RANKING', rankOverall ? `${ordinalTh(rankOverall)}` : '—'],
+    ['DISTANCE', course ? `${course.totalKm.toFixed(1)}km` : r.distance],
+    ['ELEVATION GAIN', gainM != null ? `${gainM.toLocaleString()}m` : '—'],
+    ['TIME', finished ? fmtElapsedMs(elapsedMs) : runnerStatusLabel(r)],
+  ];
+  return (
+    <div style={{ padding: 12, background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, boxShadow: '0 1px 3px rgba(31,42,28,0.08)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        {ev.logoUrl
+          ? <img src={ev.logoUrl} alt="" style={{ width: 30, height: 30, borderRadius: 8, objectFit: 'cover', flexShrink: 0 }}/>
+          : <div style={{ width: 30, height: 30, borderRadius: 8, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, background: '#f4f1e8' }}>🏔</div>}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13.5, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ev.name}</div>
+          <div style={{ fontFamily: C.mono, fontSize: 10, color: C.muted, marginTop: 1 }}>{ev.raceDateISO || ''}</div>
+        </div>
+        <div style={{ fontSize: 18, flexShrink: 0 }}>{finished ? '🏅' : '🚩'}</div>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, marginTop: 10, paddingTop: 10, borderTop: `1px solid ${C.border}` }}>
+        {stats.map(([label, value]) => (
+          <div key={label}>
+            <div style={{ fontFamily: C.mono, fontSize: 8, letterSpacing: '0.03em', color: C.muted, whiteSpace: 'nowrap' }}>{label}</div>
+            <div style={{ fontFamily: C.mono, fontSize: 11.5, fontWeight: 700, marginTop: 2, whiteSpace: 'nowrap' }}>{value}</div>
           </div>
         ))}
       </div>
     </div>
   );
+}
+function ordinalTh(n) {
+  const s = ['th', 'st', 'nd', 'rd'], v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
 }
 function fmtElapsedMs(ms) {
   if (ms == null || !isFinite(ms) || ms < 0) return '—';
