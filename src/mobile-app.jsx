@@ -1998,7 +1998,15 @@ function RouteTab({ course, runner, event, spectatorRunner, livePos }) {
                 profile" rendered as a sliver in one corner instead of
                 filling the view. calc() against the real viewport unit
                 each orientation actually has room in fixes that. */}
-            {course && <ElevationSvg course={course} progressKm={elevationKm} checkpoints={(event && event.checkpoints) || []} width={900}
+            {/* height=410 (viewBox 900×410, ≈2.2:1) approximates a real
+                landscape phone screen's own aspect ratio — preserveAspectRatio
+                "none" (see ElevationSvg) still stretches to fill the exact
+                rendered box regardless, but starting from a viewBox already
+                close to that shape keeps the stretch factor close to 1:1 on
+                both axes instead of exaggerating vertical relief the way
+                the old default (900×150, a very flat 6:1 shape) did when
+                force-stretched into a ~2:1 box. */}
+            {course && <ElevationSvg course={course} progressKm={elevationKm} checkpoints={(event && event.checkpoints) || []} width={900} height={410}
               heightCss={isPortrait ? 'calc(100vw - 90px)' : 'calc(100vh - 70px)'} interactive={false}/>}
           </div>
         </div>
@@ -2368,9 +2376,17 @@ function ElevationSvg({ course, progressKm, checkpoints, height = 150, interacti
             <g key={i}>
               <line x1={x(km)} y1="0" x2={x(km)} y2={h - padBottom} stroke={C.brand} strokeWidth="1" strokeDasharray="2 3" opacity="0.35"/>
               {isEdge ? (
+                // START sits at the very left edge of the viewBox and
+                // FINISH at the very right — center-anchored text at
+                // either point runs half its own width past that edge,
+                // which the SVG's own edge (default overflow:hidden)
+                // then silently clips. "เส้นชัย"/FINISH, being the wider
+                // label, was the one that actually read as cut off.
+                // Anchoring each label toward the inside of the chart
+                // instead keeps both fully on-screen.
                 <>
-                  <text x={x(km)} y={h - padBottom + 9} textAnchor="middle" fontFamily={C.mono} fontSize="7.5" fill={C.muted} opacity="0.85">{km.toFixed(1)}K</text>
-                  <text x={x(km)} y={h - padBottom + 19} textAnchor="middle" fontFamily={C.mono} fontSize="8" fill={C.muted}>{label}</text>
+                  <text x={x(km)} y={h - padBottom + 9} textAnchor={km === 0 ? 'start' : 'end'} fontFamily={C.mono} fontSize="7.5" fill={C.muted} opacity="0.85">{km.toFixed(1)}K</text>
+                  <text x={x(km)} y={h - padBottom + 19} textAnchor={km === 0 ? 'start' : 'end'} fontFamily={C.mono} fontSize="8" fill={C.muted}>{label}</text>
                 </>
               ) : (
                 <>
