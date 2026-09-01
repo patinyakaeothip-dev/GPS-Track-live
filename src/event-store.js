@@ -228,5 +228,11 @@
   if (window.fb) startFirestoreSync();
   else window.addEventListener('trt:firebase-ready', startFirestoreSync, { once: true });
 
-  Object.assign(window, { eventStore: { loadEvents, saveEvents, upsertEvent, deleteEvent, newEventId, incrementRegistration, decrementRegistration } });
+  // Exposed as `refresh` so a user-initiated pull (pull-to-refresh on the
+  // event picker) can force the same catch-up pull visibilitychange already
+  // does silently in the background — a manual, visible way to get current
+  // data immediately instead of waiting on it, and a fallback for whenever
+  // the visibilitychange path doesn't fire (some browser engines don't
+  // dispatch it as reliably as expected).
+  Object.assign(window, { eventStore: { loadEvents, saveEvents, upsertEvent, deleteEvent, newEventId, incrementRegistration, decrementRegistration, refresh: pullLatest } });
 })();
