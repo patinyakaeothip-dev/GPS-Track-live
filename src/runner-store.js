@@ -105,6 +105,10 @@
       // age-category filter, same as a blank gender already means "not
       // shown in the ชาย/หญิง split."
       birthYear: data.birthYear || '',
+      // ISO 3166-1 alpha-2 (e.g. "TH") — renders as a flag next to the
+      // runner's name (see flagEmoji in mobile-app.jsx). Optional, same
+      // treatment as bloodType/birthYear: blank just means no flag shown.
+      nationality: data.nationality || '',
       uid: data.uid || '',
       avatarPhoto: data.avatarPhoto || '',
       checkins: [],

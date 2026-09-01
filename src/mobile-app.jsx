@@ -2467,6 +2467,31 @@ function ageCategoryFor(birthYear, raceYear) {
   const lo = Math.floor(age / 10) * 10;
   return `${lo}-${lo + 9}`;
 }
+// A birth-year <input type="number">'s own up/down arrows have no built-in
+// floor or ceiling — typing/spinning to "-1" or "9999" was perfectly
+// possible. Clamps Profile's own input to a plausible human range; not
+// itself an age check (a 5-year-old or 110-year-old runner is unusual but
+// not impossible), just excludes values that can only be a stray keystroke.
+const MIN_BIRTH_YEAR = 1920;
+const MAX_BIRTH_YEAR = new Date().getFullYear() - 5;
+// ISO 3166-1 alpha-2 → flag emoji, built from the two Regional Indicator
+// Symbol code points each letter maps to (🇹 + 🇭 renders as one combined
+// flag glyph) — no image assets or a flag-icon library needed, just two
+// letters' worth of Unicode math.
+function flagEmoji(code) {
+  if (!code || code.length !== 2) return '';
+  return String.fromCodePoint(...[...code.toUpperCase()].map(c => 0x1f1e6 + c.charCodeAt(0) - 65));
+}
+// Short list covering the runners this app actually sees in practice
+// (Thai races, occasional regional/international entrants) rather than
+// an exhaustive ISO country list nobody needs to scroll through.
+const NATIONALITIES = [
+  ['TH', 'ไทย'], ['MM', 'เมียนมา'], ['LA', 'ลาว'], ['KH', 'กัมพูชา'], ['VN', 'เวียดนาม'],
+  ['MY', 'มาเลเซีย'], ['SG', 'สิงคโปร์'], ['ID', 'อินโดนีเซีย'], ['PH', 'ฟิลิปปินส์'],
+  ['CN', 'จีน'], ['JP', 'ญี่ปุ่น'], ['KR', 'เกาหลีใต้'], ['IN', 'อินเดีย'],
+  ['GB', 'สหราชอาณาจักร'], ['FR', 'ฝรั่งเศส'], ['DE', 'เยอรมนี'], ['AU', 'ออสเตรเลีย'],
+  ['US', 'สหรัฐอเมริกา'], ['CA', 'แคนาดา'],
+];
 
 function RankingTab({ snap, eventId, event }) {
   const distLabels = (event && event.distances && event.distances.length) ? event.distances.map(d => d.label) : ['11K', '22K', '29K'];
@@ -2982,6 +3007,7 @@ function FriendDetailSheet({ runner: r, eventId, event, onClose, onFollow, embed
         <AvatarCircle size={48} fontSize={18} photo={r.avatarPhoto} initial={r.nickname[0]} status={runnerAvatarStatus(r)}/>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {r.nationality && <span style={{ fontSize: 16, flexShrink: 0 }}>{flagEmoji(r.nationality)}</span>}
             <div style={{ fontSize: 17, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.nickname}</div>
             <RunnerStatusBadge runner={r}/>
           </div>
@@ -3583,6 +3609,10 @@ function ProfileScreen({ user, onLogout, onClose, onSave, onboard }) {
   // birthdate) — enough for a race-day age bracket, and one less
   // sensitive field to ask for than a full DOB.
   const [birthYear, setBirthYear] = uS(user.birthYear || '');
+  // ISO 3166-1 alpha-2 (e.g. "TH") — enough to render a flag emoji next to
+  // a runner's name (see flagEmoji) without asking for anything more
+  // detailed than a country.
+  const [nationality, setNationality] = uS(user.nationality || '');
   const [avatarPhoto, setAvatarPhoto] = uS(user.avatarPhoto || '');
   // 'in' → showing, 'out' → mid fade-out, null → gone. Saving used to just
   // swap the button's own label to "✓ บันทึกแล้ว" for a moment, but that
@@ -3611,7 +3641,7 @@ function ProfileScreen({ user, onLogout, onClose, onSave, onboard }) {
     if (result && result.then) result.then(err => setSaveError(err || ''));
   }
   function save() {
-    reportOutcome(onSave({ ...user, nickname, gender, phone, emgName, emgPhone, emgName2, emgPhone2, bloodType, medical, avatarPhoto, birthYear }));
+    reportOutcome(onSave({ ...user, nickname, gender, phone, emgName, emgPhone, emgName2, emgPhone2, bloodType, medical, avatarPhoto, birthYear, nationality }));
     if (onboard) return;
     setEditing(false);
     setSavedToast('in');
@@ -3630,7 +3660,7 @@ function ProfileScreen({ user, onLogout, onClose, onSave, onboard }) {
       // never synced anywhere else and even reverted back on next load.
       // Not during onboarding — onSave there marks onboarding complete,
       // which shouldn't happen before the required fields are filled in.
-      if (!onboard) reportOutcome(onSave({ ...user, nickname, gender, phone, emgName, emgPhone, emgName2, emgPhone2, bloodType, medical, avatarPhoto: dataUrl, birthYear }));
+      if (!onboard) reportOutcome(onSave({ ...user, nickname, gender, phone, emgName, emgPhone, emgName2, emgPhone2, bloodType, medical, avatarPhoto: dataUrl, birthYear, nationality }));
     });
   }
 
@@ -3689,8 +3719,23 @@ function ProfileScreen({ user, onLogout, onClose, onSave, onboard }) {
           </select>
         </Field>
         <Field label="ปีเกิด (ค.ศ.)" required={onboard}>
-          <input readOnly={readOnly} type="number" inputMode="numeric" value={birthYear}
-            onChange={e => setBirthYear(e.target.value.slice(0, 4))} placeholder="เช่น 1990" style={{ ...fieldStyle(readOnly), fontFamily: C.mono }}/>
+          {/* Digits only, and clamped to a plausible human range (a spinner
+              input's own up/down arrows have no built-in floor — "-1" or
+              "9999" were both perfectly typeable) — sanitized on every
+              keystroke instead of only at submit, so an implausible value
+              never sits in the field even briefly. */}
+          <input readOnly={readOnly} type="number" inputMode="numeric" min={MIN_BIRTH_YEAR} max={MAX_BIRTH_YEAR} value={birthYear}
+            onChange={e => {
+              const digits = e.target.value.replace(/[^\d]/g, '').slice(0, 4);
+              const n = parseInt(digits, 10);
+              setBirthYear(digits.length < 4 ? digits : String(Math.min(MAX_BIRTH_YEAR, Math.max(MIN_BIRTH_YEAR, n))));
+            }} placeholder="เช่น 1990" style={{ ...fieldStyle(readOnly), fontFamily: C.mono }}/>
+        </Field>
+        <Field label="สัญชาติ">
+          <select disabled={readOnly} value={nationality} onChange={e => setNationality(e.target.value)} style={fieldStyle(readOnly)}>
+            <option value="">— ไม่ระบุ —</option>
+            {NATIONALITIES.map(([code, label]) => <option key={code} value={code}>{flagEmoji(code)} {label}</option>)}
+          </select>
         </Field>
         <Field label="โรคประจำตัว / ข้อมูลสำคัญทางการแพทย์"><input readOnly={readOnly} value={medical} onChange={e => setMedical(e.target.value)} placeholder="เช่น หอบหืด, แพ้ยา" style={fieldStyle(readOnly)}/></Field>
         {!onboard && <RaceHistorySection uid={user.uid}/>}
@@ -4356,6 +4401,10 @@ function MobileApp() {
         if (rosterRec && session.user && session.user.birthYear && !rosterRec.birthYear && window.runnerStore) {
           window.runnerStore.updateRunnerProgress(rosterRec.id, { birthYear: session.user.birthYear });
         }
+        // Same self-heal, same reasoning, for nationality.
+        if (rosterRec && session.user && session.user.nationality && !rosterRec.nationality && window.runnerStore) {
+          window.runnerStore.updateRunnerProgress(rosterRec.id, { nationality: session.user.nationality });
+        }
         // A leftover session.spectator=true from an earlier "Follow the
         // race" tap (any event, any time before) doesn't get cleared by
         // anything else once a runner comes back to their *own* Runner
@@ -4429,7 +4478,7 @@ function MobileApp() {
           emgName2: session.user.emgName2 || '', emgPhone2: session.user.emgPhone2 || '',
           bloodType: session.user.bloodType || '', medical: session.user.medical || '',
           email: session.user.email || '', uid: session.user.uid,
-          avatarPhoto: session.user.avatarPhoto || '', birthYear: session.user.birthYear || '',
+          avatarPhoto: session.user.avatarPhoto || '', birthYear: session.user.birthYear || '', nationality: session.user.nationality || '',
         });
         runner = { ...runner, bib: rosterEntry.bib, rosterId: rosterEntry.id };
       }
