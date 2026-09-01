@@ -4541,13 +4541,20 @@ function MobileApp() {
     // The roster record (what friends/RD actually see — the avatar in the
     // "add friend" list, live monitor, etc.) is a separate document written
     // once at registration; a photo changed afterward in the profile screen
-    // needs its own explicit push to reach it.
-    if (session.runner && session.runner.rosterId && window.runnerStore) {
-      window.runnerStore.updateRunnerProgress(session.runner.rosterId, {
+    // needs its own explicit push to reach it. This account may hold roster
+    // records from several past/other events (see race history) — patching
+    // only session.runner (whichever event is currently active) left every
+    // other one of this same person's own past registrations permanently
+    // blank, since those events' Runner Space will never be reopened again
+    // to trigger openRunnerSpace's per-event self-heal. Patch all of them.
+    if (window.runnerStore) {
+      const patch = {
         avatarPhoto: withCompleted.avatarPhoto || '',
         birthYear: withCompleted.birthYear || '',
         nationality: withCompleted.nationality || '',
-      });
+      };
+      (window.runnerStore.listRunnersByUid(withCompleted.uid, { includeCancelled: true }) || [])
+        .forEach(r => window.runnerStore.updateRunnerProgress(r.id, patch));
     }
     persist({ ...session, user: withCompleted });
     // Returned so ProfileScreen can surface a real error instead of the
