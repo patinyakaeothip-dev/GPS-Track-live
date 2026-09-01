@@ -797,7 +797,24 @@ function RegisterScreen({ event, profile, onDone, onBack }) {
   // automatically when a distance's quota fills — see admin-app.jsx) used
   // to be stored but never actually checked here, so closing one distance
   // did nothing: every distance stayed pickable and registrable regardless.
-  const distances = (event && event.distances && event.distances.length) ? event.distances : ['11K', '22K', '29K'].map(label => ({ label, open: true }));
+  const rawDistances = (event && event.distances && event.distances.length) ? event.distances : ['11K', '22K', '29K'].map(label => ({ label, open: true }));
+  // A distance's own start time passing is a second, independent reason
+  // registration should close — reported directly: a distance whose race
+  // had already started (well past its cutoff) still accepted new
+  // registrations, because until now the only thing that ever closed a
+  // distance was Admin's manual "เปิด/ปิดรับสมัคร" toggle or the regCloseISO
+  // date. Neither of those tracks the actual race clock, so nothing here
+  // stopped someone "registering" for a distance that's already running or
+  // finished. Once that distance's own start time (same field the race
+  // itself starts from) is in the past, treat it as closed too, same as if
+  // Admin had flipped the toggle off.
+  const distances = rawDistances.map(d => {
+    if (d.open === false) return d;
+    const startAt = event && event.raceDateISO && window.eventStatus
+      ? window.eventStatus.combineDateTime(event.raceDateISO, d.cpTimes && d.cpTimes.start)
+      : null;
+    return startAt && Date.now() >= startAt.getTime() ? { ...d, open: false } : d;
+  });
   const distLabels = distances.map(d => d.label);
   const firstOpen = distances.find(d => d.open !== false);
   // Pre-fill from the runner's existing profile (Profile screen) so someone
@@ -2482,6 +2499,21 @@ function flagEmoji(code) {
   if (!code || code.length !== 2) return '';
   return String.fromCodePoint(...[...code.toUpperCase()].map(c => 0x1f1e6 + c.charCodeAt(0) - 65));
 }
+// A real flag *image* instead of the Unicode flag emoji above — reported
+// directly: on-device it rendered as literal "TH" letters, not a flag.
+// Flag emoji are built from two regional-indicator characters, and quite a
+// few Android builds/webviews ship without the color-emoji glyph needed to
+// combine them into a flag, silently falling back to showing the raw
+// letters instead — a platform font gap, not a logic bug, and one that
+// can't be fixed by changing which characters we generate. An actual image
+// renders identically everywhere regardless of the device's emoji font.
+function FlagIcon({ code, size }) {
+  if (!code || code.length !== 2) return null;
+  const c = code.toLowerCase();
+  const h = size || 14;
+  return <img src={`https://flagcdn.com/24x18/${c}.png`} srcSet={`https://flagcdn.com/48x36/${c}.png 2x`} alt={code.toUpperCase()}
+    style={{ width: Math.round(h * 4 / 3), height: h, borderRadius: 2, objectFit: 'cover', verticalAlign: 'middle', flexShrink: 0 }}/>;
+}
 // Short list covering the runners this app actually sees in practice
 // (Thai races, occasional regional/international entrants) rather than
 // an exhaustive ISO country list nobody needs to scroll through.
@@ -3017,7 +3049,7 @@ function FriendDetailSheet({ runner: r, eventId, event, onClose, onFollow, embed
               "not everyone has filled this in" treatment as Ranking's own
               age-category filter). */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: C.mono, fontSize: 11, color: C.muted }}>
-            {r.nationality && <span style={{ fontSize: 14 }}>{flagEmoji(r.nationality)}</span>}
+            {r.nationality && <FlagIcon code={r.nationality} size={14}/>}
             <span>
               {headerAgeCategory ? `${headerAgeCategory} · ` : ''}
               {r.distance}{r.gender ? ` · ${r.gender === 'f' ? 'หญิง' : 'ชาย'}` : ''}
@@ -3760,7 +3792,11 @@ function ProfileScreen({ user, onLogout, onClose, onSave, onboard }) {
         <Field label="สัญชาติ">
           <select disabled={readOnly} value={nationality} onChange={e => setNationality(e.target.value)} style={fieldStyle(readOnly)}>
             <option value="">— ไม่ระบุ —</option>
-            {NATIONALITIES.map(([code, label]) => <option key={code} value={code}>{flagEmoji(code)} {label}</option>)}
+            {/* Native <option> can't render an <img>, so this stays
+                text-only — the same flag-emoji-glyph gap applies here too,
+                and a select's own dropdown font can't be swapped per
+                platform, so plain text is the only reliable option. */}
+            {NATIONALITIES.map(([code, label]) => <option key={code} value={code}>{label} ({code})</option>)}
           </select>
         </Field>
         <Field label="โรคประจำตัว / ข้อมูลสำคัญทางการแพทย์"><input readOnly={readOnly} value={medical} onChange={e => setMedical(e.target.value)} placeholder="เช่น หอบหืด, แพ้ยา" style={fieldStyle(readOnly)}/></Field>
