@@ -3117,6 +3117,16 @@ function FriendMapSheet({ runner, eventId, event, onClose }) {
   const gpsProjection = (livePos && livePos.lat != null && livePos.lon != null && course && !checkinNewerThanGps)
     ? nearestKmForPoint(course.points, livePos.lat, livePos.lon, runner.progressKm) : null;
   const elevationKm = (gpsProjection && gpsProjection.distKm < ON_COURSE_KM) ? gpsProjection.km : (runner.progressKm || 0);
+  // Collapsible, LiveTrail-style (a chevron at the map/elevation boundary
+  // to hide it and get the map's own screen space back) — shown by
+  // default since that's the more useful starting state on a screen this
+  // size, same as RouteTab's own elevation panel.
+  const [elevOpen, setElevOpen] = uS(true);
+  function recenterToRunner() {
+    const map = mapObjRef.current, marker = markerRef.current;
+    if (!map || !marker) return;
+    map.flyTo(marker.getLatLng(), Math.max(map.getZoom(), 15));
+  }
 
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 10, background: '#fff', display: 'flex', flexDirection: 'column' }}>
@@ -3131,8 +3141,22 @@ function FriendMapSheet({ runner, eventId, event, onClose }) {
         <div style={{ position: 'relative', flex: 1, minHeight: 220 }}>
           {!course && <SkeletonBox radius={0} style={{ position: 'absolute', inset: 0 }}/>}
           <div ref={mapHostRef} style={{ position: 'absolute', inset: 0, background: '#eee', display: course ? 'block' : 'none' }}/>
+          {course && (
+            <div onClick={recenterToRunner} style={{ position: 'absolute', bottom: 12, right: 12, zIndex: 400,
+              width: 40, height: 40, borderRadius: 999, background: '#fff', boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+              <svg width="19" height="19" viewBox="0 0 24 24" fill={C.text}><path d="M12 2 L20 20 L12 15.5 L4 20 Z"/></svg>
+            </div>
+          )}
+          {course && (
+            <div onClick={() => setElevOpen(v => !v)} style={{ position: 'absolute', bottom: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 400,
+              width: 34, height: 22, borderRadius: 999, background: '#fff', boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 11, color: C.text }}>
+              {elevOpen ? '▾' : '▴'}
+            </div>
+          )}
         </div>
-        {course && (
+        {course && elevOpen && (
           <div style={{ padding: '14px 18px 24px', background: '#fff', flexShrink: 0 }}>
             <Kicker>Elevation</Kicker>
             <ElevationSvg course={course} progressKm={elevationKm} checkpoints={(event && event.checkpoints) || []}/>
