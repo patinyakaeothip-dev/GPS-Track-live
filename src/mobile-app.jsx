@@ -2160,31 +2160,56 @@ function CheckpointSplitsList({ runner, event }) {
     const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), r = s % 60;
     return `${neg ? '-' : ''}${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}`;
   }
+  // Distance-from-start for each point in `seq` — 0 for start, the
+  // distance's own total for finish, and each named checkpoint's own km
+  // from event.checkpoints. Only the fields LiveTrail's own checkpoint
+  // detail shows that this app actually has data for — no cut-off time,
+  // assistance, or facilities info, none of which is tracked anywhere.
+  const kmFor = uM(() => {
+    const totalKm = parseFloat(runner.distance) || 0;
+    return seq.map(cp => {
+      if (cp === 'start') return 0;
+      if (cp === 'finish') return totalKm;
+      const def = (event && event.checkpoints || []).find(c => c.id === cp);
+      return def ? (parseFloat(def.km) || 0) : null;
+    });
+  }, [seq, event, runner.distance]);
   return (
-    <div>
-      <div style={{ padding: '10px 14px', borderBottom: `1px solid ${C.border}`, fontFamily: C.mono, fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted, fontWeight: 600 }}>Checkpoints</div>
-      {seq.map((cp, i) => {
-        const done = i < checkins.length;
-        const isOpen = expanded === i;
-        const splitMs = (done && i > 0 && ckMsList[i] != null && ckMsList[i - 1] != null) ? ckMsList[i] - ckMsList[i - 1] : null;
-        return (
-          <div key={cp} style={{ borderTop: i ? `1px solid ${C.border}` : 'none' }}>
-            <div onClick={() => done && setExpanded(isOpen ? null : i)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px', cursor: done ? 'pointer' : 'default' }}>
-              <span style={{ width: 20, height: 20, borderRadius: 999, background: done ? C.brand : C.bg, color: done ? '#fff' : C.mute2,
-                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, flexShrink: 0 }}>{done ? '✓' : i + 1}</span>
-              <span style={{ flex: 1, fontSize: 13, color: done ? C.text : C.mute2 }}>{cpLabelFor(event, cp)}</span>
-              {done && <span style={{ fontFamily: C.mono, fontSize: 10, color: C.muted }}>{checkins[i].t}</span>}
-              {done && <span style={{ fontSize: 10, color: C.mute2, marginLeft: 2, transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}>▾</span>}
-            </div>
-            {done && isOpen && (
-              <div style={{ display: 'flex', gap: 18, padding: '0 14px 12px 44px' }}>
-                <Stat label="เวลาเข้าจุด" value={checkins[i].t}/>
-                <Stat label="ใช้เวลาจากจุดก่อนหน้า" value={i === 0 ? '—' : fmtElapsed(splitMs)}/>
+    <div style={{ padding: '14px 14px 24px' }}>
+      <div style={{ fontFamily: C.mono, fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted, fontWeight: 600, marginBottom: 10, paddingLeft: 26 }}>Checkpoints</div>
+      {/* LiveTrail-style vertical timeline — a dashed line down the left
+          with a dot per point, each point's own info in a rounded card to
+          its right, instead of a flat divided list. */}
+      <div style={{ position: 'relative' }}>
+        <div style={{ position: 'absolute', left: 9, top: 10, bottom: 10, width: 0, borderLeft: `2px dashed ${C.border}` }}/>
+        {seq.map((cp, i) => {
+          const done = i < checkins.length;
+          const isOpen = expanded === i;
+          const splitMs = (done && i > 0 && ckMsList[i] != null && ckMsList[i - 1] != null) ? ckMsList[i] - ckMsList[i - 1] : null;
+          const km = kmFor[i];
+          return (
+            <div key={cp} style={{ position: 'relative', display: 'flex', gap: 12, marginBottom: 10 }}>
+              <div style={{ position: 'relative', zIndex: 1, width: 20, height: 20, borderRadius: 999, flexShrink: 0, marginTop: 12,
+                background: done ? C.brand : '#fff', border: `2px solid ${done ? C.brand : C.border}` }}/>
+              <div onClick={() => done && setExpanded(isOpen ? null : i)} style={{ flex: 1, minWidth: 0, background: '#fff', borderRadius: 10,
+                boxShadow: '0 1px 3px rgba(31,42,28,0.06)', padding: '11px 14px', cursor: done ? 'pointer' : 'default' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ flex: 1, fontSize: 14, fontWeight: 700, color: done ? C.text : C.mute2 }}>{cpLabelFor(event, cp)}</span>
+                  {done && <span style={{ fontFamily: C.mono, fontSize: 10.5, color: C.muted }}>{checkins[i].t}</span>}
+                  {done && <span style={{ fontSize: 10, color: C.mute2, transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}>▾</span>}
+                </div>
+                {done && isOpen && (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.border}` }}>
+                    <Stat label="ระยะจากจุดเริ่มต้น" value={km != null ? `${km.toFixed(1)} กม.` : '—'}/>
+                    <Stat label="เวลาเข้าจุด" value={checkins[i].t}/>
+                    <Stat label="ใช้เวลาจากจุดก่อนหน้า" value={i === 0 ? '—' : fmtElapsed(splitMs)}/>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-        );
-      })}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
