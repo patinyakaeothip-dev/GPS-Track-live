@@ -1516,7 +1516,7 @@ function saveCertificateResult(session, event, checkins) {
     const finishCk = checkins.find(c => c.cp === 'finish');
     const combine = window.eventStatus && window.eventStatus.combineDateTime;
     const chipStartMs = startCk && combine ? combine(event && event.raceDateISO, startCk.t) : null;
-    const finishMs = finishCk && combine ? combine(event && event.raceDateISO, finishCk.t) : Date.now();
+    const finishMs = finishCk && combine ? combine(event && event.raceDateISO, finishCk.t, chipStartMs) : Date.now();
     const chipTimeMs = (chipStartMs && finishMs) ? finishMs - chipStartMs : null;
     // Gun time — elapsed since the event's *official* start, same
     // distinction TrackTab already shows (Chip time above is this
@@ -1544,7 +1544,7 @@ function saveCertificateResult(session, event, checkins) {
           const s = (r.checkins || []).find(c => c.cp === 'start');
           const f = (r.checkins || []).find(c => c.cp === 'finish');
           const sm = s ? combine(event.raceDateISO, s.t) : null;
-          const fm = f ? combine(event.raceDateISO, f.t) : null;
+          const fm = f ? combine(event.raceDateISO, f.t, sm) : null;
           return { bib: r.bib, ms: (sm != null && fm != null) ? fm - sm : Infinity };
         })
         .sort((a, b) => a.ms - b.ms);
@@ -1593,7 +1593,7 @@ function TrackTab({ runner, event, onScan, onSos, onDnf, offRoute, onCancelSos }
   const gunMs = distDef && distDef.cpTimes && combine ? combine(event && event.raceDateISO, distDef.cpTimes.start) : null;
   const startMs = (rawStartMs != null && gunMs != null && rawStartMs < gunMs) ? gunMs : rawStartMs;
   const finishCk = checkins.find(c => c.cp === 'finish');
-  const finishMs = finishCk && combine ? combine(event && event.raceDateISO, finishCk.t) : null;
+  const finishMs = finishCk && combine ? combine(event && event.raceDateISO, finishCk.t, startMs) : null;
   // A DNF used to have no "stop point" at all — the clock just kept
   // ticking up forever even though Results/Ranking correctly stopped
   // showing progress the instant DNF was declared, which read as the
@@ -1986,7 +1986,7 @@ function FollowedRunnerPanel({ runner, event, livePos }) {
   const startMs = startCk && combine ? combine(event && event.raceDateISO, startCk.t) : null;
   const finishCk = checkins.find(c => c.cp === 'finish');
   const finished = !!finishCk;
-  const finishMs = finishCk && combine ? combine(event && event.raceDateISO, finishCk.t) : null;
+  const finishMs = finishCk && combine ? combine(event && event.raceDateISO, finishCk.t, startMs) : null;
   // A DNF has no finish checkin, so `finished` alone missed it entirely —
   // this kept counting the "เวลาที่วิ่งมาแล้ว" clock up forever for a
   // spectator watching someone who'd already withdrawn, same bug already
@@ -2326,7 +2326,7 @@ function RankingTab({ snap, eventId, event }) {
     function raceTimesFor(r) {
       const finishCk = (r.checkins || []).find(c => c.cp === 'finish');
       if (!finishCk || !combine || !event) return { finishMs: null, gunElapsedMs: null };
-      const finishMs = combine(event.raceDateISO, finishCk.t);
+      const finishMs = combine(event.raceDateISO, finishCk.t, gunMs);
       const gunElapsedMs = (gunMs != null && finishMs != null) ? finishMs - gunMs : null;
       return { finishMs, gunElapsedMs };
     }
@@ -2336,7 +2336,7 @@ function RankingTab({ snap, eventId, event }) {
       const bestAtCp = {};
       distRunners.forEach(r => {
         (r.checkins || []).forEach(c => {
-          const ms = combine && event ? combine(event.raceDateISO, c.t) : null;
+          const ms = combine && event ? combine(event.raceDateISO, c.t, gunMs) : null;
           if (ms != null && (bestAtCp[c.cp] == null || ms < bestAtCp[c.cp])) bestAtCp[c.cp] = ms;
         });
       });
@@ -2345,7 +2345,7 @@ function RankingTab({ snap, eventId, event }) {
         const finished = cks.some(c => c.cp === 'finish');
         const { finishMs, gunElapsedMs } = finished ? raceTimesFor(r) : { finishMs: null, gunElapsedMs: null };
         const lastCk = cks[cks.length - 1];
-        const lastMs = lastCk && combine && event ? combine(event.raceDateISO, lastCk.t) : null;
+        const lastMs = lastCk && combine && event ? combine(event.raceDateISO, lastCk.t, gunMs) : null;
         const diffToLeaderMs = finished
           ? (bestAtCp.finish != null && finishMs != null ? finishMs - bestAtCp.finish : null)
           : (lastCk && bestAtCp[lastCk.cp] != null && lastMs != null ? lastMs - bestAtCp[lastCk.cp] : null);
@@ -3127,12 +3127,12 @@ function RaceHistorySection({ uid }) {
         if (r.dnf || !finishCk) return { ev, r, finished: false, elapsedMs: null, rankOverall: null };
         const distDef = (ev.distances || []).find(d => d.label === r.distance);
         const gunMs = distDef && distDef.cpTimes && combine ? combine(ev.raceDateISO, distDef.cpTimes.start) : null;
-        const finishMs = combine ? combine(ev.raceDateISO, finishCk.t) : null;
+        const finishMs = combine ? combine(ev.raceDateISO, finishCk.t, gunMs) : null;
         const elapsedMs = (gunMs != null && finishMs != null) ? finishMs - gunMs : null;
         const peers = (window.runnerStore.listRunners(ev.id) || []).filter(p => p.distance === r.distance && !p.dnf);
         const peerTimes = peers.map(p => {
           const pfc = (p.checkins || []).find(c => c.cp === 'finish');
-          const pfm = pfc && combine ? combine(ev.raceDateISO, pfc.t) : null;
+          const pfm = pfc && combine ? combine(ev.raceDateISO, pfc.t, gunMs) : null;
           return (gunMs != null && pfm != null) ? pfm - gunMs : null;
         }).filter(ms => ms != null);
         peerTimes.sort((a, b) => a - b);
@@ -3498,7 +3498,7 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
     const startCk = session.runner.checkins.find(c => c.cp === 'start');
     const finishCk = session.runner.checkins.find(c => c.cp === 'finish');
     const startMs = startCk && combine && currentEvent ? combine(currentEvent.raceDateISO, startCk.t) : null;
-    const finishMs = finishCk && combine && currentEvent ? combine(currentEvent.raceDateISO, finishCk.t) : null;
+    const finishMs = finishCk && combine && currentEvent ? combine(currentEvent.raceDateISO, finishCk.t, startMs) : null;
     const km = session.runner.progressKm;
     if (!startMs || !km) return gpsLive ? 'หยุดอยู่' : '—';
     // Once finished, average pace must be measured up to the actual finish

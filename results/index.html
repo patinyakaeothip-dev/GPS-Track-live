@@ -112,8 +112,12 @@
     // when there's no finish time to show.
     function buildResultsFromRoster(ev, runners) {
       if (!runners) return null;
-      function checkinMs(hhmm) {
-        const d = window.eventStatus && window.eventStatus.combineDateTime(ev && ev.raceDateISO, hhmm);
+      // anchor — see combineDateTime's own comment (src/event-status.js):
+      // a distance that runs past midnight has finish/cutoff clock times
+      // that are numerically *earlier* than its own start, which land on
+      // the wrong side of it unless rolled onto the next day.
+      function checkinMs(hhmm, anchor) {
+        const d = window.eventStatus && window.eventStatus.combineDateTime(ev && ev.raceDateISO, hhmm, anchor);
         return d ? d.getTime() : null;
       }
       const items = runners.map(r => {
@@ -122,9 +126,9 @@
         const finish = cks.find(c => c.cp === 'finish');
         const last = cks[cks.length - 1];
         const startMs = start ? checkinMs(start.t) : null;
-        const finishMs = finish ? checkinMs(finish.t) : null;
         const distDefForGun = (ev && ev.distances || []).find(d => d.label === r.distance);
         const gunMs = distDefForGun && distDefForGun.cpTimes ? checkinMs(distDefForGun.cpTimes.start) : null;
+        const finishMs = finish ? checkinMs(finish.t, startMs != null ? startMs : gunMs) : null;
         // Chip time — never better than the official gun time. A runner who
         // scanned start early (crowding, a mis-scan) has their *result*
         // clamped up to the gun; a late scan (queue at the mat) is
@@ -149,7 +153,7 @@
         // time), someone who never checked in at all is a DNS (never
         // actually started) — instead of sitting as "active"/"ยังไม่เริ่ม"
         // forever with no real outcome.
-        const cutoffMs = distDefForGun && distDefForGun.cpTimes ? checkinMs(distDefForGun.cpTimes.finish) : null;
+        const cutoffMs = distDefForGun && distDefForGun.cpTimes ? checkinMs(distDefForGun.cpTimes.finish, gunMs) : null;
         const overCutoff = !!(cutoffMs && Date.now() > cutoffMs);
         const status = r.dnf ? 'dnf'
           : finish ? 'finished'

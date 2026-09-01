@@ -93,8 +93,12 @@ function cpLabel(cp) {
 // mobile-app.jsx scanComplete) — reconstruct a real timestamp against the
 // event's race date the same way Results does, so pace/staleness can be
 // computed from it.
-function checkinMs(ev, hhmm) {
-  const d = window.eventStatus && window.eventStatus.combineDateTime(ev && ev.raceDateISO, hhmm);
+// anchor — see combineDateTime's own comment (src/event-status.js): an
+// overnight distance's finish/cutoff clock time is numerically earlier
+// than its own start, so it needs rolling onto the next day rather than
+// landing before the start it actually followed.
+function checkinMs(ev, hhmm, anchor) {
+  const d = window.eventStatus && window.eventStatus.combineDateTime(ev && ev.raceDateISO, hhmm, anchor);
   return d ? d.getTime() : null;
 }
 function statusMeta(status) {
@@ -662,7 +666,8 @@ function LiveMonitorApp() {
       // "ยังไม่เริ่ม" forever with no real outcome, or (the original bug)
       // an elapsed clock that just kept climbing off Date.now() forever.
       const distDef = (selectedEvent && selectedEvent.distances || []).find(d => d.label === r.distance);
-      const cutoffMs = distDef && distDef.cpTimes && checkinMs(selectedEvent, distDef.cpTimes.finish);
+      const gunMs = distDef && distDef.cpTimes && checkinMs(selectedEvent, distDef.cpTimes.start);
+      const cutoffMs = distDef && distDef.cpTimes && checkinMs(selectedEvent, distDef.cpTimes.finish, gunMs);
       const overCutoff = !!(cutoffMs && Date.now() > cutoffMs);
       const baseStatus = r.dnf ? 'dnf'
         : finishCk ? 'finished'
@@ -674,12 +679,11 @@ function LiveMonitorApp() {
       const gain = geo.cumulativeGainToKm(pts, Math.max(0, km));
 
       const rawStartMs = startCk ? checkinMs(selectedEvent, startCk.t) : null;
-      const gunMs = distDef && distDef.cpTimes && checkinMs(selectedEvent, distDef.cpTimes.start);
       const startMs = effectiveStartMs(rawStartMs, gunMs);
       // Cap the live-ticking end at this distance's own finish cutoff once
       // it's passed without a finish scan, rather than off Date.now() —
       // same reasoning as the DNF/DNS reclassification above.
-      const endMs = finishCk ? checkinMs(selectedEvent, finishCk.t) : (overCutoff ? cutoffMs : Date.now());
+      const endMs = finishCk ? checkinMs(selectedEvent, finishCk.t, startMs) : (overCutoff ? cutoffMs : Date.now());
       const pace = (startMs != null && km > 0 && endMs > startMs) ? ((endMs - startMs) / 60000) / km : null;
       // Elapsed time since start — live-ticking for runners still on course
       // (frozen at finish once they're done, or at cutoff once they've
@@ -689,7 +693,7 @@ function LiveMonitorApp() {
       const elapsedMs = startMs != null ? (endMs - startMs) : null;
       const checkinTimes = cks.map(c => ({ cp: c.cp, label: cpLabel(c.cp), t: c.t }));
 
-      const lastAtMs = last ? checkinMs(selectedEvent, last.t) : null;
+      const lastAtMs = last ? checkinMs(selectedEvent, last.t, startMs) : null;
       const staleMin = lastAtMs != null ? (Date.now() - lastAtMs) / 60000 : null;
       const offSince = offCourseSinceRef.current.get(r.bib);
       const offRoute = !!(offSince && (Date.now() - offSince) > OFF_ROUTE_ALERT_MIN * 60000);

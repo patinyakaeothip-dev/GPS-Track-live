@@ -16,7 +16,24 @@
 // Races happen in Thailand, so every date+time is anchored to Asia/Bangkok
 // (UTC+7) explicitly — never the viewer's local device timezone.
 (function () {
-  function combineDateTime(dateISO, hhmm) {
+  // anchor (optional Date/ms) — pass whichever earlier point in the same
+  // race this time is known to come after (typically that distance's own
+  // gun/start time). A trail race can run past midnight (start in the
+  // evening, finish in the small hours), but every clock time recorded
+  // for it — cpTimes.start/finish, a runner's checkins[].t — is still
+  // just a bare wall-clock "HH:MM[:SS]", combined onto the single
+  // raceDateISO the whole event is filed under. Combined naively, a
+  // finish/checkpoint time that's numerically earlier than the start
+  // (03:00 vs 22:00) lands on that same calendar date and comes out
+  // *before* the start instead of ~5h after it — the exact shape of bug
+  // already hit once with a mismatched test-event date, except this one
+  // would happen on real race night for any distance that's genuinely
+  // scheduled to cross midnight. Rolling forward a day at a time until
+  // the result is at/after the anchor fixes that without needing every
+  // caller to know in advance whether *this specific* distance crosses
+  // midnight — it either did, and this corrects it, or it didn't, and
+  // one day is already enough to clear the anchor so nothing changes.
+  function combineDateTime(dateISO, hhmm, anchor) {
     if (!dateISO || !hhmm) return null;
     // The CP-time fields used to be freeform text, so data entered before
     // they became <input type="time"> may use "." or a space instead of ":"
@@ -30,13 +47,30 @@
     if (!m) return null;
     const normalized = `${m[1].padStart(2, '0')}:${m[2]}:${m[3] || '00'}`;
     const d = new Date(`${dateISO}T${normalized}+07:00`);
-    return Number.isNaN(d.getTime()) ? null : d;
+    if (Number.isNaN(d.getTime())) return null;
+    const anchorMs = anchor instanceof Date ? anchor.getTime() : anchor;
+    if (typeof anchorMs === 'number' && !Number.isNaN(anchorMs)) {
+      // Almost always at most one rollover (start→finish overnight); capped
+      // at a week as a sane ceiling rather than looping forever on garbage
+      // input.
+      for (let guard = 0; d.getTime() < anchorMs && guard < 7; guard++) d.setDate(d.getDate() + 1);
+    }
+    return d;
   }
 
   function eventWindow(ev) {
     if (!ev || !ev.raceDateISO) return { start: null, end: null };
-    const starts = (ev.distances || []).map(d => combineDateTime(ev.raceDateISO, d.cpTimes && d.cpTimes.start)).filter(Boolean);
-    const ends = (ev.distances || []).map(d => combineDateTime(ev.raceDateISO, d.cpTimes && d.cpTimes.finish)).filter(Boolean);
+    // Each distance's own finish is anchored off that same distance's own
+    // start (not the earliest start across every distance) — otherwise an
+    // overnight distance's finish could roll onto the wrong day relative
+    // to a same-morning distance's start also running in this event.
+    const starts = [], ends = [];
+    (ev.distances || []).forEach(d => {
+      const s = combineDateTime(ev.raceDateISO, d.cpTimes && d.cpTimes.start);
+      if (s) starts.push(s);
+      const f = combineDateTime(ev.raceDateISO, d.cpTimes && d.cpTimes.finish, s || undefined);
+      if (f) ends.push(f);
+    });
     return {
       start: starts.length ? new Date(Math.min(...starts.map(d => d.getTime()))) : null,
       end: ends.length ? new Date(Math.max(...ends.map(d => d.getTime()))) : null,
