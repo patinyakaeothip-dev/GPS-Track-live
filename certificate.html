@@ -411,19 +411,27 @@
         || candidates[0];
       if (!ev || !r) return null;
       const combine = window.eventStatus.combineDateTime;
-      function checkinMs(hhmm) { const d = combine(ev.raceDateISO, hhmm); return d ? d.getTime() : null; }
+      // anchor — see combineDateTime's own comment (src/event-status.js):
+      // an overnight distance's finish clock time is numerically earlier
+      // than its start, so it needs to be rolled onto the next day rather
+      // than compared as if it happened before the start.
+      function checkinMs(hhmm, anchor) { const d = combine(ev.raceDateISO, hhmm, anchor); return d ? d.getTime() : null; }
       const startCk = (r.checkins || []).find(c => c.cp === 'start');
       const finishCk = (r.checkins || []).find(c => c.cp === 'finish');
       if (!finishCk) return null;
-      const finishMs = checkinMs(finishCk.t);
       const chipStartMs = startCk ? checkinMs(startCk.t) : null;
       const distDef = (ev.distances || []).find(d => d.label === r.distance);
       const gunMs = distDef && distDef.cpTimes ? checkinMs(distDef.cpTimes.start) : null;
+      const finishMs = checkinMs(finishCk.t, chipStartMs != null ? chipStartMs : gunMs);
       const gunTimeMs = (gunMs != null && finishMs != null) ? finishMs - gunMs : null;
       const chipTimeMs = (chipStartMs != null && finishMs != null) ? finishMs - chipStartMs : null;
       const finishers = runners
         .filter(x => x.distance === r.distance && !x.dnf && (x.checkins || []).some(c => c.cp === 'finish'))
-        .map(x => ({ bib: x.bib, finishMs: checkinMs((x.checkins.find(c => c.cp === 'finish') || {}).t) }))
+        .map(x => {
+          const xStartCk = (x.checkins || []).find(c => c.cp === 'start');
+          const xStartMs = xStartCk ? checkinMs(xStartCk.t) : null;
+          return { bib: x.bib, finishMs: checkinMs((x.checkins.find(c => c.cp === 'finish') || {}).t, xStartMs != null ? xStartMs : gunMs) };
+        })
         .sort((a, b) => (a.finishMs || 0) - (b.finishMs || 0));
       const rankIdx = finishers.findIndex(x => x.bib === bib);
       return {
