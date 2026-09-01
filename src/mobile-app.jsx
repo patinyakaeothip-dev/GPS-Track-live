@@ -4483,6 +4483,24 @@ function MobileApp() {
   // RegisterScreen already disables its submit button/guards double-taps
   // (see its own submittedRef) for exactly this kind of async submit.
   async function afterRegister(data) {
+    // openRunnerSpace already checks "already registered by this uid" before
+    // ever sending someone to this screen — but that check runs once, on
+    // navigation in. It can't see a registration that lands *after* it ran
+    // (a second tap on the same device before the first submit's Firestore
+    // round-trip settles, e.g. the exact "same name, two bibs" duplicate
+    // reported directly), and registerRunner itself has never enforced this
+    // — it just writes a new roster row unconditionally. Re-check right
+    // here, immediately before writing, so a genuine double-submit reuses
+    // the existing record instead of creating a second one.
+    if (pendingEvent && session.user && session.user.uid && window.runnerStore) {
+      const dup = window.runnerStore.listRunnersByUid(session.user.uid).find(r => r.eventId === pendingEvent.id);
+      if (dup) {
+        const runner = { dist: dup.distance, name: dup.nickname, checkins: dup.checkins || [], progressKm: dup.progressKm || 0, eventId: dup.eventId, bib: dup.bib, rosterId: dup.id };
+        persist({ ...session, runner, spectator: false, followBib: null });
+        setScreen('register-success');
+        return;
+      }
+    }
     let runner = { dist: data.dist, name: data.nick, checkins: [], progressKm: 0, eventId: pendingEvent && pendingEvent.id };
     if (pendingEvent) {
       window.eventStore.incrementRegistration(pendingEvent.id, data.dist);
