@@ -1953,17 +1953,35 @@ function RouteTab({ course, runner, event, spectatorRunner, livePos }) {
           column layout, not something floating on top of this content —
           it already reserves its own space, so padding this deep to dodge
           it just left a big blank gap under the chart. */}
-      {!mapFull && (
-        <div style={elevFull
-          ? { position: 'absolute', inset: 0, zIndex: 900, background: '#fff', padding: '14px 18px 20px', overflow: 'auto' }
-          : { padding: '14px 18px 20px', background: '#fff' }}>
+      {!mapFull && elevFull && (
+        // "The whole profile, in one look" (LiveTrail) — rotated into
+        // landscape instead of just growing taller within the phone's own
+        // portrait width, which is what actually shows more of a long
+        // course at once. position:fixed breaks out to the real device
+        // viewport (not just #phone's box) so the rotated box's 100vh/
+        // 100vw sizing lands on the screen's own real dimensions.
+        // Non-interactive here (no pinch/pan) — rotating the visual box
+        // doesn't rotate pointer coordinates, so the drag/pinch math
+        // (written for portrait) would read gestures on the wrong axis;
+        // simpler and safer to just show the whole course at once here,
+        // full zoom control stays in the normal (portrait) view.
+        <div style={{ position: 'fixed', inset: 0, zIndex: 1000, background: '#fff' }}>
+          <div onClick={() => setElevFull(false)} style={{ position: 'fixed', top: 14, right: 14, zIndex: 1001,
+            width: 34, height: 34, borderRadius: 999, background: '#fff', border: `1px solid ${C.border}`, boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 15 }}>✕</div>
+          <div style={{ position: 'fixed', top: '50%', left: '50%', width: '100vh', height: '100vw', transform: 'translate(-50%, -50%) rotate(90deg)', padding: '0 16px', boxSizing: 'border-box' }}>
+            <Kicker>Elevation</Kicker>
+            {course && <ElevationSvg course={course} progressKm={elevationKm} checkpoints={(event && event.checkpoints) || []} width={900} interactive={false}/>}
+          </div>
+        </div>
+      )}
+      {!mapFull && !elevFull && (
+        <div style={{ padding: '14px 18px 20px', background: '#fff' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <Kicker>Elevation</Kicker>
-            <span onClick={() => setElevFull(v => !v)} style={{ cursor: 'pointer', fontSize: 11, fontFamily: C.mono, fontWeight: 700, color: C.brand }}>
-              {elevFull ? '✕ ปิด' : '⤢ ขยาย'}
-            </span>
+            <span onClick={() => setElevFull(true)} style={{ cursor: 'pointer', fontSize: 11, fontFamily: C.mono, fontWeight: 700, color: C.brand }}>⤢ ขยาย</span>
           </div>
-          {course && <ElevationSvg course={course} progressKm={elevationKm} checkpoints={(event && event.checkpoints) || []} height={elevFull ? 340 : 150}/>}
+          {course && <ElevationSvg course={course} progressKm={elevationKm} checkpoints={(event && event.checkpoints) || []} height={150}/>}
         </div>
       )}
     </div>
@@ -2110,7 +2128,7 @@ function FollowedRunnerPanel({ runner, event, livePos, course }) {
 // inline SVG, not a charting library. `zoom` is how many times narrower the
 // visible km window is than the full course; `panKm` is that window's left
 // edge, always clamped so it can't scroll past either end.
-function ElevationSvg({ course, progressKm, checkpoints, height = 150 }) {
+function ElevationSvg({ course, progressKm, checkpoints, height = 150, interactive = true, width = 340 }) {
   // padBottom is taller than the plot really needs so angled checkpoint
   // labels (see marks.map below) have room to run diagonally without
   // colliding with their neighbors — a long name like "WS2 Green mountain"
@@ -2123,7 +2141,7 @@ function ElevationSvg({ course, progressKm, checkpoints, height = 150 }) {
   // height is only ever taller than the default (fullscreen view) — padBottom
   // stays a fixed pixel amount either way since it just needs to fit the
   // checkpoint labels' own text height, not scale with the chart.
-  const w = 340, h = height, pad = 6, padBottom = 66, padLeft = 28;
+  const w = width, h = height, pad = 6, padBottom = 66, padLeft = 28;
   const pts = course.points;
   const minE = course.minEle, maxE = course.maxEle;
   const totalKm = course.totalKm;
@@ -2255,8 +2273,8 @@ function ElevationSvg({ course, progressKm, checkpoints, height = 150 }) {
   });
   return (
     <div style={{ position: 'relative' }}>
-      <svg viewBox={`0 0 ${w} ${h}`} style={{ width: '100%', height: h, marginTop: 6, touchAction: 'none', cursor: zoom > 1 ? 'grab' : 'default' }}
-        onWheel={onWheel} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}>
+      <svg viewBox={`0 0 ${w} ${h}`} style={{ width: '100%', height: interactive ? h : '100%', marginTop: interactive ? 6 : 0, touchAction: 'none', cursor: interactive && zoom > 1 ? 'grab' : 'default' }}
+        {...(interactive ? { onWheel, onPointerDown, onPointerMove, onPointerUp, onPointerCancel: onPointerUp } : {})}>
         <defs>
           <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor={C.brand} stopOpacity="0.45"/>
