@@ -2512,7 +2512,7 @@ function flagEmoji(code) {
 // letters instead — a platform font gap, not a logic bug, and one that
 // can't be fixed by changing which characters we generate. An actual image
 // renders identically everywhere regardless of the device's emoji font.
-function FlagIcon({ code, size }) {
+function CountryFlag({ code, size }) {
   if (!code || code.length !== 2) return null;
   const c = code.toLowerCase();
   const h = size || 14;
@@ -3054,7 +3054,7 @@ function FriendDetailSheet({ runner: r, eventId, event, onClose, onFollow, embed
               "not everyone has filled this in" treatment as Ranking's own
               age-category filter). */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: C.mono, fontSize: 11, color: C.muted }}>
-            {r.nationality && <FlagIcon code={r.nationality} size={14}/>}
+            {r.nationality && <CountryFlag code={r.nationality} size={14}/>}
             <span>
               {headerAgeCategory ? `${headerAgeCategory} · ` : ''}
               {r.distance}{r.gender ? ` · ${r.gender === 'f' ? 'หญิง' : 'ชาย'}` : ''}
