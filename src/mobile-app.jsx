@@ -3847,6 +3847,13 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
   const [scanned, setScanned] = uS(null);
   const [pickingFav, setPickingFav] = uS(false);
   const [favBibs, setFavBibs] = uS(() => loadFavorites());
+  // Switching who's followed jumps straight to Route — which, for a
+  // spectator, already renders as the same full-screen runner-detail view
+  // "ติดตาม"/"ตั้งเป็นคนที่ติดตามหลัก" themselves just opened, so the tap
+  // read as doing nothing even though it worked (reported directly: "กด
+  // แล้วไม่เกิดอะไรขึ้น"). A toast makes the state change visible instead
+  // of relying on a tab switch the user has no reason to notice.
+  const [followToast, setFollowToast] = uS(null);
   const snap = uM(() => (window.buildSnapshot ? window.buildSnapshot('mid') : null), []);
   const currentEventId = isSpectator ? session.followEventId : (session.runner && session.runner.eventId);
   // A plain useMemo keyed only on currentEventId froze this the moment the
@@ -4098,7 +4105,7 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
   ].filter(Boolean);
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: C.bg, fontFamily: C.font, overflow: 'hidden' }}>
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: C.bg, fontFamily: C.font, overflow: 'hidden', position: 'relative' }}>
       {/* The outer #phone shell (index.html) already reserves
           env(safe-area-inset-top) for the notch/Dynamic Island on real
           devices — a flat 40px on top of that doubled up the gap. Fall
@@ -4152,8 +4159,17 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
             from scratch — Route tab kept showing whoever was picked there
             no matter who got tapped inside Friends afterward. */}
         {tab === 'friends' && <FriendsTab eventId={currentEventId} event={currentEvent} followedBib={isSpectator ? session.followBib : (session.runner && session.runner.bib)} favBibs={favBibs} onAddFavorite={() => setPickingFav(true)} onRemoveFavorite={toggleFavorite}
-          onFollow={isSpectator ? (bib) => { persist({ ...session, followBib: bib }); setTab('route'); } : null}/>}
+          onFollow={isSpectator ? (bib) => {
+            persist({ ...session, followBib: bib });
+            const picked = window.runnerStore && currentEventId && window.runnerStore.listRunners(currentEventId).find(r => r.bib === bib);
+            setFollowToast(picked ? `ตั้ง "${picked.nickname}" เป็นคนที่ติดตามหลักแล้ว · ไปที่แท็บ Route` : null);
+            setTimeout(() => setFollowToast(null), 2800);
+            setTab('route');
+          } : null}/>}
       </div>
+      {followToast && <div style={{ position: 'absolute', top: 14, left: '50%', transform: 'translateX(-50%)', zIndex: 30,
+        padding: '10px 16px', background: '#3a3a3a', color: '#fff', borderRadius: 999, fontSize: 12.5, whiteSpace: 'nowrap',
+        boxShadow: '0 6px 20px rgba(0,0,0,0.25)' }}>⭐ {followToast}</div>}
       <div style={{ flexShrink: 0, display: 'flex', borderTop: `1px solid #d8d2c2`, background: '#fff', padding: '6px 4px 20px' }}>
         {TABS.map(([k, Icon, label]) => (
           <div key={k} onClick={() => k === 'event' ? onHome() : setTab(k)} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, padding: '6px 0', color: tab === k ? C.brand : C.mute2, cursor: 'pointer' }}>
