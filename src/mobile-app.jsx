@@ -2549,15 +2549,26 @@ function RankingTab({ snap, eventId, event }) {
           ? (bestAtCp.finish != null && finishMs != null ? finishMs - bestAtCp.finish : null)
           : (lastCk && bestAtCp[lastCk.cp] != null && lastMs != null ? lastMs - bestAtCp[lastCk.cp] : null);
         const paceMinPerKm = (gunElapsedMs != null && r.progressKm) ? (gunElapsedMs / 60000) / r.progressKm : null;
-        return { bib: r.bib, name: r.nickname, gender: r.gender, category: ageCategoryFor(r.birthYear, raceYear), progressKm: r.progressKm, finished, finishMs, elapsedMs: gunElapsedMs, diffToLeaderMs, paceMinPerKm };
+        return { bib: r.bib, name: r.nickname, gender: r.gender, category: ageCategoryFor(r.birthYear, raceYear), progressKm: r.progressKm, finished, finishMs, lastMs, elapsedMs: gunElapsedMs, diffToLeaderMs, paceMinPerKm };
       });
     } else if (snap) {
       list = snap.runners.filter(r => r.distance === dist)
-        .map(r => ({ bib: r.bib, name: `${r.firstName} ${r.lastName}`, gender: r.gender, category: null, progressKm: r.progressKm, finished: false, finishMs: null, elapsedMs: null, diffToLeaderMs: null, paceMinPerKm: null }));
+        .map(r => ({ bib: r.bib, name: `${r.firstName} ${r.lastName}`, gender: r.gender, category: null, progressKm: r.progressKm, finished: false, finishMs: null, lastMs: null, elapsedMs: null, diffToLeaderMs: null, paceMinPerKm: null }));
     } else {
       list = [];
     }
-    list.sort((a, b) => (a.finished === b.finished ? 0 : a.finished ? -1 : 1) || (a.finished ? (a.finishMs || 0) - (b.finishMs || 0) : b.progressKm - a.progressKm));
+    // Two runners tied on progressKm (both stopped at the same last
+    // checkpoint, e.g. "15.3K" for everyone who's reached A2 but no
+    // further) used to keep whatever order they happened to arrive in
+    // from the roster/Firestore snapshot — arbitrary, not a real ranking.
+    // Reported directly: someone showing a large "diff to leader" time
+    // was still ranked #1 overall, ahead of someone with almost no gap,
+    // because progressKm alone couldn't tell them apart. Break ties by
+    // who actually reached that same point *first* (their own lastMs)
+    // instead.
+    list.sort((a, b) => (a.finished === b.finished ? 0 : a.finished ? -1 : 1)
+      || (a.finished ? (a.finishMs || 0) - (b.finishMs || 0)
+        : (b.progressKm - a.progressKm) || ((a.lastMs || Infinity) - (b.lastMs || Infinity))));
     list.forEach((r, i) => { r.rankOverall = i + 1; });
     ['m', 'f'].forEach(g => { list.filter(r => r.gender === g).forEach((r, i) => { r.rankGender = i + 1; }); });
     // Only among runners who actually filled in a birth year — someone
