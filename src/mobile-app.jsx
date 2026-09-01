@@ -130,6 +130,52 @@ function getEvents() {
   return window.eventStore ? window.eventStore.loadEvents() : [];
 }
 
+// ── Display-unit preferences (Settings) ───────────────────────────────────
+// Purely a display-time conversion — every distance/time is still stored
+// and computed in km / 24h everywhere else in the app (GPS math, ranking,
+// results, admin). Changing this preference only changes how a number gets
+// *formatted* right before it's shown on screen, so it can't ever drift the
+// underlying race data.
+const UNIT_PREFS_KEY = 'trt-unit-prefs';
+function loadUnitPrefs() {
+  try { return { distance: 'km', time: '24h', ...JSON.parse(localStorage.getItem(UNIT_PREFS_KEY) || '{}') }; }
+  catch (e) { return { distance: 'km', time: '24h' }; }
+}
+function saveUnitPrefs(next) {
+  try { localStorage.setItem(UNIT_PREFS_KEY, JSON.stringify(next)); } catch (e) {}
+  window.dispatchEvent(new CustomEvent('trt:unit-prefs-updated'));
+}
+function useUnitPrefs() {
+  const [prefs, setPrefs] = uS(loadUnitPrefs);
+  uE(() => {
+    const onUpdate = () => setPrefs(loadUnitPrefs());
+    window.addEventListener('trt:unit-prefs-updated', onUpdate);
+    return () => window.removeEventListener('trt:unit-prefs-updated', onUpdate);
+  }, []);
+  return prefs;
+}
+function fmtDistPref(km, prefs, decimals) {
+  if (km == null || !isFinite(km)) return '—';
+  const d = decimals == null ? 1 : decimals;
+  return (prefs && prefs.distance === 'mi') ? `${(km * 0.621371).toFixed(d)} mi` : `${km.toFixed(d)} กม.`;
+}
+// Reformats a 24h "HH:MM" or "HH:MM:SS" wall-clock string — the raw form
+// every checkin/gun-time value is actually stored and computed in — into
+// 12h with AM/PM when that's the active preference. Passed through
+// unchanged for anything that isn't recognizably HH:MM[:SS] (defensive:
+// this only ever touches display, so a bad match should just no-op rather
+// than show something broken).
+function fmtClockPref(hhmm, prefs) {
+  if (!hhmm) return hhmm;
+  if (!prefs || prefs.time !== '12h') return hhmm;
+  const m = /^(\d{1,2}):(\d{2})(?::(\d{2}))?/.exec(String(hhmm));
+  if (!m) return hhmm;
+  let h = parseInt(m[1], 10);
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  h = h % 12; if (h === 0) h = 12;
+  return `${h}:${m[2]}${m[3] ? ':' + m[3] : ''} ${ampm}`;
+}
+
 // Loads the real course for a specific event+distance (from GPX uploaded in
 // Admin — see src/course-geo.js buildEventCoursePaths) when both are known,
 // falling back to the bundled demo course otherwise (e.g. spectator not yet
@@ -562,7 +608,54 @@ function EventCard({ ev, isRegistered, onRunnerSpace, onFollow, onSeeResult }) {
   );
 }
 
-function EventPickerScreen({ user, session, onOpenApp, onFollow, onProfile }) {
+// ── Screen: Settings ───────────────────────────────────────────────────────
+const SOCIAL_LINKS = [
+  ['facebook', '📘', 'Facebook', 'RayongTrailRunning', 'https://www.facebook.com/RayongTrailRunning'],
+  ['instagram', '📷', 'Instagram', 'ติดตามเรา', 'https://www.instagram.com/rayongtrailrunning'],
+];
+function SettingsToggle({ label, options, value, onChange }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '13px 14px', background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12 }}>
+      <span style={{ fontSize: 13.5, fontWeight: 600, color: C.text }}>{label}</span>
+      <div style={{ display: 'flex', background: C.bg, borderRadius: 999, padding: 3, gap: 2 }}>
+        {options.map(([k, l]) => (
+          <div key={k} onClick={() => onChange(k)} style={{ padding: '6px 14px', borderRadius: 999, fontSize: 11.5, fontWeight: 700, cursor: 'pointer',
+            background: value === k ? C.brand : 'transparent', color: value === k ? '#fff' : C.muted }}>{l}</div>
+        ))}
+      </div>
+    </div>
+  );
+}
+function SettingsScreen({ onBack }) {
+  const prefs = useUnitPrefs();
+  function patch(next) { saveUnitPrefs({ ...prefs, ...next }); }
+  return (
+    <div style={{ height: '100%', background: C.bg, fontFamily: C.font, display: 'flex', flexDirection: 'column' }}>
+      <div style={{ padding: '40px 20px 14px', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+        <BackBtn onClick={onBack} inline/>
+        <div style={{ fontSize: 19, fontWeight: 800, color: C.text }}>ตั้งค่า</div>
+      </div>
+      <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '10px 18px 24px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ display: 'flex', gap: 10 }}>
+          {SOCIAL_LINKS.map(([k, icon, name, sub, url]) => (
+            <a key={k} href={url} target="_blank" rel="noopener noreferrer" style={{ flex: 1, textDecoration: 'none', color: 'inherit' }}>
+              <div style={{ padding: 14, background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, boxShadow: '0 1px 3px rgba(31,42,28,0.08)' }}>
+                <div style={{ fontSize: 22 }}>{icon}</div>
+                <div style={{ fontSize: 13, fontWeight: 700, marginTop: 8 }}>{name}</div>
+                <div style={{ fontSize: 10.5, color: C.muted, marginTop: 2 }}>{sub}</div>
+              </div>
+            </a>
+          ))}
+        </div>
+        <div style={{ fontFamily: C.mono, fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted, marginTop: 10, marginBottom: 2 }}>หน่วยที่แสดง</div>
+        <SettingsToggle label="ระยะทาง" options={[['km', 'กม.'], ['mi', 'ไมล์']]} value={prefs.distance} onChange={v => patch({ distance: v })}/>
+        <SettingsToggle label="รูปแบบเวลา" options={[['24h', '24h'], ['12h', '12h']]} value={prefs.time} onChange={v => patch({ time: v })}/>
+        <div style={{ fontSize: 11, color: C.muted, marginTop: 2, lineHeight: 1.5 }}>เปลี่ยนแค่การแสดงผลบนหน้าจอ ข้อมูล GPS/เวลาที่เก็บไว้จริงยังเป็นกิโลเมตร/24 ชม.เหมือนเดิมทุกที่</div>
+      </div>
+    </div>
+  );
+}
+function EventPickerScreen({ user, session, onOpenApp, onFollow, onProfile, onSettings }) {
   const [tab, setTab] = uS('live');
   const [q, setQ] = uS('');
   const [toast, setToast] = uS(null);
@@ -624,7 +717,10 @@ function EventPickerScreen({ user, session, onOpenApp, onFollow, onProfile }) {
               Remove once cache staleness is confirmed resolved. */}
           <div style={{ fontSize: 9, opacity: 0.4, marginTop: 2 }}>build 2026-08-08-1</div>
         </div>
-        <PersonIcon size={38} onClick={onProfile} photo={user.avatarPhoto}/>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+          <div onClick={onSettings} style={{ width: 38, height: 38, borderRadius: 999, background: '#fff', border: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, cursor: 'pointer' }}>⚙️</div>
+          <PersonIcon size={38} onClick={onProfile} photo={user.avatarPhoto}/>
+        </div>
       </div>
       <InstallPrompt/>
       <div style={{ display: 'flex', gap: 6, background: '#f4f1e8', borderRadius: 12, margin: '0 18px', padding: 4 }}>
@@ -655,6 +751,7 @@ function EventPickerScreen({ user, session, onOpenApp, onFollow, onProfile }) {
 
 // ── Screen: Follow the race · pick a registered runner to follow ─────────
 function FollowPickerScreen({ eventId, event, onBack, onPick }) {
+  const prefs = useUnitPrefs();
   const [q, setQ] = uS('');
   const [gender, setGender] = uS('all');
   const [view, setView] = uS('list'); // 'list' | 'route'
@@ -735,7 +832,7 @@ function FollowPickerScreen({ eventId, event, onBack, onPick }) {
         <div style={{ padding: '0 18px 10px', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px',
             background: '#fff', border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 11.5, color: C.muted }}>
-            <span>📏 {routeCourse.totalKm.toFixed(1)} กม.</span>
+            <span>📏 {fmtDistPref(routeCourse.totalKm, prefs)}</span>
             {totalGainM != null && <span>⛰️ D+ {totalGainM.toLocaleString()} ม.</span>}
           </div>
         </div>
@@ -1631,6 +1728,7 @@ function saveCertificateResult(session, event, checkins) {
 }
 
 function TrackTab({ runner, event, onScan, onSos, onDnf, offRoute, onCancelSos }) {
+  const prefs = useUnitPrefs();
   const seq = cpSeqFor(event);
   const nextIdx = runner.checkins.length;
   const totalKm = parseFloat(runner.dist) || 29;
@@ -1747,7 +1845,7 @@ function TrackTab({ runner, event, onScan, onSos, onDnf, offRoute, onCancelSos }
       <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 14, padding: 16, boxShadow: '0 1px 3px rgba(31,42,28,0.08)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
           <Kicker>ระยะทาง</Kicker>
-          <span style={{ fontFamily: C.mono, fontSize: 11, color: C.muted }}>{runner.progressKm.toFixed(1)}/{totalKm} กม.</span>
+          <span style={{ fontFamily: C.mono, fontSize: 11, color: C.muted }}>{fmtDistPref(runner.progressKm, prefs)}/{fmtDistPref(totalKm, prefs)}</span>
         </div>
         <div style={{ height: 8, background: C.bg, borderRadius: 4, marginTop: 8, overflow: 'hidden' }}>
           <div style={{ height: '100%', width: `${pct}%`, background: C.brand }}/>
@@ -1820,7 +1918,7 @@ function TrackTab({ runner, event, onScan, onSos, onDnf, offRoute, onCancelSos }
                 display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, flexShrink: 0 }}>{done ? '✓' : i + 1}</span>
               <span style={{ flex: 1, fontSize: 13, color: done ? C.text : C.mute2 }}>{cpLabelFor(event, cp)}</span>
               <span style={{ fontFamily: C.mono, fontSize: 10, color: C.muted }}>{cpKmFor(event, cp, runner.dist)}/{totalKm}K</span>
-              {done && <span style={{ fontFamily: C.mono, fontSize: 10, color: C.muted, marginLeft: 8 }}>{runner.checkins[i].t}</span>}
+              {done && <span style={{ fontFamily: C.mono, fontSize: 10, color: C.muted, marginLeft: 8 }}>{fmtClockPref(runner.checkins[i].t, prefs)}</span>}
             </div>
           );
         })}
@@ -1851,6 +1949,7 @@ function FramedSection({ title, children }) {
 }
 
 function RouteTab({ course, runner, event, spectatorRunner, livePos }) {
+  const prefs = useUnitPrefs();
   const mapRef = uR(null);
   const mapObj = uR(null);
   const runnerMarkerRef = uR(null);
@@ -2181,7 +2280,7 @@ function FollowedRunnerPanel({ runner, event, livePos, course }) {
           pace), scoped to how far this runner's actually gotten rather
           than the route's fixed totals. */}
       <div style={{ display: 'flex', gap: 14, padding: '14px 18px', borderBottom: `1px solid ${C.border}` }}>
-        <Stat label="ระยะที่วิ่งไปแล้ว" value={`${(runner.progressKm || 0).toFixed(1)} กม.`}/>
+        <Stat label="ระยะที่วิ่งไปแล้ว" value={fmtDistPref(runner.progressKm || 0, prefs)}/>
         <Stat label="ไต่ระดับสะสม" value={gainSoFarM != null ? `+${gainSoFarM.toLocaleString()} ม.` : '—'}/>
         <Stat label="เพซเฉลี่ย" value={avgPaceLabel}/>
       </div>
@@ -2194,6 +2293,7 @@ function FollowedRunnerPanel({ runner, event, livePos, course }) {
 // expandable checkpoint/split-time list instead of two copies drifting
 // apart.
 function CheckpointSplitsList({ runner, event }) {
+  const prefs = useUnitPrefs();
   const seq = cpSeqFor(event);
   const checkins = runner.checkins || [];
   const combine = window.eventStatus && window.eventStatus.combineDateTime;
@@ -2254,13 +2354,13 @@ function CheckpointSplitsList({ runner, event }) {
                 boxShadow: '0 1px 3px rgba(31,42,28,0.06)', padding: '11px 14px', cursor: done ? 'pointer' : 'default' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span style={{ flex: 1, fontSize: 14, fontWeight: 700, color: done ? C.text : C.mute2 }}>{cpLabelFor(event, cp)}</span>
-                  {done && <span style={{ fontFamily: C.mono, fontSize: 10.5, color: C.muted }}>{checkins[i].t}</span>}
+                  {done && <span style={{ fontFamily: C.mono, fontSize: 10.5, color: C.muted }}>{fmtClockPref(checkins[i].t, prefs)}</span>}
                   {done && <span style={{ fontSize: 10, color: C.mute2, transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}>▾</span>}
                 </div>
                 {done && isOpen && (
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.border}` }}>
-                    <Stat label="ระยะจากจุดเริ่มต้น" value={km != null ? `${km.toFixed(1)} กม.` : '—'}/>
-                    <Stat label="เวลาเข้าจุด" value={checkins[i].t}/>
+                    <Stat label="ระยะจากจุดเริ่มต้น" value={km != null ? fmtDistPref(km, prefs) : '—'}/>
+                    <Stat label="เวลาเข้าจุด" value={fmtClockPref(checkins[i].t, prefs)}/>
                     <Stat label="ใช้เวลาจากจุดก่อนหน้า" value={i === 0 ? '—' : fmtElapsed(splitMs)}/>
                   </div>
                 )}
@@ -2568,6 +2668,7 @@ const NATIONALITIES = [
 ];
 
 function RankingTab({ snap, eventId, event }) {
+  const prefs = useUnitPrefs();
   const distLabels = (event && event.distances && event.distances.length) ? event.distances.map(d => d.label) : ['11K', '22K', '29K'];
   const [dist, setDist] = uS(distLabels[0]);
   const [gender, setGender] = uS('all');
@@ -2733,7 +2834,7 @@ function RankingTab({ snap, eventId, event }) {
   }, [realRunners, event, dist]);
   function fmtClock(ms) {
     const d = new Date(ms);
-    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+    return fmtClockPref(`${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`, prefs);
   }
   return (
     <PullToRefresh onRefresh={() => refreshRealRunners.current()} style={{ flex: 1, minHeight: 0, padding: '14px 18px 90px' }}>
@@ -2767,7 +2868,7 @@ function RankingTab({ snap, eventId, event }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, padding: '8px 12px',
           background: '#fdf0d6', border: '1px solid #f0d9a0', borderRadius: 10, fontSize: 11, color: '#7c4a03' }}>
           <span>🏃</span>
-          <span>ผู้นำอยู่ที่ {etaInfo.leaderKm.toFixed(1)} กม. · คาดถึง <b>{etaInfo.nextLabel}</b> เวลา <b>{fmtClock(etaInfo.etaMs)}</b> น.</span>
+          <span>ผู้นำอยู่ที่ {fmtDistPref(etaInfo.leaderKm, prefs)} · คาดถึง <b>{etaInfo.nextLabel}</b> เวลา <b>{fmtClock(etaInfo.etaMs)}</b> น.</span>
         </div>
       )}
       {rows.map(r => {
@@ -3007,6 +3108,7 @@ function FriendsTab({ eventId, event, followedBib, favBibs, onAddFavorite, onRem
 // content) is identical, so "follow the race" and "tap a friend" land on
 // the exact same screen shape instead of two that drifted apart.
 function FriendDetailSheet({ runner: r, eventId, event, onClose, onFollow, embedded }) {
+  const prefs = useUnitPrefs();
   const [tab, setTab] = uS('info');
   const cks = r.checkins || [];
   const last = cks[cks.length - 1];
@@ -3116,12 +3218,12 @@ function FriendDetailSheet({ runner: r, eventId, event, onClose, onFollow, embed
             )}
             <FramedSection title="สถานะปัจจุบัน">
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                <Stat label="ระยะที่วิ่งไปแล้ว" value={`${(r.progressKm || 0).toFixed(1)} กม.`}/>
+                <Stat label="ระยะที่วิ่งไปแล้ว" value={fmtDistPref(r.progressKm || 0, prefs)}/>
                 <Stat label="สถานะ" value={runnerStatusLabel(r)}/>
               </div>
               <div style={{ fontFamily: C.mono, fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted, margin: '14px 0 6px' }}>เช็คอินล่าสุด</div>
               {last
-                ? <div style={{ fontSize: 13.5 }}>{cpCheckinLabel(last.cp)} · <span style={{ fontFamily: C.mono, color: C.muted }}>{last.t} น.</span></div>
+                ? <div style={{ fontSize: 13.5 }}>{cpCheckinLabel(last.cp)} · <span style={{ fontFamily: C.mono, color: C.muted }}>{fmtClockPref(last.t, prefs)} น.</span></div>
                 : <div style={{ fontSize: 13, color: C.muted }}>ยังไม่มีการเช็คอิน</div>}
             </FramedSection>
             <FramedSection title="RUNNER INFO">
@@ -3670,6 +3772,7 @@ function RaceHistorySection({ uid }) {
 // race's real distance/elevation-gain, and every row needs that same hook
 // call made consistently for React's rules of hooks to hold.
 function RaceHistoryRow({ ev, r, finished, elapsedMs, rankOverall, totalFinishers }) {
+  const prefs = useUnitPrefs();
   const course = useCourse(ev, r.distance);
   const gainM = uM(() => {
     if (!course || !course.points || !course.points.length || !window.courseGeo) return null;
@@ -3678,7 +3781,7 @@ function RaceHistoryRow({ ev, r, finished, elapsedMs, rankOverall, totalFinisher
   }, [course]);
   const stats = [
     ['RANKING', rankOverall ? `${ordinalTh(rankOverall)}` : '—'],
-    ['DISTANCE', course ? `${course.totalKm.toFixed(1)}km` : r.distance],
+    ['DISTANCE', course ? fmtDistPref(course.totalKm, prefs) : r.distance],
     ['ELEVATION GAIN', gainM != null ? `${gainM.toLocaleString()}m` : '—'],
     ['TIME', finished ? fmtElapsedMs(elapsedMs) : runnerStatusLabel(r)],
   ];
@@ -4743,7 +4846,9 @@ function MobileApp() {
   else if (screen === 'events') body = <EventPickerScreen user={session.user} session={session}
     onOpenApp={openRunnerSpace}
     onFollow={(ev) => { setPendingEvent(ev); setScreen('follow-picker'); }}
-    onProfile={() => setModal('profile')}/>;
+    onProfile={() => setModal('profile')}
+    onSettings={() => setScreen('settings')}/>;
+  else if (screen === 'settings') body = <SettingsScreen onBack={() => setScreen('events')}/>;
   else if (screen === 'follow-picker') body = <FollowPickerScreen eventId={pendingEvent && pendingEvent.id} event={pendingEvent} onBack={() => setScreen('events')} onPick={(bib) => {
     persist({ ...session, spectator: true, followBib: bib, followEventId: pendingEvent && pendingEvent.id, runner: null });
     setScreen('app');
