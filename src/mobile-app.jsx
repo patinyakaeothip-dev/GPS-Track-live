@@ -593,7 +593,8 @@ function EventPickerScreen({ user, session, onOpenApp, onFollow, onProfile }) {
             color: tab === k ? C.brandDk : C.muted, fontSize: 12.5, fontWeight: tab === k ? 700 : 600, cursor: 'pointer' }}>{l}</div>
         ))}
       </div>
-      <div style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '14px 18px 18px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <PullToRefresh onRefresh={() => window.eventStore && window.eventStore.refresh && window.eventStore.refresh()}
+        style={{ flex: 1, minHeight: 0, padding: '14px 18px 18px', display: 'flex', flexDirection: 'column', gap: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '11px 13px', background: '#fff', border: `1px solid ${C.border}`, borderRadius: 10, boxShadow: '0 1px 3px rgba(31,42,28,0.08)' }}>
           <span style={{ fontSize: 13, color: C.mute2 }}>🔍</span>
           <input value={q} onChange={e => setQ(e.target.value)} placeholder="ค้นหาชื่องาน" style={{ border: 'none', outline: 'none', fontSize: 13, flex: 1, fontFamily: C.font, background: 'transparent' }}/>
@@ -606,7 +607,7 @@ function EventPickerScreen({ user, session, onOpenApp, onFollow, onProfile }) {
             onSeeResult={() => window.location.href = `results/?event=${encodeURIComponent(ev.id)}`} />
         ))}
         {filtered.length === 0 && <EmptyState icon="🏔" text="ไม่มีงานในหมวดนี้"/>}
-      </div>
+      </PullToRefresh>
     </div>
   );
 }
