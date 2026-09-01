@@ -3714,6 +3714,20 @@ function ProfileScreen({ user, onLogout, onClose, onSave, onboard }) {
   const [savedToast, setSavedToast] = uS(null);
   const [saveError, setSaveError] = uS('');
   const canSubmit = !onboard || (nickname.trim() && phone.trim() && emgName.trim() && emgPhone.trim() && birthYear.trim());
+  // Snapshot of every editable field as it stood when this screen opened —
+  // compared against current values to warn before a silent-discard ✕ tap.
+  // Reported directly: editing a field, then tapping ✕ without saving, gave
+  // no warning at all that the change was about to be thrown away.
+  const initialRef = uR({ nickname: user.nickname || user.name || '', gender: user.gender || '', phone: user.phone || '',
+    emgName: user.emgName || '', emgPhone: user.emgPhone || '', emgName2: user.emgName2 || '', emgPhone2: user.emgPhone2 || '',
+    bloodType: user.bloodType || '', medical: user.medical || '', birthYear: user.birthYear || '', nationality: user.nationality || '',
+    avatarPhoto: user.avatarPhoto || '' });
+  const [confirmClose, setConfirmClose] = uS(false);
+  const isDirty = !onboard && editing && Object.entries(initialRef.current).some(([k, v]) => v !== { nickname, gender, phone, emgName, emgPhone, emgName2, emgPhone2, bloodType, medical, birthYear, nationality, avatarPhoto }[k]);
+  function requestClose() {
+    if (isDirty) setConfirmClose(true);
+    else onClose();
+  }
   // Onboarding has nothing to view yet — always starts editable. A
   // returning runner opening their own profile used to land straight on
   // an already-editable form with every field an open text box, which
@@ -3768,8 +3782,21 @@ function ProfileScreen({ user, onLogout, onClose, onSave, onboard }) {
           <div style={{ fontSize: 20, fontWeight: 800 }}>{onboard ? 'ยินดีต้อนรับ 👋' : 'โปรไฟล์'}</div>
           {onboard && <div style={{ fontSize: 12.5, color: C.muted, marginTop: 4 }}>กรอกข้อมูลก่อนเริ่มใช้งานครั้งแรก · ครั้งต่อไปไม่ต้องกรอกอีก</div>}
         </div>
-        {!onboard && <span onClick={onClose} style={{ cursor: 'pointer', fontSize: 20, color: C.muted }}>×</span>}
+        {!onboard && <span onClick={requestClose} style={{ cursor: 'pointer', fontSize: 20, color: C.muted }}>×</span>}
       </div>
+      {confirmClose && (
+        <div style={{ position: 'absolute', inset: 0, zIndex: 30, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+          <div style={{ background: '#fff', borderRadius: 16, padding: 20, width: '100%', maxWidth: 320, boxShadow: '0 20px 50px rgba(0,0,0,0.3)' }}>
+            <div style={{ fontSize: 15, fontWeight: 800 }}>ยังไม่ได้บันทึกการแก้ไข</div>
+            <div style={{ fontSize: 12.5, color: C.muted, marginTop: 6, lineHeight: 1.5 }}>ถ้าออกตอนนี้ ข้อมูลที่แก้ไว้จะหายไป</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 16 }}>
+              <Btn variant="primary" onClick={() => { setConfirmClose(false); save(); onClose(); }}>บันทึกแล้วออก</Btn>
+              <Btn variant="ghost" onClick={() => { setConfirmClose(false); onClose(); }}>ออกโดยไม่บันทึก</Btn>
+              <Btn variant="white" onClick={() => setConfirmClose(false)}>กลับไปแก้ไขต่อ</Btn>
+            </div>
+          </div>
+        </div>
+      )}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 20, flexShrink: 0 }}>
         <label style={{ position: 'relative', cursor: 'pointer', flexShrink: 0 }}>
           <input type="file" accept="image/*" onChange={pickPhoto} style={{ display: 'none' }}/>
