@@ -4543,7 +4543,11 @@ function MobileApp() {
     // once at registration; a photo changed afterward in the profile screen
     // needs its own explicit push to reach it.
     if (session.runner && session.runner.rosterId && window.runnerStore) {
-      window.runnerStore.updateRunnerProgress(session.runner.rosterId, { avatarPhoto: withCompleted.avatarPhoto || '' });
+      window.runnerStore.updateRunnerProgress(session.runner.rosterId, {
+        avatarPhoto: withCompleted.avatarPhoto || '',
+        birthYear: withCompleted.birthYear || '',
+        nationality: withCompleted.nationality || '',
+      });
     }
     persist({ ...session, user: withCompleted });
     // Returned so ProfileScreen can surface a real error instead of the
