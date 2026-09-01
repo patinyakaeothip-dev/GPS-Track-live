@@ -2002,6 +2002,22 @@ function FollowedRunnerPanel({ runner, event, livePos }) {
   const totalMs = (startMs != null && endMs != null) ? endMs - startMs : null;
   const elapsedMs = startMs && !stopped ? Date.now() - startMs : null;
 
+  // Each checkin's own timestamp, anchored off the previous one (same
+  // overnight-rollover handling as everywhere else that converts a
+  // checkin clock time) — computed once here instead of per-row so the
+  // expandable split-time rows below can just index into it.
+  const ckMsList = uM(() => {
+    const out = [];
+    let prev = null;
+    checkins.forEach(c => {
+      const ms = combine && event ? combine(event.raceDateISO, c.t, prev) : null;
+      out.push(ms);
+      if (ms != null) prev = ms;
+    });
+    return out;
+  }, [checkins, combine, event]);
+  const [expanded, setExpanded] = uS(null);
+
   const liveAgeMs = livePos && livePos.at ? Date.now() - livePos.at : null;
   const gpsLive = liveAgeMs != null && liveAgeMs < 2 * 60 * 1000;
   const speedMps = gpsLive ? livePos.speed : null;
@@ -2040,12 +2056,23 @@ function FollowedRunnerPanel({ runner, event, livePos }) {
         <div style={{ padding: '10px 14px', borderBottom: `1px solid ${C.border}`, fontFamily: C.mono, fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted, fontWeight: 600 }}>Checkpoints</div>
         {seq.map((cp, i) => {
           const done = i < checkins.length;
+          const isOpen = expanded === i;
+          const splitMs = (done && i > 0 && ckMsList[i] != null && ckMsList[i - 1] != null) ? ckMsList[i] - ckMsList[i - 1] : null;
           return (
-            <div key={cp} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px', borderTop: i ? `1px solid ${C.border}` : 'none' }}>
-              <span style={{ width: 20, height: 20, borderRadius: 999, background: done ? C.brand : C.bg, color: done ? '#fff' : C.mute2,
-                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, flexShrink: 0 }}>{done ? '✓' : i + 1}</span>
-              <span style={{ flex: 1, fontSize: 13, color: done ? C.text : C.mute2 }}>{cpLabelFor(event, cp)}</span>
-              {done && <span style={{ fontFamily: C.mono, fontSize: 10, color: C.muted }}>{checkins[i].t}</span>}
+            <div key={cp} style={{ borderTop: i ? `1px solid ${C.border}` : 'none' }}>
+              <div onClick={() => done && setExpanded(isOpen ? null : i)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px', cursor: done ? 'pointer' : 'default' }}>
+                <span style={{ width: 20, height: 20, borderRadius: 999, background: done ? C.brand : C.bg, color: done ? '#fff' : C.mute2,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, flexShrink: 0 }}>{done ? '✓' : i + 1}</span>
+                <span style={{ flex: 1, fontSize: 13, color: done ? C.text : C.mute2 }}>{cpLabelFor(event, cp)}</span>
+                {done && <span style={{ fontFamily: C.mono, fontSize: 10, color: C.muted }}>{checkins[i].t}</span>}
+                {done && <span style={{ fontSize: 10, color: C.mute2, marginLeft: 2, transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}>▾</span>}
+              </div>
+              {done && isOpen && (
+                <div style={{ display: 'flex', gap: 18, padding: '0 14px 12px 44px' }}>
+                  <Stat label="เวลาเข้าจุด" value={checkins[i].t}/>
+                  <Stat label="ใช้เวลาจากจุดก่อนหน้า" value={i === 0 ? '—' : fmtElapsed(splitMs)}/>
+                </div>
+              )}
             </div>
           );
         })}
