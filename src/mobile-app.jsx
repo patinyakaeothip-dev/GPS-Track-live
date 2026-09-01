@@ -422,6 +422,32 @@ function LoginScreen({ onLogin }) {
 // fix, which turned out to fix the same root cause without it) — removed
 // again after it broke touch-scrolling the whole event list on iOS,
 // a worse regression than the bug it was working around.
+// A LiveTrail-style digital countdown/elapsed clock — 4 bordered boxes
+// (days/hours/min/sec), each ticking on its own second. `ms` is a duration
+// (either "time until start" or "time since start" — the caller decides
+// which and just hands over the resulting ms), not a target timestamp, so
+// this component itself never needs to know whether it's counting up or
+// down.
+function TimeBoxRow({ ms }) {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const units = [
+    [Math.floor(total / 86400), 'days'],
+    [Math.floor((total % 86400) / 3600), 'hours'],
+    [Math.floor((total % 3600) / 60), 'min'],
+    [total % 60, 'sec'],
+  ];
+  return (
+    <div style={{ display: 'flex', gap: 6, justifyContent: 'center' }}>
+      {units.map(([v, label]) => (
+        <div key={label} style={{ textAlign: 'center' }}>
+          <div style={{ fontFamily: C.mono, fontSize: 15, fontWeight: 800, color: C.text, background: '#fff',
+            border: `1px solid ${C.border}`, borderRadius: 8, padding: '4px 7px', minWidth: 28 }}>{String(v).padStart(2, '0')}</div>
+          <div style={{ fontSize: 8, color: C.muted, marginTop: 2, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
 function EventCard({ ev, isRegistered, onRunnerSpace, onFollow, onSeeResult }) {
   // Computed live from ev's schedule data on every render (see
   // src/event-status.js) instead of trusting ev.status/ev.closed, which are
@@ -441,6 +467,15 @@ function EventCard({ ev, isRegistered, onRunnerSpace, onFollow, onSeeResult }) {
   const eventStart = status === 'upcoming' ? window.eventStatus.eventWindow(ev).start : null;
   const followOpensSoon = !!(eventStart && (eventStart.getTime() - Date.now()) <= FOLLOW_EARLY_MS);
   const canFollow = status === 'live' || followOpensSoon;
+  // Ticks the countdown box below once a second — only while there's
+  // actually one to show, so a past/live card (the vast majority of cards
+  // once an event's under way) isn't re-rendering on a timer for nothing.
+  const [, tick] = uS(0);
+  uE(() => {
+    if (!eventStart) return;
+    const id = setInterval(() => tick(t => t + 1), 1000);
+    return () => clearInterval(id);
+  }, [!!eventStart]);
   if (status === 'past') {
     return (
       // flexShrink: 0 — this card is a direct child of .list, a
@@ -501,6 +536,12 @@ function EventCard({ ev, isRegistered, onRunnerSpace, onFollow, onSeeResult }) {
         </div>
         {status === 'live' && <span style={{ fontFamily: C.mono, fontSize: 9.5, fontWeight: 700, letterSpacing: '0.06em', color: '#fff', background: `linear-gradient(135deg,${C.brandLt},${C.brandDk})`, padding: '4px 10px', borderRadius: 999 }}>LIVE</span>}
       </div>
+      {/* Countdown-to-start, LiveTrail-style — only an upcoming card has a
+          "not yet" to count down; live/past cards show their own status
+          badge or result button instead, nothing left here to count. */}
+      {status === 'upcoming' && eventStart && (
+        <div style={{ padding: '0 14px 14px' }}><TimeBoxRow ms={eventStart.getTime() - Date.now()}/></div>
+      )}
       <div style={{ display: 'flex' }}>
         <button onClick={onRunnerSpace} style={{ flex: 1, padding: 13, background: (closed && !isRegistered) ? '#e5e4df' : C.orange, color: (closed && !isRegistered) ? '#7c7566' : '#fff', border: 'none', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>
           🏃 Runner Space
@@ -656,12 +697,6 @@ function FollowPickerScreen({ eventId, event, onBack, onPick }) {
     const pts = routeCourse.points.map(p => ({ lat: p[0], lon: p[1], ele: p[2], km: p[3] }));
     return window.courseGeo.cumulativeGainToKm(pts, routeCourse.totalKm);
   }, [routeCourse]);
-  function fmtElapsed(ms) {
-    if (ms == null || !isFinite(ms) || ms < 0) return '—';
-    const s = Math.floor(ms / 1000);
-    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), r = s % 60;
-    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}`;
-  }
   return (
     <div style={{ height: '100%', background: C.bg, fontFamily: C.font, display: 'flex', flexDirection: 'column' }}>
       <div style={{ padding: '40px 20px 14px', flexShrink: 0 }}>
@@ -681,9 +716,11 @@ function FollowPickerScreen({ eventId, event, onBack, onPick }) {
         </div>
       )}
       {gunMs != null && (
-        <div style={{ textAlign: 'center', fontFamily: C.mono, fontSize: 20, fontWeight: 700, flexShrink: 0,
-          color: Date.now() >= gunMs ? C.brandDk : '#b45309', marginBottom: 10 }}>
-          {Date.now() >= gunMs ? fmtElapsed(Date.now() - gunMs) : `เริ่มในอีก ${fmtElapsed(gunMs - Date.now())}`}
+        <div style={{ textAlign: 'center', flexShrink: 0, marginBottom: 10 }}>
+          <div style={{ fontFamily: C.mono, fontSize: 10.5, fontWeight: 700, color: Date.now() >= gunMs ? C.brandDk : '#b45309', marginBottom: 6 }}>
+            {Date.now() >= gunMs ? 'กำลังแข่งขัน' : 'เริ่มในอีก'}
+          </div>
+          <TimeBoxRow ms={Date.now() >= gunMs ? Date.now() - gunMs : gunMs - Date.now()}/>
         </div>
       )}
       <div style={{ padding: '0 18px 10px', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
