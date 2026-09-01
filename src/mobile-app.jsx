@@ -3555,12 +3555,27 @@ function RaceHistorySection({ uid }) {
       .filter(Boolean)
       .sort((a, b) => (b.ev.raceDateISO || '').localeCompare(a.ev.raceDateISO || ''));
   }, [uid]);
+  const [showAll, setShowAll] = uS(false);
   if (!rows.length) return null;
+  // Profile is a long scrolling form already (contact info, blood type,
+  // medical notes, ...) — a runner who's done a dozen races would have
+  // pushed everything below this section off-screen before this cap.
+  // Collapsed to the 3 most recent by default, same as any "recent
+  // activity" list; the rest are one tap away, not gone.
+  const VISIBLE = 3;
+  const shown = showAll ? rows : rows.slice(0, VISIBLE);
   return (
     <div>
-      <div style={{ fontFamily: C.mono, fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted, marginBottom: 6 }}>ประวัติการแข่งขัน</div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+        <div style={{ fontFamily: C.mono, fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted }}>ประวัติการแข่งขัน ({rows.length})</div>
+        {rows.length > VISIBLE && (
+          <span onClick={() => setShowAll(v => !v)} style={{ fontSize: 11, fontWeight: 700, color: C.brand, cursor: 'pointer' }}>
+            {showAll ? 'ย่อ' : `ดูทั้งหมด (${rows.length})`}
+          </span>
+        )}
+      </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {rows.map(({ ev, r, finished, elapsedMs, rankOverall, totalFinishers }) => (
+        {shown.map(({ ev, r, finished, elapsedMs, rankOverall, totalFinishers }) => (
           <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 12, background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, boxShadow: '0 1px 3px rgba(31,42,28,0.08)' }}>
             <div style={{ fontSize: 22, flexShrink: 0 }}>{finished ? '🏅' : '🚩'}</div>
             <div style={{ flex: 1, minWidth: 0 }}>
