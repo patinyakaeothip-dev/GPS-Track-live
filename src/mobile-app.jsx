@@ -3865,7 +3865,7 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
             from scratch — Route tab kept showing whoever was picked there
             no matter who got tapped inside Friends afterward. */}
         {tab === 'friends' && <FriendsTab eventId={currentEventId} event={currentEvent} followedBib={isSpectator ? session.followBib : (session.runner && session.runner.bib)} favBibs={favBibs} onAddFavorite={() => setPickingFav(true)} onRemoveFavorite={toggleFavorite}
-          onFollow={isSpectator ? (bib) => persist({ ...session, followBib: bib }) : null}/>}
+          onFollow={isSpectator ? (bib) => { persist({ ...session, followBib: bib }); setTab('route'); } : null}/>}
       </div>
       <div style={{ flexShrink: 0, display: 'flex', borderTop: `1px solid #d8d2c2`, background: '#fff', padding: '6px 4px 20px' }}>
         {TABS.map(([k, Icon, label]) => (
