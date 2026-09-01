@@ -1948,7 +1948,7 @@ function RouteTab({ course, runner, event, spectatorRunner, livePos }) {
           </svg>
         </div>
       </div>
-      {!mapFull && spectatorRunner && <FollowedRunnerPanel runner={spectatorRunner} event={event} livePos={livePos}/>}
+      {!mapFull && spectatorRunner && <FollowedRunnerPanel runner={spectatorRunner} event={event} livePos={livePos} course={course}/>}
       {/* The tab bar is a proper flexShrink:0 sibling in AppShell's own
           column layout, not something floating on top of this content —
           it already reserves its own space, so padding this deep to dodge
@@ -1975,7 +1975,7 @@ function RouteTab({ course, runner, event, spectatorRunner, livePos }) {
 // (on pace, stuck, close to cutoff), only *where*. This pairs it with the
 // same checkpoint-time data the runner sees in their own Track tab, plus a
 // live speed reading when their phone has an active GPS fix.
-function FollowedRunnerPanel({ runner, event, livePos }) {
+function FollowedRunnerPanel({ runner, event, livePos, course }) {
   const [, setTick] = uS(0);
   uE(() => { const id = setInterval(() => setTick(t => t + 1), 1000); return () => clearInterval(id); }, []);
 
@@ -2039,6 +2039,23 @@ function FollowedRunnerPanel({ runner, event, livePos }) {
     const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), r = s % 60;
     return `${neg ? '-' : ''}${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}`;
   }
+  // Elevation climbed so far, up to this runner's own progress point on
+  // the course — not the route's total D+, which "how much have *I*
+  // climbed" would misreport as a fixed number regardless of how far this
+  // runner's actually gotten.
+  const gainSoFarM = uM(() => {
+    if (!course || !course.points || !course.points.length || !window.courseGeo || !(runner.progressKm > 0)) return null;
+    const pts = course.points.map(p => ({ lat: p[0], lon: p[1], ele: p[2], km: p[3] }));
+    return window.courseGeo.cumulativeGainToKm(pts, Math.min(runner.progressKm, course.totalKm));
+  }, [course, runner.progressKm]);
+  const avgPaceLabel = uM(() => {
+    const baseMs = stopped ? totalMs : elapsedMs;
+    if (baseMs == null || !(runner.progressKm > 0)) return '—';
+    const min = (baseMs / 60000) / runner.progressKm;
+    if (!isFinite(min) || min <= 0) return '—';
+    const mm = Math.floor(min), ss = Math.round((min - mm) * 60);
+    return `${mm}'${String(ss).padStart(2, '0')}"/กม.`;
+  }, [stopped, totalMs, elapsedMs, runner.progressKm]);
 
   return (
     <div style={{ background: '#fff', borderTop: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}` }}>
@@ -2051,6 +2068,14 @@ function FollowedRunnerPanel({ runner, event, livePos }) {
         <Stat label={stopped ? (finished ? 'เวลารวม' : 'DNF ที่') : 'เวลาที่วิ่งมาแล้ว'} value={fmtElapsed(stopped ? totalMs : elapsedMs)}/>
         <Stat label="ความเร็วปัจจุบัน" value={paceLabel} accent={gpsLive ? C.brand : C.mute2}/>
         <Stat label="GPS" value={gpsLive ? '🟢 สด' : (livePos ? '⚪ หลุดสัญญาณ' : '⚪ ยังไม่เริ่ม')}/>
+      </div>
+      {/* Second row — LiveTrail's own "RUNNER INFO" grid (distance/D+/
+          pace), scoped to how far this runner's actually gotten rather
+          than the route's fixed totals. */}
+      <div style={{ display: 'flex', gap: 14, padding: '14px 18px', borderBottom: `1px solid ${C.border}` }}>
+        <Stat label="ระยะที่วิ่งไปแล้ว" value={`${(runner.progressKm || 0).toFixed(1)} กม.`}/>
+        <Stat label="ไต่ระดับสะสม" value={gainSoFarM != null ? `+${gainSoFarM.toLocaleString()} ม.` : '—'}/>
+        <Stat label="เพซเฉลี่ย" value={avgPaceLabel}/>
       </div>
       <div>
         <div style={{ padding: '10px 14px', borderBottom: `1px solid ${C.border}`, fontFamily: C.mono, fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted, fontWeight: 600 }}>Checkpoints</div>
