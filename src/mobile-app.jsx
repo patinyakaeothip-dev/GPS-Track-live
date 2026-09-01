@@ -798,22 +798,26 @@ function RegisterScreen({ event, profile, onDone, onBack }) {
   // to be stored but never actually checked here, so closing one distance
   // did nothing: every distance stayed pickable and registrable regardless.
   const rawDistances = (event && event.distances && event.distances.length) ? event.distances : ['11K', '22K', '29K'].map(label => ({ label, open: true }));
-  // A distance's own start time passing is a second, independent reason
+  // A distance's own cutoff time passing is a second, independent reason
   // registration should close — reported directly: a distance whose race
   // had already started (well past its cutoff) still accepted new
   // registrations, because until now the only thing that ever closed a
   // distance was Admin's manual "เปิด/ปิดรับสมัคร" toggle or the regCloseISO
   // date. Neither of those tracks the actual race clock, so nothing here
   // stopped someone "registering" for a distance that's already running or
-  // finished. Once that distance's own start time (same field the race
-  // itself starts from) is in the past, treat it as closed too, same as if
-  // Admin had flipped the toggle off.
+  // finished. Anchored on cpTimes.finish (the same field results/DNF use as
+  // "cutoff"), not cpTimes.start — a real runner's own QR check-in can lag
+  // well past their actual start time (late scan, spotty signal), and that
+  // lateness must never itself look like "too late to register."
   const distances = rawDistances.map(d => {
     if (d.open === false) return d;
     const startAt = event && event.raceDateISO && window.eventStatus
       ? window.eventStatus.combineDateTime(event.raceDateISO, d.cpTimes && d.cpTimes.start)
       : null;
-    return startAt && Date.now() >= startAt.getTime() ? { ...d, open: false } : d;
+    const cutoffAt = event && event.raceDateISO && window.eventStatus
+      ? window.eventStatus.combineDateTime(event.raceDateISO, d.cpTimes && d.cpTimes.finish, startAt || undefined)
+      : null;
+    return cutoffAt && Date.now() >= cutoffAt.getTime() ? { ...d, open: false } : d;
   });
   const distLabels = distances.map(d => d.label);
   const firstOpen = distances.find(d => d.open !== false);
