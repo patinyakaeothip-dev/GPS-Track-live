@@ -2852,13 +2852,22 @@ function FriendsTab({ eventId, event, followedBib, favBibs, onAddFavorite, onRem
 // doing (on pace, stuck, close to cutoff, how their own past races went);
 // this pulls all of that into one place instead of scattering it across
 // separate sheets someone had to know to go looking for.
-function FriendDetailSheet({ runner: r, eventId, event, onClose, onFollow }) {
+// embedded — used directly as the spectator's main Route tab content
+// (AppShell already shows its own back-arrow/Brand/profile header above
+// this, and there's no "close" concept for a main tab) instead of as an
+// overlay sheet opened from Friends. Drops the ✕ button and the
+// absolute-positioned overlay chrome; everything else (avatar/name/tabs/
+// content) is identical, so "follow the race" and "tap a friend" land on
+// the exact same screen shape instead of two that drifted apart.
+function FriendDetailSheet({ runner: r, eventId, event, onClose, onFollow, embedded }) {
   const [tab, setTab] = uS('info');
   const cks = r.checkins || [];
   const last = cks[cks.length - 1];
   const TABS = [['info', 'ℹ️ ข้อมูล'], ['splits', '⏱ Splits'], ['map', '🗺️ แผนที่'], ['trophy', '🏆 ประวัติ']];
   return (
-    <div style={{ position: 'absolute', inset: 0, zIndex: 10, background: '#fff', display: 'flex', flexDirection: 'column', animation: 'trtFadeIn 0.18s ease' }}>
+    <div style={embedded
+      ? { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }
+      : { position: 'absolute', inset: 0, zIndex: 10, background: '#fff', display: 'flex', flexDirection: 'column', animation: 'trtFadeIn 0.18s ease' }}>
       <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 12, padding: '16px 18px', borderBottom: `1px solid ${C.border}` }}>
         <AvatarCircle size={48} fontSize={18} photo={r.avatarPhoto} initial={r.nickname[0]} status={runnerAvatarStatus(r)}/>
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -2868,7 +2877,7 @@ function FriendDetailSheet({ runner: r, eventId, event, onClose, onFollow }) {
           </div>
           <div style={{ fontFamily: C.mono, fontSize: 11, color: C.muted }}>bib {r.bib} · {r.distance}</div>
         </div>
-        <div onClick={onClose} style={{ width: 30, height: 30, borderRadius: 10, border: `1.6px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 14, flexShrink: 0 }}>✕</div>
+        {!embedded && <div onClick={onClose} style={{ width: 30, height: 30, borderRadius: 10, border: `1.6px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 14, flexShrink: 0 }}>✕</div>}
       </div>
       <div style={{ flexShrink: 0, display: 'flex', borderBottom: `1px solid ${C.border}` }}>
         {TABS.map(([k, l]) => (
@@ -2887,7 +2896,15 @@ function FriendDetailSheet({ runner: r, eventId, event, onClose, onFollow }) {
             {last
               ? <div style={{ fontSize: 13.5, marginBottom: 18 }}>{cpCheckinLabel(last.cp)} · <span style={{ fontFamily: C.mono, color: C.muted }}>{last.t} น.</span></div>
               : <div style={{ fontSize: 13, color: C.muted, marginBottom: 18 }}>ยังไม่มีการเช็คอิน</div>}
-            {onFollow && <Btn variant="primary" onClick={onFollow}>👣 ติดตามคนนี้ (Route tab)</Btn>}
+            {/* Not shown when embedded — this screen already *is* the main
+                Route tab at that point, so "set as main tracked runner"
+                would be a no-op. */}
+            {onFollow && !embedded && (
+              <>
+                <Btn variant="primary" onClick={onFollow}>⭐ ตั้งเป็นคนที่ติดตามหลัก</Btn>
+                <div style={{ fontSize: 11, color: C.muted, marginTop: 8, textAlign: 'center' }}>จะโชว์ในแท็บ Route หลักของแอพ พร้อมกราฟความสูง/เช็คพอยต์</div>
+              </>
+            )}
           </div>
         )}
         {tab === 'splits' && <CheckpointSplitsList runner={r} event={event}/>}
@@ -3842,9 +3859,20 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
       <div key={tab} style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', animation: 'trtFadeIn 0.2s ease' }}>
         {!isSpectator && tab === 'track' && <TrackTab runner={{ ...session.runner,
           pace: trackPace, gradient: trackGradient }} event={currentEvent} onScan={doScan} onSos={onSos} onDnf={onDnf} offRoute={isOffRoute} onCancelSos={onCancelSos}/>}
-        {tab === 'route' && <RouteTab course={course} event={currentEvent}
-          runner={isSpectator ? (followedRunner ? { dist: followedRunner.distance, progressKm: followedRunner.progressKm } : { dist: '22K', progressKm: 0 }) : session.runner}
-          spectatorRunner={isSpectator ? followedRunner : null} livePos={effectiveLivePos}/>}
+        {/* A spectator's Route tab is now the exact same Info/Splits/Map/
+            Trophy screen as tapping a friend from the Friends tab
+            (embedded — no ✕, no "set as main tracked runner" button,
+            since this already *is* that) instead of the separate RouteTab
+            layout it used to be — those had drifted into two different
+            shapes for what's conceptually the same "look at this one
+            runner" screen. A runner's own Route tab (map/elevation of
+            their own progress, no checkpoint-detail panel) is unaffected. */}
+        {tab === 'route' && isSpectator && (
+          followedRunner
+            ? <FriendDetailSheet runner={followedRunner} eventId={currentEventId} event={currentEvent} embedded/>
+            : <EmptyState icon="🏃" text="ยังไม่ได้เลือกนักวิ่งที่จะติดตาม"/>
+        )}
+        {tab === 'route' && !isSpectator && <RouteTab course={course} event={currentEvent} runner={session.runner} spectatorRunner={null} livePos={effectiveLivePos}/>}
         {/* Used to pass null here for a spectator (isSpectator true — the
             "Follow the race" flow), same as it once did for RouteTab/
             FriendsTab before those were fixed to use currentEventId. That
