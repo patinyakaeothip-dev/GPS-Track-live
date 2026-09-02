@@ -540,9 +540,9 @@
     try {
       const raw = localStorage.getItem(GPS_MODE_KEY);
       if (raw === "saver") return "eco";
-      return GPS_MODES.includes(raw) ? raw : "normal";
+      return GPS_MODES.includes(raw) ? raw : "performance";
     } catch (_) {
-      return "normal";
+      return "performance";
     }
   }
   function saveMode(mode) {
@@ -553,7 +553,7 @@
   }
   var currentMode = loadMode();
   var MODE_CONFIG = {
-    performance: { distanceFilter: 20, heartbeatMs: 45e3, enableHighAccuracy: true, maximumAge: 3e3 },
+    performance: { distanceFilter: 50, heartbeatMs: 45e3, enableHighAccuracy: true, maximumAge: 3e3 },
     normal: { distanceFilter: 60, heartbeatMs: 21e4, enableHighAccuracy: true, maximumAge: 8e3 },
     eco: { distanceFilter: 500, heartbeatMs: 6e5, enableHighAccuracy: false, maximumAge: 6e4 }
   };
