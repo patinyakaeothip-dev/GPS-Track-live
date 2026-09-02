@@ -245,6 +245,19 @@
       markReady();
     });
   }
+  // Exposed as `refresh` for a user-initiated pull (a manual "รีเฟรช"
+  // button on Admin/Live Monitor, same reasoning as eventStore.refresh —
+  // watchCollection's onSnapshot listener above should already push every
+  // change live, but a stalled/silently-dead socket has no visible symptom
+  // of its own, so a way to force a fresh pull independent of it is worth
+  // having regardless of how rarely that actually happens.
+  function pullLatest() {
+    if (!window.fb) return;
+    window.fb.listDocs('runners').then(remote => {
+      saveRunners(remote.filter(r => !pendingDeletes.has(r.id)));
+      notifyUpdated();
+    }).catch(err => console.warn('[runner-store] Firestore pull failed', err));
+  }
   function notifyUpdated() {
     window.dispatchEvent(new CustomEvent('trt:runners-updated'));
   }
@@ -313,5 +326,5 @@
   if (window.fb) startSosLogFirestoreSync();
   else window.addEventListener('trt:firebase-ready', startSosLogFirestoreSync, { once: true });
 
-  Object.assign(window, { runnerStore: { listRunners, listRunnersByUid, registerRunner, updateRunnerProgress, cancelRunner, deleteRunner, renumberBibs, logSosTriggered, resolveSosLog, listSosLog, isReady, waitUntilReady } });
+  Object.assign(window, { runnerStore: { listRunners, listRunnersByUid, registerRunner, updateRunnerProgress, cancelRunner, deleteRunner, renumberBibs, logSosTriggered, resolveSosLog, listSosLog, isReady, waitUntilReady, refresh: pullLatest } });
 })();
