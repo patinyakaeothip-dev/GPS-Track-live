@@ -652,6 +652,13 @@ function SettingsToggle({ label, options, value, onChange }) {
 function SettingsScreen({ onBack }) {
   const prefs = useUnitPrefs();
   function patch(next) { saveUnitPrefs({ ...prefs, ...next }); }
+  // window.trtGpsTracker.setMode/getMode only exist once the native app has
+  // actually been rebuilt with that support — an older installed build
+  // (or the plain web fallback with no bridge at all) just won't have
+  // them, so this whole section stays hidden rather than offering a
+  // control that would silently do nothing.
+  const gpsModeSupported = !!(window.trtGpsTracker && window.trtGpsTracker.setMode && window.trtGpsTracker.getMode);
+  const [gpsMode, setGpsMode] = uS(() => gpsModeSupported ? window.trtGpsTracker.getMode() : 'normal');
   return (
     <div style={{ height: '100%', background: C.bg, fontFamily: C.font, display: 'flex', flexDirection: 'column' }}>
       <div style={{ padding: '40px 20px 14px', display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
@@ -674,6 +681,14 @@ function SettingsScreen({ onBack }) {
         <SettingsToggle label="ระยะทาง" options={[['km', 'กม.'], ['mi', 'ไมล์']]} value={prefs.distance} onChange={v => patch({ distance: v })}/>
         <SettingsToggle label="รูปแบบเวลา" options={[['24h', '24h'], ['12h', '12h']]} value={prefs.time} onChange={v => patch({ time: v })}/>
         <div style={{ fontSize: 11, color: C.muted, marginTop: 2, lineHeight: 1.5 }}>เปลี่ยนแค่การแสดงผลบนหน้าจอ ข้อมูล GPS/เวลาที่เก็บไว้จริงยังเป็นกิโลเมตร/24 ชม.เหมือนเดิมทุกที่</div>
+        {gpsModeSupported && (
+          <>
+            <div style={{ fontFamily: C.mono, fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted, marginTop: 10, marginBottom: 2 }}>GPS ระหว่างวิ่ง</div>
+            <SettingsToggle label="โหมดแบตเตอรี่" options={[['normal', 'ปกติ'], ['saver', '🔋 ประหยัด']]} value={gpsMode}
+              onChange={v => { window.trtGpsTracker.setMode(v); setGpsMode(v); }}/>
+            <div style={{ fontSize: 11, color: C.muted, marginTop: 2, lineHeight: 1.5 }}>โหมดประหยัดพลังงาน: ส่งตำแหน่งถี่น้อยลง จุดบนแผนที่จะขยับเป็นช่วงๆ มากกว่าเดิม แลกกับแบตอยู่ได้นานขึ้นตลอดการแข่ง</div>
+          </>
+        )}
       </div>
     </div>
   );

@@ -34,15 +34,39 @@ let heartbeatEventId = null;
 let heartbeatBib = null;
 let visibilityHandler = null;
 
-// The background-geolocation plugin only ever fires on ~50m of movement
-// (distanceFilter) — it has no time-based option of its own. That's fine
+// Battery-saver: a runner mid-race for many hours cares more about their
+// phone lasting the whole race than about map-dot smoothness. "Normal"
+// pings on every ~50m of movement with a fairly tight heartbeat; "saver"
+// widens both — fewer GPS radio wake-ups and fewer Firestore writes — plus
+// a coarser/cheaper fix on the web fallback (native's own accuracy is
+// controlled by distanceFilter alone; there's no separate accuracy knob on
+// that plugin). Persisted so the choice survives an app relaunch, same as
+// everything else read straight from localStorage in this file.
+const GPS_MODE_KEY = 'trt.gps.mode.v1';
+function loadMode() {
+  try { return localStorage.getItem(GPS_MODE_KEY) === 'saver' ? 'saver' : 'normal'; } catch (_) { return 'normal'; }
+}
+function saveMode(mode) {
+  try { localStorage.setItem(GPS_MODE_KEY, mode); } catch (_) {}
+}
+let currentMode = loadMode();
+const MODE_CONFIG = {
+  normal: { distanceFilter: 50, heartbeatMs: 30000, enableHighAccuracy: true, maximumAge: 5000 },
+  saver: { distanceFilter: 150, heartbeatMs: 90000, enableHighAccuracy: false, maximumAge: 20000 },
+};
+
+// The background-geolocation plugin only ever fires on movement past
+// distanceFilter — it has no time-based option of its own. That's fine
 // while running, but leaves the map dot sitting motionless for a long
 // stretch whenever a runner walks slowly, rests at a checkpoint, or is
 // stuck in a queue — indistinguishable on Live Monitor from GPS having
 // actually died. A heartbeat re-sends the last known fix on a timer so
 // there's always a recent ping to show/measure staleness against, even
-// with zero movement.
-const HEARTBEAT_MS = 30000;
+// with zero movement. The tick itself runs on a fixed, short interval
+// (HEARTBEAT_TICK_MS) regardless of mode — only the *threshold* checked
+// each tick depends on currentMode — so switching modes mid-race takes
+// effect on the very next tick with nothing to tear down and recreate.
+const HEARTBEAT_TICK_MS = 15000;
 function isNative() {
   return Capacitor.isNativePlatform();
 }
@@ -171,60 +195,102 @@ async function start(eventId, bib, onPingCb) {
   retryTimerId = setInterval(flushPending, 15000);
   window.addEventListener('online', flushPending);
   heartbeatTimerId = setInterval(() => {
-    if (!lastFix || Date.now() - lastPingAt < HEARTBEAT_MS) return;
+    if (!lastFix || Date.now() - lastPingAt < MODE_CONFIG[currentMode].heartbeatMs) return;
     pushPing(heartbeatEventId, heartbeatBib, lastFix.lat, lastFix.lon, { accuracy: lastFix.accuracy, speed: lastFix.speed });
-  }, HEARTBEAT_MS);
+  }, HEARTBEAT_TICK_MS);
 
   if (isNative()) {
-    watcherId = await BackgroundGeolocation.addWatcher(
-      {
-        backgroundMessage: 'กำลังติดตามตำแหน่ง GPS ระหว่างวิ่ง',
-        backgroundTitle: 'Rayong Trail',
-        requestPermissions: true,
-        stale: false,
-        distanceFilter: 50, // meters — spectators only need map-level precision; denser pings just burn battery + Firestore writes for no visible benefit
-      },
-      (location, error) => {
-        if (error) { console.warn('[gps-tracker] native watcher error', error); return; }
-        if (!location) return;
-        if (!shouldAcceptFix(location.accuracy)) { console.warn('[gps-tracker] dropping low-accuracy native fix', location.accuracy); return; }
-        pushPing(currentEventId, currentBib, location.latitude, location.longitude, { accuracy: location.accuracy, speed: location.speed ?? null });
-      },
-    );
+    await addNativeWatcher();
     return;
   }
+  startWebWatcher();
+}
 
-  // Web fallback: foreground-only.
-  if (navigator.geolocation) {
-    watcherId = navigator.geolocation.watchPosition(
+// Native watcher setup — its own function (not inlined in start()) so
+// setMode can remove and re-add it with a fresh distanceFilter without
+// touching the timers/listeners start() also sets up, which only ever need
+// doing once per session regardless of how many times the mode changes.
+async function addNativeWatcher() {
+  watcherId = await BackgroundGeolocation.addWatcher(
+    {
+      backgroundMessage: 'กำลังติดตามตำแหน่ง GPS ระหว่างวิ่ง',
+      backgroundTitle: 'Rayong Trail',
+      requestPermissions: true,
+      stale: false,
+      distanceFilter: MODE_CONFIG[currentMode].distanceFilter, // meters — spectators only need map-level precision; denser pings just burn battery + Firestore writes for no visible benefit
+    },
+    (location, error) => {
+      if (error) { console.warn('[gps-tracker] native watcher error', error); return; }
+      if (!location) return;
+      if (!shouldAcceptFix(location.accuracy)) { console.warn('[gps-tracker] dropping low-accuracy native fix', location.accuracy); return; }
+      pushPing(currentEventId, currentBib, location.latitude, location.longitude, { accuracy: location.accuracy, speed: location.speed ?? null });
+    },
+  );
+}
+
+// Web fallback: foreground-only. Its own function for the same reason as
+// addNativeWatcher above — setMode can tear down and restart just the
+// watcher, not the visibilityHandler (registered once, reads currentMode
+// itself on every catch-up fix so it never goes stale).
+function startWebWatcher() {
+  if (!navigator.geolocation) return;
+  const cfg = MODE_CONFIG[currentMode];
+  watcherId = navigator.geolocation.watchPosition(
+    pos => {
+      if (!shouldAcceptFix(pos.coords.accuracy)) { console.warn('[gps-tracker] dropping low-accuracy browser fix', pos.coords.accuracy); return; }
+      pushPing(currentEventId, currentBib, pos.coords.latitude, pos.coords.longitude, { accuracy: pos.coords.accuracy, speed: pos.coords.speed ?? null });
+    },
+    err => console.warn('[gps-tracker] browser watcher error', err),
+    { enableHighAccuracy: cfg.enableHighAccuracy, maximumAge: cfg.maximumAge },
+  );
+  if (visibilityHandler) return; // already registered from an earlier startWebWatcher() call this session
+  // watchPosition just silently stops delivering callbacks while the tab
+  // is backgrounded/screen-locked (see the file-level note on why) —
+  // there was nothing that kicked it back into gear once the runner
+  // unlocked their phone and came back, so Live Monitor kept showing
+  // wherever they were the moment the screen locked, arbitrarily far
+  // behind, until the next natural movement callback happened to land.
+  // Grab one fresh fix immediately on regaining visibility instead of
+  // waiting for that.
+  visibilityHandler = () => {
+    if (document.visibilityState !== 'visible') return;
+    const c = MODE_CONFIG[currentMode];
+    navigator.geolocation.getCurrentPosition(
       pos => {
-        if (!shouldAcceptFix(pos.coords.accuracy)) { console.warn('[gps-tracker] dropping low-accuracy browser fix', pos.coords.accuracy); return; }
+        if (!shouldAcceptFix(pos.coords.accuracy)) { console.warn('[gps-tracker] dropping low-accuracy catch-up fix', pos.coords.accuracy); return; }
         pushPing(currentEventId, currentBib, pos.coords.latitude, pos.coords.longitude, { accuracy: pos.coords.accuracy, speed: pos.coords.speed ?? null });
       },
-      err => console.warn('[gps-tracker] browser watcher error', err),
-      { enableHighAccuracy: true, maximumAge: 5000 },
+      err => console.warn('[gps-tracker] visibility catch-up fix failed', err),
+      { enableHighAccuracy: c.enableHighAccuracy, maximumAge: c.maximumAge },
     );
-    // watchPosition just silently stops delivering callbacks while the tab
-    // is backgrounded/screen-locked (see the file-level note on why) —
-    // there was nothing that kicked it back into gear once the runner
-    // unlocked their phone and came back, so Live Monitor kept showing
-    // wherever they were the moment the screen locked, arbitrarily far
-    // behind, until the next natural ~50m-of-movement callback happened to
-    // land. Grab one fresh fix immediately on regaining visibility instead
-    // of waiting for that.
-    visibilityHandler = () => {
-      if (document.visibilityState !== 'visible') return;
-      navigator.geolocation.getCurrentPosition(
-        pos => {
-          if (!shouldAcceptFix(pos.coords.accuracy)) { console.warn('[gps-tracker] dropping low-accuracy catch-up fix', pos.coords.accuracy); return; }
-          pushPing(currentEventId, currentBib, pos.coords.latitude, pos.coords.longitude, { accuracy: pos.coords.accuracy, speed: pos.coords.speed ?? null });
-        },
-        err => console.warn('[gps-tracker] visibility catch-up fix failed', err),
-        { enableHighAccuracy: true, maximumAge: 5000 },
-      );
-    };
-    document.addEventListener('visibilitychange', visibilityHandler);
+  };
+  document.addEventListener('visibilitychange', visibilityHandler);
+}
+
+// Switches battery-saver on/off. Takes effect on the very next heartbeat
+// tick regardless (see HEARTBEAT_TICK_MS above); for the actual GPS
+// watcher — distanceFilter (native) / enableHighAccuracy+maximumAge (web)
+// — those are only read once, at the moment a watcher is created, so an
+// already-running watcher is torn down and immediately re-created here to
+// pick up the new setting mid-race instead of only on the next app launch.
+async function setMode(mode) {
+  const next = mode === 'saver' ? 'saver' : 'normal';
+  if (next === currentMode) return;
+  currentMode = next;
+  saveMode(next);
+  if (watcherId == null) return;
+  if (isNative()) {
+    await BackgroundGeolocation.removeWatcher({ id: watcherId });
+    watcherId = null;
+    await addNativeWatcher();
+  } else if (navigator.geolocation) {
+    navigator.geolocation.clearWatch(watcherId);
+    watcherId = null;
+    startWebWatcher();
   }
+}
+function getMode() {
+  return currentMode;
 }
 
 async function stop() {
@@ -244,4 +310,4 @@ async function stop() {
   currentBib = null;
 }
 
-window.trtGpsTracker = { start, stop, isNative };
+window.trtGpsTracker = { start, stop, isNative, setMode, getMode };

@@ -534,7 +534,26 @@
   var heartbeatEventId = null;
   var heartbeatBib = null;
   var visibilityHandler = null;
-  var HEARTBEAT_MS = 3e4;
+  var GPS_MODE_KEY = "trt.gps.mode.v1";
+  function loadMode() {
+    try {
+      return localStorage.getItem(GPS_MODE_KEY) === "saver" ? "saver" : "normal";
+    } catch (_) {
+      return "normal";
+    }
+  }
+  function saveMode(mode) {
+    try {
+      localStorage.setItem(GPS_MODE_KEY, mode);
+    } catch (_) {
+    }
+  }
+  var currentMode = loadMode();
+  var MODE_CONFIG = {
+    normal: { distanceFilter: 50, heartbeatMs: 3e4, enableHighAccuracy: true, maximumAge: 5e3 },
+    saver: { distanceFilter: 150, heartbeatMs: 9e4, enableHighAccuracy: false, maximumAge: 2e4 }
+  };
+  var HEARTBEAT_TICK_MS = 15e3;
   function isNative() {
     return Capacitor.isNativePlatform();
   }
@@ -604,62 +623,89 @@
     retryTimerId = setInterval(flushPending, 15e3);
     window.addEventListener("online", flushPending);
     heartbeatTimerId = setInterval(() => {
-      if (!lastFix || Date.now() - lastPingAt < HEARTBEAT_MS) return;
+      if (!lastFix || Date.now() - lastPingAt < MODE_CONFIG[currentMode].heartbeatMs) return;
       pushPing(heartbeatEventId, heartbeatBib, lastFix.lat, lastFix.lon, { accuracy: lastFix.accuracy, speed: lastFix.speed });
-    }, HEARTBEAT_MS);
+    }, HEARTBEAT_TICK_MS);
     if (isNative()) {
-      watcherId = await BackgroundGeolocation.addWatcher(
-        {
-          backgroundMessage: "\u0E01\u0E33\u0E25\u0E31\u0E07\u0E15\u0E34\u0E14\u0E15\u0E32\u0E21\u0E15\u0E33\u0E41\u0E2B\u0E19\u0E48\u0E07 GPS \u0E23\u0E30\u0E2B\u0E27\u0E48\u0E32\u0E07\u0E27\u0E34\u0E48\u0E07",
-          backgroundTitle: "Rayong Trail",
-          requestPermissions: true,
-          stale: false,
-          distanceFilter: 50
-          // meters — spectators only need map-level precision; denser pings just burn battery + Firestore writes for no visible benefit
-        },
-        (location, error) => {
-          if (error) {
-            console.warn("[gps-tracker] native watcher error", error);
-            return;
-          }
-          if (!location) return;
-          if (!shouldAcceptFix(location.accuracy)) {
-            console.warn("[gps-tracker] dropping low-accuracy native fix", location.accuracy);
-            return;
-          }
-          pushPing(currentEventId, currentBib, location.latitude, location.longitude, { accuracy: location.accuracy, speed: location.speed ?? null });
-        }
-      );
+      await addNativeWatcher();
       return;
     }
-    if (navigator.geolocation) {
-      watcherId = navigator.geolocation.watchPosition(
+    startWebWatcher();
+  }
+  async function addNativeWatcher() {
+    watcherId = await BackgroundGeolocation.addWatcher(
+      {
+        backgroundMessage: "\u0E01\u0E33\u0E25\u0E31\u0E07\u0E15\u0E34\u0E14\u0E15\u0E32\u0E21\u0E15\u0E33\u0E41\u0E2B\u0E19\u0E48\u0E07 GPS \u0E23\u0E30\u0E2B\u0E27\u0E48\u0E32\u0E07\u0E27\u0E34\u0E48\u0E07",
+        backgroundTitle: "Rayong Trail",
+        requestPermissions: true,
+        stale: false,
+        distanceFilter: MODE_CONFIG[currentMode].distanceFilter
+        // meters — spectators only need map-level precision; denser pings just burn battery + Firestore writes for no visible benefit
+      },
+      (location, error) => {
+        if (error) {
+          console.warn("[gps-tracker] native watcher error", error);
+          return;
+        }
+        if (!location) return;
+        if (!shouldAcceptFix(location.accuracy)) {
+          console.warn("[gps-tracker] dropping low-accuracy native fix", location.accuracy);
+          return;
+        }
+        pushPing(currentEventId, currentBib, location.latitude, location.longitude, { accuracy: location.accuracy, speed: location.speed ?? null });
+      }
+    );
+  }
+  function startWebWatcher() {
+    if (!navigator.geolocation) return;
+    const cfg = MODE_CONFIG[currentMode];
+    watcherId = navigator.geolocation.watchPosition(
+      (pos) => {
+        if (!shouldAcceptFix(pos.coords.accuracy)) {
+          console.warn("[gps-tracker] dropping low-accuracy browser fix", pos.coords.accuracy);
+          return;
+        }
+        pushPing(currentEventId, currentBib, pos.coords.latitude, pos.coords.longitude, { accuracy: pos.coords.accuracy, speed: pos.coords.speed ?? null });
+      },
+      (err) => console.warn("[gps-tracker] browser watcher error", err),
+      { enableHighAccuracy: cfg.enableHighAccuracy, maximumAge: cfg.maximumAge }
+    );
+    if (visibilityHandler) return;
+    visibilityHandler = () => {
+      if (document.visibilityState !== "visible") return;
+      const c = MODE_CONFIG[currentMode];
+      navigator.geolocation.getCurrentPosition(
         (pos) => {
           if (!shouldAcceptFix(pos.coords.accuracy)) {
-            console.warn("[gps-tracker] dropping low-accuracy browser fix", pos.coords.accuracy);
+            console.warn("[gps-tracker] dropping low-accuracy catch-up fix", pos.coords.accuracy);
             return;
           }
           pushPing(currentEventId, currentBib, pos.coords.latitude, pos.coords.longitude, { accuracy: pos.coords.accuracy, speed: pos.coords.speed ?? null });
         },
-        (err) => console.warn("[gps-tracker] browser watcher error", err),
-        { enableHighAccuracy: true, maximumAge: 5e3 }
+        (err) => console.warn("[gps-tracker] visibility catch-up fix failed", err),
+        { enableHighAccuracy: c.enableHighAccuracy, maximumAge: c.maximumAge }
       );
-      visibilityHandler = () => {
-        if (document.visibilityState !== "visible") return;
-        navigator.geolocation.getCurrentPosition(
-          (pos) => {
-            if (!shouldAcceptFix(pos.coords.accuracy)) {
-              console.warn("[gps-tracker] dropping low-accuracy catch-up fix", pos.coords.accuracy);
-              return;
-            }
-            pushPing(currentEventId, currentBib, pos.coords.latitude, pos.coords.longitude, { accuracy: pos.coords.accuracy, speed: pos.coords.speed ?? null });
-          },
-          (err) => console.warn("[gps-tracker] visibility catch-up fix failed", err),
-          { enableHighAccuracy: true, maximumAge: 5e3 }
-        );
-      };
-      document.addEventListener("visibilitychange", visibilityHandler);
+    };
+    document.addEventListener("visibilitychange", visibilityHandler);
+  }
+  async function setMode(mode) {
+    const next = mode === "saver" ? "saver" : "normal";
+    if (next === currentMode) return;
+    currentMode = next;
+    saveMode(next);
+    if (watcherId == null) return;
+    if (isNative()) {
+      await BackgroundGeolocation.removeWatcher({ id: watcherId });
+      watcherId = null;
+      await addNativeWatcher();
+    } else if (navigator.geolocation) {
+      navigator.geolocation.clearWatch(watcherId);
+      watcherId = null;
+      startWebWatcher();
     }
+  }
+  function getMode() {
+    return currentMode;
   }
   async function stop() {
     if (retryTimerId) {
@@ -686,7 +732,7 @@
     currentEventId = null;
     currentBib = null;
   }
-  window.trtGpsTracker = { start, stop, isNative };
+  window.trtGpsTracker = { start, stop, isNative, setMode, getMode };
 })();
 /*! Bundled license information:
 
