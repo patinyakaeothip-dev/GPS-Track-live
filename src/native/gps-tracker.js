@@ -55,15 +55,15 @@ function loadMode() {
     // rather than silently reverting anyone who'd already picked it back
     // to normal.
     if (raw === 'saver') return 'eco';
-    return GPS_MODES.includes(raw) ? raw : 'normal';
-  } catch (_) { return 'normal'; }
+    return GPS_MODES.includes(raw) ? raw : 'performance';
+  } catch (_) { return 'performance'; }
 }
 function saveMode(mode) {
   try { localStorage.setItem(GPS_MODE_KEY, mode); } catch (_) {}
 }
 let currentMode = loadMode();
 const MODE_CONFIG = {
-  performance: { distanceFilter: 20, heartbeatMs: 45000, enableHighAccuracy: true, maximumAge: 3000 },
+  performance: { distanceFilter: 50, heartbeatMs: 45000, enableHighAccuracy: true, maximumAge: 3000 },
   normal: { distanceFilter: 60, heartbeatMs: 210000, enableHighAccuracy: true, maximumAge: 8000 },
   eco: { distanceFilter: 500, heartbeatMs: 600000, enableHighAccuracy: false, maximumAge: 60000 },
 };
