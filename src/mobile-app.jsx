@@ -175,6 +175,20 @@ function fmtClockPref(hhmm, prefs) {
   h = h % 12; if (h === 0) h = 12;
   return `${h}:${m[2]}${m[3] ? ':' + m[3] : ''} ${ampm}`;
 }
+// minPerKm is pace as minutes-per-kilometer (a plain float, e.g. 6.7 =
+// 6'42"/กม.) — the unit every pace is actually computed in throughout this
+// file, straight from elapsed-time-over-distance-in-km. Converting the
+// pace itself (not just formatting the same number differently) for mi
+// mode, since minutes-per-mile is a different number, not minutes-per-km
+// relabeled — 1 mile = 1.609344 km, so minPerMi = minPerKm * 1.609344.
+function fmtPacePref(minPerKm, prefs) {
+  if (minPerKm == null || !isFinite(minPerKm) || minPerKm <= 0) return null;
+  const mi = prefs && prefs.distance === 'mi';
+  const min = mi ? minPerKm * 1.609344 : minPerKm;
+  const mm = Math.floor(min);
+  const ss = Math.round((min - mm) * 60);
+  return `${mm}'${String(ss).padStart(2, '0')}"/${mi ? 'mi' : 'กม.'}`;
+}
 
 // Loads the real course for a specific event+distance (from GPX uploaded in
 // Admin — see src/course-geo.js buildEventCoursePaths) when both are known,
@@ -2238,6 +2252,7 @@ function RouteTab({ course, runner, event, spectatorRunner, livePos }) {
 // same checkpoint-time data the runner sees in their own Track tab, plus a
 // live speed reading when their phone has an active GPS fix.
 function FollowedRunnerPanel({ runner, event, livePos, course }) {
+  const prefs = useUnitPrefs();
   const [, setTick] = uS(0);
   uE(() => { const id = setInterval(() => setTick(t => t + 1), 1000); return () => clearInterval(id); }, []);
 
@@ -2267,7 +2282,7 @@ function FollowedRunnerPanel({ runner, event, livePos, course }) {
   const gpsLive = liveAgeMs != null && liveAgeMs < 2 * 60 * 1000;
   const speedMps = gpsLive ? livePos.speed : null;
   const paceLabel = (speedMps != null && speedMps > 0.3)
-    ? (() => { const min = 1000 / speedMps / 60; const mm = Math.floor(min); const ss = Math.round((min - mm) * 60); return `${mm}'${String(ss).padStart(2, '0')}"/กม.`; })()
+    ? fmtPacePref(1000 / speedMps / 60, prefs)
     : (speedMps != null ? 'หยุดอยู่' : '—');
 
   // Negative here means a checkin got stamped onto a date in the future
@@ -2297,10 +2312,8 @@ function FollowedRunnerPanel({ runner, event, livePos, course }) {
     const baseMs = stopped ? totalMs : elapsedMs;
     if (baseMs == null || !(runner.progressKm > 0)) return '—';
     const min = (baseMs / 60000) / runner.progressKm;
-    if (!isFinite(min) || min <= 0) return '—';
-    const mm = Math.floor(min), ss = Math.round((min - mm) * 60);
-    return `${mm}'${String(ss).padStart(2, '0')}"/กม.`;
-  }, [stopped, totalMs, elapsedMs, runner.progressKm]);
+    return fmtPacePref(min, prefs) || '—';
+  }, [stopped, totalMs, elapsedMs, runner.progressKm, prefs]);
 
   return (
     <div style={{ background: '#fff', borderTop: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}` }}>
@@ -2839,9 +2852,11 @@ function RankingTab({ snap, eventId, event }) {
   }
   function fmtPace(minPerKm) {
     if (minPerKm == null || !isFinite(minPerKm)) return null;
-    const m = Math.floor(minPerKm);
-    const s = Math.round((minPerKm - m) * 60);
-    return `${m}:${String(s).padStart(2, '0')}/กม.`;
+    const mi = prefs && prefs.distance === 'mi';
+    const min = mi ? minPerKm * 1.609344 : minPerKm;
+    const m = Math.floor(min);
+    const s = Math.round((min - m) * 60);
+    return `${m}:${String(s).padStart(2, '0')}/${mi ? 'mi' : 'กม.'}`;
   }
   // "9.4km · คาดถึง [จุดถัดไป] ~14:05" — an estimate, not a promise:
   // extrapolates the current leader's own average pace so far (from gun
@@ -3177,15 +3192,13 @@ function FriendDetailSheet({ runner: r, eventId, event, onClose, onFollow, embed
     const endMs = finished ? finishMs : (r.dnf ? null : Date.now());
     const elapsedMs = (gunMs != null && endMs != null) ? endMs - gunMs : null;
     const pace = (elapsedMs != null && r.progressKm) ? (elapsedMs / 60000) / r.progressKm : null;
-    const paceLabel = (pace != null && isFinite(pace) && pace > 0)
-      ? `${Math.floor(pace)}'${String(Math.round((pace - Math.floor(pace)) * 60)).padStart(2, '0')}"/กม.`
-      : '—';
+    const paceLabel = fmtPacePref(pace, prefs) || '—';
     const lastMs = last && combine ? combine(event.raceDateISO, last.t, gunMs) : null;
     const diff = finished
       ? (bestAtCp.finish != null && finishMs != null ? finishMs - bestAtCp.finish : null)
       : (last && bestAtCp[last.cp] != null && lastMs != null ? lastMs - bestAtCp[last.cp] : null);
     return { avgPaceLabel: paceLabel, diffToLeaderMs: diff };
-  }, [event, eventId, r, cks, last, combine]);
+  }, [event, eventId, r, cks, last, combine, prefs]);
   function fmtDiff(ms) {
     if (ms == null || !isFinite(ms) || ms <= 0) return '—';
     const s = Math.floor(ms / 1000);
@@ -4070,6 +4083,7 @@ function ProfileScreen({ user, onLogout, onClose, onSave, onboard }) {
 
 // ── App shell with bottom tabs ────────────────────────────────────────────
 function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome, onCancelSos, onBackToPicker }) {
+  const prefs = useUnitPrefs();
   const isSpectator = !!session.spectator;
   // A spectator who just picked a runner from the list wants to see that
   // runner's route/checkpoints right away — landing on Friends (a list of
@@ -4233,9 +4247,7 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
     const finished = session.runner.checkins.some(c => c.cp === 'finish');
     const gpsLive = !finished && effectiveLivePos && effectiveLivePos.at && (Date.now() - effectiveLivePos.at) < 2 * 60 * 1000;
     if (gpsLive && effectiveLivePos.speed > 0.3) {
-      const min = 1000 / effectiveLivePos.speed / 60;
-      const mm = Math.floor(min), ss = Math.round((min - mm) * 60);
-      return `${mm}'${String(ss).padStart(2, '0')}"/กม.`;
+      return fmtPacePref(1000 / effectiveLivePos.speed / 60, prefs);
     }
     const combine = window.eventStatus && window.eventStatus.combineDateTime;
     const startCk = session.runner.checkins.find(c => c.cp === 'start');
@@ -4252,10 +4264,8 @@ function AppShell({ user, session, updateRunner, onSos, onDnf, onProfile, onHome
     const endMs = finished ? finishMs : Date.now();
     if (endMs == null) return '—';
     const min = (endMs - startMs) / 60000 / km;
-    if (!isFinite(min) || min <= 0) return '—';
-    const mm = Math.floor(min), ss = Math.round((min - mm) * 60);
-    return `${mm}'${String(ss).padStart(2, '0')}"/กม.`;
-  }, [isSpectator, session.runner, currentEvent, effectiveLivePos]);
+    return fmtPacePref(min, prefs) || '—';
+  }, [isSpectator, session.runner, currentEvent, effectiveLivePos, prefs]);
   const trackGradient = uM(() => {
     if (isSpectator || !session.runner || !session.runner.checkins.length || !course || !course.points) return '—';
     const gpsLive = effectiveLivePos && effectiveLivePos.at && (Date.now() - effectiveLivePos.at) < 2 * 60 * 1000 && effectiveLivePos.lat != null;
