@@ -190,6 +190,35 @@ function fmtPacePref(minPerKm, prefs) {
   return `${mm}'${String(ss).padStart(2, '0')}"/${mi ? 'mi' : 'กม.'}`;
 }
 
+// ── Theme preference (Settings) ────────────────────────────────────────────
+// See index.html's [data-theme="dark"] rules for what this actually does
+// visually (a global invert()+hue-rotate filter, not a hand-built dark
+// palette — that file's comment explains why). This side only owns the
+// preference itself and reflecting it onto <html data-theme>, which is
+// what those CSS rules key off.
+const THEME_KEY = 'trt-theme-pref';
+function loadTheme() {
+  try { return localStorage.getItem(THEME_KEY) === 'dark' ? 'dark' : 'light'; } catch (e) { return 'light'; }
+}
+function saveTheme(theme) {
+  try { localStorage.setItem(THEME_KEY, theme); } catch (e) {}
+  window.dispatchEvent(new CustomEvent('trt:theme-updated'));
+}
+function useTheme() {
+  const [theme, setTheme] = uS(loadTheme);
+  uE(() => {
+    const onUpdate = () => setTheme(loadTheme());
+    window.addEventListener('trt:theme-updated', onUpdate);
+    return () => window.removeEventListener('trt:theme-updated', onUpdate);
+  }, []);
+  // Reflected as a side effect (not read directly by any component's own
+  // render) so this is the one and only place that ever touches the actual
+  // DOM attribute — every other useTheme() caller just needs the current
+  // value to drive its own toggle UI.
+  uE(() => { document.documentElement.setAttribute('data-theme', theme); }, [theme]);
+  return theme;
+}
+
 // Loads the real course for a specific event+distance (from GPX uploaded in
 // Admin — see src/course-geo.js buildEventCoursePaths) when both are known,
 // falling back to the bundled demo course otherwise (e.g. spectator not yet
@@ -666,6 +695,7 @@ function SettingsToggle({ label, options, value, onChange }) {
 function SettingsScreen({ onBack }) {
   const prefs = useUnitPrefs();
   function patch(next) { saveUnitPrefs({ ...prefs, ...next }); }
+  const theme = useTheme();
   // window.trtGpsTracker.setMode/getMode only exist once the native app has
   // actually been rebuilt with that support — an older installed build
   // (or the plain web fallback with no bridge at all) just won't have
@@ -691,6 +721,9 @@ function SettingsScreen({ onBack }) {
             </a>
           ))}
         </div>
+        <div style={{ fontFamily: C.mono, fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted, marginTop: 10, marginBottom: 2 }}>ธีม</div>
+        <SettingsToggle label="โหมดสี" options={[['light', '☀️ ปกติ'], ['dark', '🌙 มืด']]} value={theme} onChange={v => saveTheme(v)}/>
+        <div style={{ fontSize: 11, color: C.muted, marginTop: 2, lineHeight: 1.5 }}>โหมดมืดใช้วิธีกลับสีทั้งหน้าจอ (ไม่ใช่ชุดสีที่ออกแบบใหม่) เพราะสีในแอพตอนนี้ยังไม่รองรับสลับธีมโดยตรง — โทนสีจะใกล้เคียงของเดิมแต่ไม่เป๊ะ 100%</div>
         <div style={{ fontFamily: C.mono, fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted, marginTop: 10, marginBottom: 2 }}>หน่วยที่แสดง</div>
         <SettingsToggle label="ระยะทาง" options={[['km', 'กม.'], ['mi', 'ไมล์']]} value={prefs.distance} onChange={v => patch({ distance: v })}/>
         <SettingsToggle label="รูปแบบเวลา" options={[['24h', '24h'], ['12h', '12h']]} value={prefs.time} onChange={v => patch({ time: v })}/>
@@ -4464,6 +4497,11 @@ function initialScreenFor(session, savedScreen) {
 }
 
 function MobileApp() {
+  // Applies the stored theme preference to <html data-theme> on every load
+  // and whenever Settings changes it — called once here (not per-screen)
+  // so the preference takes effect immediately on app start regardless of
+  // whether Settings has ever actually been opened this session.
+  useTheme();
   const [session, setSession] = uS(() => loadSession());
   // A session only belongs on the 'app' screen once it actually has a
   // runner or is following one — otherwise (logged in but never registered/

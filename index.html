@@ -109,6 +109,27 @@
         box-shadow: none; background: #efe9dc;
         padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
     }
+    /* Dark theme, toggled via <html data-theme="dark"> (see mobile-app.jsx's
+       theme preference). Every color in this app is a hardcoded hex literal
+       in inline styles — there is no swappable palette to redirect, and
+       hand-converting every one of them (hundreds, scattered across a
+       4000+ line file with no automated visual testing available in this
+       environment) is a large, high-regression-risk rewrite in its own
+       right. invert()+hue-rotate(180deg) is the standard fallback for
+       exactly this situation (the same trick browser reader-mode/extension
+       dark themes use on sites that were never built with one) — it flips
+       light backgrounds to dark and dark text to light in one global
+       operation, roughly preserving hue on saturated colors, without
+       touching a single one of those hardcoded values. Real photos/logos/
+       map tiles would come out looking like photo negatives under a raw
+       invert, so they're counter-inverted back to normal right after.
+       Trade-off worth being upfront about: this reads as "the whole screen
+       inverted," not a hand-tuned dark palette — colors are close to their
+       original hue but not pixel-identical to what a designed dark mode
+       would use. */
+    [data-theme="dark"] #root { filter: invert(1) hue-rotate(180deg); }
+    [data-theme="dark"] #root img,
+    [data-theme="dark"] #root .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg); }
   </style>
 </head>
 <body>
