@@ -535,9 +535,12 @@
   var heartbeatBib = null;
   var visibilityHandler = null;
   var GPS_MODE_KEY = "trt.gps.mode.v1";
+  var GPS_MODES = ["performance", "normal", "eco"];
   function loadMode() {
     try {
-      return localStorage.getItem(GPS_MODE_KEY) === "saver" ? "saver" : "normal";
+      const raw = localStorage.getItem(GPS_MODE_KEY);
+      if (raw === "saver") return "eco";
+      return GPS_MODES.includes(raw) ? raw : "normal";
     } catch (_) {
       return "normal";
     }
@@ -550,8 +553,9 @@
   }
   var currentMode = loadMode();
   var MODE_CONFIG = {
-    normal: { distanceFilter: 50, heartbeatMs: 3e4, enableHighAccuracy: true, maximumAge: 5e3 },
-    saver: { distanceFilter: 150, heartbeatMs: 9e4, enableHighAccuracy: false, maximumAge: 2e4 }
+    performance: { distanceFilter: 20, heartbeatMs: 45e3, enableHighAccuracy: true, maximumAge: 3e3 },
+    normal: { distanceFilter: 60, heartbeatMs: 21e4, enableHighAccuracy: true, maximumAge: 8e3 },
+    eco: { distanceFilter: 500, heartbeatMs: 6e5, enableHighAccuracy: false, maximumAge: 6e4 }
   };
   var HEARTBEAT_TICK_MS = 15e3;
   function isNative() {
@@ -689,7 +693,7 @@
     document.addEventListener("visibilitychange", visibilityHandler);
   }
   async function setMode(mode) {
-    const next = mode === "saver" ? "saver" : "normal";
+    const next = GPS_MODES.includes(mode) ? mode : "normal";
     if (next === currentMode) return;
     currentMode = next;
     saveMode(next);

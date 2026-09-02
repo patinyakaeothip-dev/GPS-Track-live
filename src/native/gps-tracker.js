@@ -34,25 +34,38 @@ let heartbeatEventId = null;
 let heartbeatBib = null;
 let visibilityHandler = null;
 
-// Battery-saver: a runner mid-race for many hours cares more about their
-// phone lasting the whole race than about map-dot smoothness. "Normal"
-// pings on every ~50m of movement with a fairly tight heartbeat; "saver"
-// widens both — fewer GPS radio wake-ups and fewer Firestore writes — plus
-// a coarser/cheaper fix on the web fallback (native's own accuracy is
-// controlled by distanceFilter alone; there's no separate accuracy knob on
-// that plugin). Persisted so the choice survives an app relaunch, same as
-// everything else read straight from localStorage in this file.
+// Battery mode: a runner mid-race for many hours cares more about their
+// phone lasting the whole race than about map-dot smoothness on a long
+// distance, but a short/technical race wants the tightest update rate it
+// can get. Three tiers instead of a plain on/off toggle, matching the
+// reference the user asked to match — heartbeatMs is this mode's ceiling
+// on how long the dot can sit stale with zero movement; distanceFilter is
+// how far a runner must move to trigger a ping before that ceiling hits;
+// enableHighAccuracy/maximumAge only affect the web fallback (native's own
+// accuracy is controlled by distanceFilter alone; there's no separate
+// accuracy knob on that plugin). Persisted so the choice survives an app
+// relaunch, same as everything else read straight from localStorage here.
 const GPS_MODE_KEY = 'trt.gps.mode.v1';
+const GPS_MODES = ['performance', 'normal', 'eco'];
 function loadMode() {
-  try { return localStorage.getItem(GPS_MODE_KEY) === 'saver' ? 'saver' : 'normal'; } catch (_) { return 'normal'; }
+  try {
+    const raw = localStorage.getItem(GPS_MODE_KEY);
+    // 'saver' was this key's only non-'normal' value before the 3-tier
+    // split below — treat it as this range's closest equivalent, eco,
+    // rather than silently reverting anyone who'd already picked it back
+    // to normal.
+    if (raw === 'saver') return 'eco';
+    return GPS_MODES.includes(raw) ? raw : 'normal';
+  } catch (_) { return 'normal'; }
 }
 function saveMode(mode) {
   try { localStorage.setItem(GPS_MODE_KEY, mode); } catch (_) {}
 }
 let currentMode = loadMode();
 const MODE_CONFIG = {
-  normal: { distanceFilter: 50, heartbeatMs: 30000, enableHighAccuracy: true, maximumAge: 5000 },
-  saver: { distanceFilter: 150, heartbeatMs: 90000, enableHighAccuracy: false, maximumAge: 20000 },
+  performance: { distanceFilter: 20, heartbeatMs: 45000, enableHighAccuracy: true, maximumAge: 3000 },
+  normal: { distanceFilter: 60, heartbeatMs: 210000, enableHighAccuracy: true, maximumAge: 8000 },
+  eco: { distanceFilter: 500, heartbeatMs: 600000, enableHighAccuracy: false, maximumAge: 60000 },
 };
 
 // The background-geolocation plugin only ever fires on movement past
@@ -274,7 +287,7 @@ function startWebWatcher() {
 // already-running watcher is torn down and immediately re-created here to
 // pick up the new setting mid-race instead of only on the next app launch.
 async function setMode(mode) {
-  const next = mode === 'saver' ? 'saver' : 'normal';
+  const next = GPS_MODES.includes(mode) ? mode : 'normal';
   if (next === currentMode) return;
   currentMode = next;
   saveMode(next);

@@ -684,9 +684,9 @@ function SettingsScreen({ onBack }) {
         {gpsModeSupported && (
           <>
             <div style={{ fontFamily: C.mono, fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted, marginTop: 10, marginBottom: 2 }}>GPS ระหว่างวิ่ง</div>
-            <SettingsToggle label="โหมดแบตเตอรี่" options={[['normal', 'ปกติ'], ['saver', '🔋 ประหยัด']]} value={gpsMode}
+            <SettingsToggle label="โหมดแบตเตอรี่" options={[['performance', '⚡ Perf'], ['normal', 'Normal'], ['eco', '🔋 Eco']]} value={gpsMode}
               onChange={v => { window.trtGpsTracker.setMode(v); setGpsMode(v); }}/>
-            <div style={{ fontSize: 11, color: C.muted, marginTop: 2, lineHeight: 1.5 }}>โหมดประหยัดพลังงาน: ส่งตำแหน่งถี่น้อยลง จุดบนแผนที่จะขยับเป็นช่วงๆ มากกว่าเดิม แลกกับแบตอยู่ได้นานขึ้นตลอดการแข่ง</div>
+            <div style={{ fontSize: 11, color: C.muted, marginTop: 2, lineHeight: 1.5 }}>Performance อัพเดทถี่สุด เหมาะระยะสั้น (≤20 กม.) · Normal สมดุล เหมาะระยะกลาง (~50 กม.) · Eco อัพเดทห่างสุด แบตอยู่ได้นานสุด เหมาะระยะไกล (100+ กม.)</div>
           </>
         )}
       </div>
