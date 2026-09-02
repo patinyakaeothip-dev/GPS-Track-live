@@ -308,6 +308,7 @@ function LiveMonitorApp() {
   // so selecting more people here costs nothing extra.
   const [watchMode, setWatchMode] = mS(false);
   const [watchBibs, setWatchBibs] = mS([]);
+  const [refreshDone, setRefreshDone] = mS(null); // null = idle icon, true = brief ✓ after a manual refresh
   function toggleWatchMode() {
     setWatchMode(v => !v);
     setWatchBibs([]);
@@ -929,6 +930,16 @@ function LiveMonitorApp() {
               )}
             </select>
           )}
+          {/* watchCollection's onSnapshot listener already pushes every
+              change live — this button isn't the normal way data gets
+              here, it's a fallback for the rare case that socket stalls
+              silently with no visible symptom of its own (same reasoning
+              as eventStore/runnerStore's own `refresh` export, added for
+              the mobile app's pull-to-refresh). Desktop/RD screen, so a
+              plain click button rather than a mobile pull gesture. */}
+          <button onClick={() => { setRefreshDone(false); if (window.eventStore) window.eventStore.refresh(); if (window.runnerStore) window.runnerStore.refresh(); setTimeout(() => setRefreshDone(true), 500); setTimeout(() => setRefreshDone(null), 1800); }}
+            title="รีเฟรชข้อมูลล่าสุด" style={{ width: 30, height: 30, flexShrink: 0, borderRadius: 8, border: '1px solid #e5e0d3', background: '#fff',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 14, order: isMobile ? 4 : 0 }}>{refreshDone ? '✅' : '🔄'}</button>
           {!isMobile && <div style={{ flex: 1 }}/>}
           {viewGunMs && selectedStatus !== 'past' && (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', padding: isMobile ? '4px 0' : '4px 12px', borderRight: isMobile ? 'none' : '1px solid #e5e0d3' }}>

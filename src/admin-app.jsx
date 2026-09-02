@@ -240,6 +240,7 @@ const STATUS_META = {
 // ── Event list ──────────────────────────────────────────────────────────
 function EventList({ events, onEdit, onDelete, onCreate }) {
   const [q, setQ] = aS('');
+  const [refreshDone, setRefreshDone] = aS(null); // null = idle icon, true = brief ✓ after a manual refresh
   const query = q.trim().toLowerCase();
   const filtered = query
     ? events.filter(ev => (ev.name || '').toLowerCase().includes(query) || (ev.date || '').toLowerCase().includes(query))
@@ -251,7 +252,17 @@ function EventList({ events, onEdit, onDelete, onCreate }) {
           <div style={{ fontSize: 20, fontWeight: 800 }}>🔧 Admin</div>
           <div style={{ fontFamily: A_MONO, fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#5d6b59', marginTop: 2 }}>งานแข่งทั้งหมด · {events.length} งาน</div>
         </div>
-        <button onClick={onCreate} style={{ padding: '10px 16px', background: `linear-gradient(135deg,#357a5c 0%,#1a4a37 100%)`, color: '#fff', border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>+ สร้างงานแข่งใหม่</button>
+        <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+          {/* watchCollection's onSnapshot listener already pushes every
+              change live — this is a fallback for the rare case that
+              socket stalls silently, same reasoning as the mobile app's
+              own pull-to-refresh. A plain click button here since this is
+              a desktop screen, not a mobile pull gesture. */}
+          <button onClick={() => { setRefreshDone(false); if (window.eventStore) window.eventStore.refresh(); if (window.runnerStore) window.runnerStore.refresh(); setTimeout(() => setRefreshDone(true), 500); setTimeout(() => setRefreshDone(null), 1800); }}
+            title="รีเฟรชข้อมูลล่าสุด" style={{ width: 42, height: 42, flexShrink: 0, borderRadius: 10, border: '1px solid #e5e0d3', background: '#fff',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 16 }}>{refreshDone ? '✅' : '🔄'}</button>
+          <button onClick={onCreate} style={{ padding: '10px 16px', background: `linear-gradient(135deg,#357a5c 0%,#1a4a37 100%)`, color: '#fff', border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>+ สร้างงานแข่งใหม่</button>
+        </div>
       </div>
       <div style={{ fontSize: 12, color: '#5d6b59', marginBottom: 14, lineHeight: 1.6 }}>
         {window.fb
