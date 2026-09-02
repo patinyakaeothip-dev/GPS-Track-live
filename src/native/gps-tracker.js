@@ -64,7 +64,7 @@ function saveMode(mode) {
 let currentMode = loadMode();
 const MODE_CONFIG = {
   performance: { distanceFilter: 50, heartbeatMs: 45000, enableHighAccuracy: true, maximumAge: 3000 },
-  normal: { distanceFilter: 60, heartbeatMs: 210000, enableHighAccuracy: true, maximumAge: 8000 },
+  normal: { distanceFilter: 100, heartbeatMs: 120000, enableHighAccuracy: true, maximumAge: 8000 },
   eco: { distanceFilter: 500, heartbeatMs: 600000, enableHighAccuracy: false, maximumAge: 60000 },
 };
 

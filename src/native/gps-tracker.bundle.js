@@ -554,7 +554,7 @@
   var currentMode = loadMode();
   var MODE_CONFIG = {
     performance: { distanceFilter: 50, heartbeatMs: 45e3, enableHighAccuracy: true, maximumAge: 3e3 },
-    normal: { distanceFilter: 60, heartbeatMs: 21e4, enableHighAccuracy: true, maximumAge: 8e3 },
+    normal: { distanceFilter: 100, heartbeatMs: 12e4, enableHighAccuracy: true, maximumAge: 8e3 },
     eco: { distanceFilter: 500, heartbeatMs: 6e5, enableHighAccuracy: false, maximumAge: 6e4 }
   };
   var HEARTBEAT_TICK_MS = 15e3;
