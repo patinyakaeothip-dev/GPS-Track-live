@@ -159,6 +159,12 @@ function fmtDistPref(km, prefs, decimals) {
   const d = decimals == null ? 1 : decimals;
   return (prefs && prefs.distance === 'mi') ? `${(km * 0.621371).toFixed(d)} mi` : `${km.toFixed(d)} กม.`;
 }
+// Same conversion as fmtDistPref, but a bare "1.2K"/"0.7mi" with no space
+// — used only for the elevation chart's own axis tick labels, where the
+// full " กม." unit text doesn't fit at that font size.
+function axisDistLabel(km, prefs) {
+  return (prefs && prefs.distance === 'mi') ? `${(km * 0.621371).toFixed(1)}mi` : `${km.toFixed(1)}K`;
+}
 // Reformats a 24h "HH:MM" or "HH:MM:SS" wall-clock string — the raw form
 // every checkin/gun-time value is actually stored and computed in — into
 // 12h with AM/PM when that's the active preference. Passed through
@@ -733,7 +739,19 @@ function SettingsScreen({ onBack }) {
             <div style={{ fontFamily: C.mono, fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted, marginTop: 10, marginBottom: 2 }}>GPS ระหว่างวิ่ง</div>
             <SettingsToggle label="โหมดแบตเตอรี่" options={[['performance', '⚡ Perf'], ['normal', 'Normal'], ['eco', '🔋 Eco']]} value={gpsMode}
               onChange={v => { window.trtGpsTracker.setMode(v); setGpsMode(v); }}/>
+            {/* Real, current numbers — not just the mode's name — so
+                switching modes has something visibly different to check
+                against right away. Reported directly: no way to actually
+                tell a mode switch took effect. This can't show battery
+                impact itself (nothing in-app measures that; real battery
+                differences only show up over an actual multi-hour run,
+                compared via the phone's own OS battery-usage screen) but
+                it does confirm the setting itself changed. */}
+            <div style={{ fontSize: 11.5, fontWeight: 700, color: C.brandDk, background: '#eaf3ee', border: `1px solid ${C.border}`, borderRadius: 8, padding: '8px 10px', marginTop: 2 }}>
+              ✓ ใช้งานอยู่: ส่งตำแหน่งทุกที่ขยับ {window.trtGpsTracker.getModeConfig(gpsMode).distanceFilter} เมตร หรืออย่างช้าทุก {Math.round(window.trtGpsTracker.getModeConfig(gpsMode).heartbeatMs / 1000)} วินาที
+            </div>
             <div style={{ fontSize: 11, color: C.muted, marginTop: 2, lineHeight: 1.5 }}>Performance อัพเดทถี่สุด เหมาะระยะสั้น (≤20 กม.) · Normal สมดุล เหมาะระยะกลาง (~50 กม.) · Eco อัพเดทห่างสุด แบตอยู่ได้นานสุด เหมาะระยะไกล (100+ กม.)</div>
+            <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.5 }}>วิธีเทียบแบตจริง: ใช้แต่ละโหมดวิ่งเป็นชั่วโมงๆ แล้วเข้าไปดู % แบตที่แอพนี้ใช้ไปในหน้า "แบตเตอรี่" ของระบบมือถือ (iOS: Settings → Battery, Android: Settings → Battery) เทียบกันระหว่างโหมด — ในแอพเองไม่มีตัววัดแบตให้ดูโดยตรง</div>
           </>
         )}
       </div>
@@ -1994,7 +2012,17 @@ function TrackTab({ runner, event, onScan, onSos, onDnf, offRoute, onCancelSos }
           horizontal scroll again; overflowY is left alone so nothing gets
           silently cropped the way it did before. */}
       <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 14, overflowX: 'hidden' }}>
-        <div style={{ padding: '10px 14px', borderBottom: `1px solid ${C.border}`, fontFamily: C.mono, fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted, fontWeight: 600 }}>Checkpoints</div>
+        <div style={{ padding: '10px 14px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ fontFamily: C.mono, fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase', color: C.muted, fontWeight: 600 }}>Checkpoints</span>
+          {/* A visible confirmation that the battery mode picked in
+              Settings is actually the one active right now, mid-race —
+              reported directly: no way to tell a mode switch took effect
+              at all, and Settings itself isn't somewhere a runner is
+              likely to check back on once they're already tracking. */}
+          {window.trtGpsTracker && window.trtGpsTracker.getMode && (
+            <span style={{ fontFamily: C.mono, fontSize: 9, color: C.muted }}>📡 {({ performance: 'Perf', normal: 'Normal', eco: 'Eco' })[window.trtGpsTracker.getMode()] || window.trtGpsTracker.getMode()}</span>
+          )}
+        </div>
         {seq.map((cp, i) => {
           const done = i < runner.checkins.length;
           return (
@@ -2002,7 +2030,7 @@ function TrackTab({ runner, event, onScan, onSos, onDnf, offRoute, onCancelSos }
               <span style={{ width: 20, height: 20, borderRadius: 999, background: done ? C.brand : C.bg, color: done ? '#fff' : C.mute2,
                 display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, flexShrink: 0 }}>{done ? '✓' : i + 1}</span>
               <span style={{ flex: 1, fontSize: 13, color: done ? C.text : C.mute2 }}>{cpLabelFor(event, cp)}</span>
-              <span style={{ fontFamily: C.mono, fontSize: 10, color: C.muted }}>{cpKmFor(event, cp, runner.dist)}/{totalKm}K</span>
+              <span style={{ fontFamily: C.mono, fontSize: 10, color: C.muted }}>{fmtDistPref(cpKmFor(event, cp, runner.dist), prefs)}/{fmtDistPref(totalKm, prefs)}</span>
               {done && <span style={{ fontFamily: C.mono, fontSize: 10, color: C.muted, marginLeft: 8 }}>{fmtClockPref(runner.checkins[i].t, prefs)}</span>}
             </div>
           );
@@ -2462,6 +2490,7 @@ function CheckpointSplitsList({ runner, event }) {
 // visible km window is than the full course; `panKm` is that window's left
 // edge, always clamped so it can't scroll past either end.
 function ElevationSvg({ course, progressKm, checkpoints, height = 150, interactive = true, width = 340, heightCss }) {
+  const prefs = useUnitPrefs();
   // padBottom is taller than the plot really needs so angled checkpoint
   // labels (see marks.map below) have room to run diagonally without
   // colliding with their neighbors — a long name like "WS2 Green mountain"
@@ -2665,7 +2694,7 @@ function ElevationSvg({ course, progressKm, checkpoints, height = 150, interacti
                 // Anchoring each label toward the inside of the chart
                 // instead keeps both fully on-screen.
                 <>
-                  <text x={x(km)} y={h - padBottom + 9} textAnchor={km === 0 ? 'start' : 'end'} fontFamily={C.mono} fontSize="7.5" fill={C.muted} opacity="0.85">{km.toFixed(1)}K</text>
+                  <text x={x(km)} y={h - padBottom + 9} textAnchor={km === 0 ? 'start' : 'end'} fontFamily={C.mono} fontSize="7.5" fill={C.muted} opacity="0.85">{axisDistLabel(km, prefs)}</text>
                   <text x={x(km)} y={h - padBottom + 19} textAnchor={km === 0 ? 'start' : 'end'} fontFamily={C.mono} fontSize="8" fill={C.muted}>{label}</text>
                 </>
               ) : (
@@ -2674,7 +2703,7 @@ function ElevationSvg({ course, progressKm, checkpoints, height = 150, interacti
                     <rect x={-13} y={-10} width={26} height={13} rx={6} fill={C.orange}/>
                     <text x={0} y={0.5} textAnchor="middle" dominantBaseline="central" fontFamily={C.mono} fontSize="7.5" fontWeight="700" fill="#fff">{tag}</text>
                   </g>
-                  <text x={x(km)} y={h - padBottom + 9} textAnchor="middle" fontFamily={C.mono} fontSize="7.5" fill={C.muted} opacity="0.85">{km.toFixed(1)}K</text>
+                  <text x={x(km)} y={h - padBottom + 9} textAnchor="middle" fontFamily={C.mono} fontSize="7.5" fill={C.muted} opacity="0.85">{axisDistLabel(km, prefs)}</text>
                   {/* Always the same angle (unlike the tag, which is
                       pinned by its own point's height) — every name reads
                       the same direction instead of some tilting one way
@@ -2979,7 +3008,7 @@ function RankingTab({ snap, eventId, event }) {
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
               {r.finished
                 ? <span style={{ fontFamily: C.mono, fontSize: 11, color: C.text, fontWeight: 700 }}>{fmtElapsed(r.elapsedMs)}</span>
-                : <span style={{ fontFamily: C.mono, fontSize: 11, color: C.muted }}>{r.progressKm.toFixed(1)}K</span>}
+                : <span style={{ fontFamily: C.mono, fontSize: 11, color: C.muted }}>{fmtDistPref(r.progressKm, prefs)}</span>}
               {paceStr && <span style={{ fontFamily: C.mono, fontSize: 9.5, color: C.muted }}>{paceStr}</span>}
               {diffStr && <span style={{ fontFamily: C.mono, fontSize: 9.5, color: '#b45309' }}>{diffStr}</span>}
             </div>
@@ -3498,6 +3527,7 @@ const MULTI_MAP_COLORS = ['#2d6a4f', '#e07a3e', '#0369a1', '#9b1c10', '#7c4a03',
 // each runner's Firestore doc is watched directly instead, all torn down
 // together on unmount.
 function FriendsMultiMapSheet({ runners, eventId, event, onClose }) {
+  const prefs = useUnitPrefs();
   const [coursePaths, setCoursePaths] = uS(null);
   const [liveByBib, setLiveByBib] = uS({});
   // Same "don't guess at a checkpoint before real data has loaded" lesson
@@ -3631,7 +3661,7 @@ function FriendsMultiMapSheet({ runners, eventId, event, onClose }) {
           <div key={r.bib} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', fontSize: 12.5 }}>
             <span style={{ width: 10, height: 10, borderRadius: 999, background: MULTI_MAP_COLORS[i % MULTI_MAP_COLORS.length], flexShrink: 0 }}/>
             <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>#{r.bib} {r.nickname}</span>
-            <span style={{ fontFamily: C.mono, fontSize: 10.5, color: C.muted, flexShrink: 0 }}>{(r.progressKm || 0).toFixed(1)}K · {liveByBib[r.bib] && liveByBib[r.bib].lat != null ? '🟢' : '⚪'}</span>
+            <span style={{ fontFamily: C.mono, fontSize: 10.5, color: C.muted, flexShrink: 0 }}>{axisDistLabel(r.progressKm || 0, prefs)} · {liveByBib[r.bib] && liveByBib[r.bib].lat != null ? '🟢' : '⚪'}</span>
           </div>
         ))}
       </div>

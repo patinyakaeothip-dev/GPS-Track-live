@@ -711,6 +711,9 @@
   function getMode() {
     return currentMode;
   }
+  function getModeConfig(mode) {
+    return MODE_CONFIG[GPS_MODES.includes(mode) ? mode : currentMode];
+  }
   async function stop() {
     if (retryTimerId) {
       clearInterval(retryTimerId);
@@ -736,7 +739,7 @@
     currentEventId = null;
     currentBib = null;
   }
-  window.trtGpsTracker = { start, stop, isNative, setMode, getMode };
+  window.trtGpsTracker = { start, stop, isNative, setMode, getMode, getModeConfig };
 })();
 /*! Bundled license information:
 

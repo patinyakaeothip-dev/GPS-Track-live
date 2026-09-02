@@ -305,6 +305,13 @@ async function setMode(mode) {
 function getMode() {
   return currentMode;
 }
+// Exposed so the Settings screen can show the real, current numbers next
+// to the mode toggle (distanceFilter/heartbeatMs) instead of just a label
+// — a visible way to confirm a mode switch actually took effect, since
+// there's otherwise nothing on screen that changes when this happens.
+function getModeConfig(mode) {
+  return MODE_CONFIG[GPS_MODES.includes(mode) ? mode : currentMode];
+}
 
 async function stop() {
   if (retryTimerId) { clearInterval(retryTimerId); retryTimerId = null; }
@@ -323,4 +330,4 @@ async function stop() {
   currentBib = null;
 }
 
-window.trtGpsTracker = { start, stop, isNative, setMode, getMode };
+window.trtGpsTracker = { start, stop, isNative, setMode, getMode, getModeConfig };
