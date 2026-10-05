@@ -9,7 +9,7 @@
 
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
 import {
-  getAuth, initializeAuth, indexedDBLocalPersistence, GoogleAuthProvider, OAuthProvider, signInWithPopup, signInWithRedirect, signInWithCredential, getRedirectResult, signOut, onAuthStateChanged,
+  getAuth, initializeAuth, indexedDBLocalPersistence, GoogleAuthProvider, OAuthProvider, signInWithPopup, signInWithRedirect, signInWithCredential, getRedirectResult, signOut, onAuthStateChanged, deleteUser,
 } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
 import {
   getFirestore, collection, doc, getDocs, setDoc, deleteDoc, onSnapshot, runTransaction,
@@ -102,6 +102,18 @@ if (!configured) {
     async signOutUser() {
       if (window.trtNativeAuth && window.trtNativeAuth.isNative()) await window.trtNativeAuth.signOut();
       return signOut(auth);
+    },
+    // App Store guideline 5.1.1(v) — account creation must come with an
+    // in-app way to delete the account, not just sign out. Deletes the
+    // Firebase Auth user record itself; callers are responsible for
+    // deleting/anonymizing the Firestore documents (profile, roster
+    // entries) first, since those aren't reachable once the auth session
+    // backing them is gone. Firebase requires a "recent" sign-in for this —
+    // a session signed in long ago throws 'auth/requires-recent-login',
+    // which callers should catch and ask the user to sign out/in again.
+    async deleteAccount() {
+      if (!auth.currentUser) throw new Error('not signed in');
+      await deleteUser(auth.currentUser);
     },
     onAuthChange: (cb) => onAuthStateChanged(auth, cb),
     // Collection helpers used by src/event-store.js and friends.

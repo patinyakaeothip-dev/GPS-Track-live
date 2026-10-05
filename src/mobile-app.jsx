@@ -1483,7 +1483,7 @@ function GpsPermissionScreen({ onAllow, onBack }) {
         </div>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <Btn onClick={onAllow}>อนุญาตตำแหน่ง (จำเป็น)</Btn>
+        <Btn onClick={onAllow}>ดำเนินการต่อ</Btn>
         <div style={{ textAlign: 'center', fontFamily: C.mono, fontSize: 10, color: '#a8a396' }}>ต้องอนุญาตเพื่อเข้าร่วมการแข่งขัน</div>
       </div>
     </div>
@@ -3933,7 +3933,7 @@ function fmtElapsedMs(ms) {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
-function ProfileScreen({ user, onLogout, onClose, onSave, onboard }) {
+function ProfileScreen({ user, onLogout, onClose, onSave, onboard, onDeleteAccount }) {
   const [nickname, setNickname] = uS(user.nickname || user.name || '');
   const [gender, setGender] = uS(user.gender || '');
   const [phone, setPhone] = uS(user.phone || '');
@@ -3977,6 +3977,23 @@ function ProfileScreen({ user, onLogout, onClose, onSave, onboard }) {
     bloodType: user.bloodType || '', medical: user.medical || '', birthYear: user.birthYear || '', nationality: user.nationality || '',
     avatarPhoto: user.avatarPhoto || '' });
   const [confirmClose, setConfirmClose] = uS(false);
+  const [confirmDelete, setConfirmDelete] = uS(false);
+  const [deleting, setDeleting] = uS(false);
+  const [deleteError, setDeleteError] = uS('');
+  function confirmDeleteAccount() {
+    setDeleting(true);
+    setDeleteError('');
+    onDeleteAccount().then(err => {
+      if (err === 'auth/requires-recent-login') {
+        setDeleting(false);
+        setDeleteError('เพื่อความปลอดภัย กรุณาออกจากระบบแล้วเข้าสู่ระบบใหม่ ก่อนลบบัญชี');
+      } else if (err) {
+        setDeleting(false);
+        setDeleteError('ลบบัญชีไม่สำเร็จ: ' + err);
+      }
+      // else: onDeleteAccount already navigated away to the login screen.
+    });
+  }
   const isDirty = !onboard && editing && Object.entries(initialRef.current).some(([k, v]) => v !== { nickname, gender, phone, emgName, emgPhone, emgName2, emgPhone2, bloodType, medical, birthYear, nationality, avatarPhoto }[k]);
   function requestClose() {
     if (isDirty) setConfirmClose(true);
@@ -4038,6 +4055,22 @@ function ProfileScreen({ user, onLogout, onClose, onSave, onboard }) {
         </div>
         {!onboard && <span onClick={requestClose} style={{ cursor: 'pointer', fontSize: 20, color: C.muted }}>×</span>}
       </div>
+      {confirmDelete && (
+        <div style={{ position: 'absolute', inset: 0, zIndex: 30, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+          <div style={{ background: '#fff', borderRadius: 16, padding: 20, width: '100%', maxWidth: 320, boxShadow: '0 20px 50px rgba(0,0,0,0.3)' }}>
+            <div style={{ fontSize: 15, fontWeight: 800, color: '#9b1c10' }}>ลบบัญชีถาวร?</div>
+            <div style={{ fontSize: 12.5, color: C.muted, marginTop: 6, lineHeight: 1.5 }}>
+              โปรไฟล์ ข้อมูลติดต่อฉุกเฉิน และประวัติการลงทะเบียนวิ่งทุกงานของบัญชีนี้จะถูกลบทิ้งถาวร กู้คืนไม่ได้
+            </div>
+            {deleteError && <div style={{ fontSize: 11.5, color: '#9b1c10', marginTop: 10 }}>⚠ {deleteError}</div>}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 16 }}>
+              <Btn variant="primary" disabled={deleting} onClick={confirmDeleteAccount}
+                style={{ background: '#9b1c10' }}>{deleting ? 'กำลังลบ...' : 'ลบบัญชีถาวร'}</Btn>
+              <Btn variant="white" disabled={deleting} onClick={() => setConfirmDelete(false)}>ยกเลิก</Btn>
+            </div>
+          </div>
+        </div>
+      )}
       {confirmClose && (
         <div style={{ position: 'absolute', inset: 0, zIndex: 30, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
           <div style={{ background: '#fff', borderRadius: 16, padding: 20, width: '100%', maxWidth: 320, boxShadow: '0 20px 50px rgba(0,0,0,0.3)' }}>
@@ -4139,6 +4172,7 @@ function ProfileScreen({ user, onLogout, onClose, onSave, onboard }) {
           }}>📲 ติดตั้งแอพขึ้นหน้าโฮม</Btn>
         )}
         {!onboard && <Btn variant="ghost" onClick={onLogout}>ออกจากระบบ</Btn>}
+        {!onboard && <Btn variant="ghost" onClick={() => setConfirmDelete(true)} style={{ color: '#9b1c10' }}>ลบบัญชี</Btn>}
       </div>
     </div>
   );
@@ -4947,6 +4981,36 @@ function MobileApp() {
     // failure just vanishing into a console nobody checks on a phone.
     return syncProfileToCloud(withCompleted.uid, withCompleted);
   }
+  // App Store guideline 5.1.1(v) — account deletion, initiated and
+  // completed entirely in-app (no "email us" detour). Removes this
+  // person's own data (profile doc + every roster entry tied to their
+  // uid, across every event they ever registered for — see updateUser's
+  // comment on listRunnersByUid for why it's not just the active one)
+  // before deleting the Firebase Auth account itself, since the Firestore
+  // deletes need an authenticated uid to be allowed by security rules.
+  // Returns an error string on failure (e.g. 'auth/requires-recent-login'
+  // after a long-dormant session — caller asks the user to sign in again
+  // and retry) or null on success.
+  async function deleteAccount() {
+    const uid = session.user.uid;
+    try {
+      if (window.runnerStore) {
+        (window.runnerStore.listRunnersByUid(uid, { includeCancelled: true }) || [])
+          .forEach(r => window.runnerStore.deleteRunner(r.id));
+      }
+      if (window.fb) {
+        await window.fb.deleteDocById('profiles', uid).catch(() => {});
+        await window.fb.deleteAccount();
+      }
+      clearSession();
+      setSession(null);
+      setModal(null);
+      setScreen('login');
+      return null;
+    } catch (err) {
+      return (err && (err.code || err.message)) || 'ไม่ทราบสาเหตุ';
+    }
+  }
 
   uE(() => { const id = 'trt-mobile-style'; if (document.getElementById(id)) return;
     const st = document.createElement('style'); st.id = id;
@@ -5013,6 +5077,7 @@ function MobileApp() {
       <div key={screen} style={{ height: '100%', animation: 'trtFadeIn 0.22s ease' }}>{body}</div>
       {modal === 'profile' && <Overlay><ProfileScreen user={session.user} onClose={() => setModal(null)}
         onSave={updateUser}
+        onDeleteAccount={deleteAccount}
         onLogout={() => { if (window.fb) window.fb.signOutUser().catch(() => {}); clearSession(); setSession(null); setModal(null); setScreen('login'); }}/></Overlay>}
       {modal === 'sos' && <Overlay><SosScreen
         hotlines={(() => {
