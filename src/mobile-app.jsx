@@ -35,6 +35,20 @@ function saveSession(s) {
   try { localStorage.setItem(LS_KEY, JSON.stringify(s)); } catch (_) {}
 }
 function clearSession() { try { localStorage.removeItem(LS_KEY); } catch (_) {} }
+// Safety net around native plugin calls (sign-in, sign-out) that have been
+// observed on a real device to just never resolve — no error, no native UI,
+// the JS promise simply sits forever (a known-flaky state of
+// @capacitor-firebase/authentication after a sign-in + account-delete
+// cycle). Without this, a hung native call left the login screen's buttons
+// permanently stuck on "กำลังเข้าสู่ระบบ…" with the only way out being a
+// full app kill-and-reopen. Rejects after `ms` so callers can reset their
+// busy state and let the person try again instead.
+function withTimeout(promise, ms, label) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error(`${label || 'operation'} timed out`)), ms)),
+  ]);
+}
 
 // Remembers which top-level screen the runner was last looking at, so a
 // refresh (accidental or not — flaky mobile signal, browser restart) drops
@@ -425,7 +439,7 @@ function LoginScreen({ onLogin }) {
     if (!window.fb) { onLogin({ name: 'มิ้น', provider: 'google' }); return; }
     setBusy(true); setError(null);
     try {
-      const result = await window.fb.signInWithGoogle();
+      const result = await withTimeout(window.fb.signInWithGoogle(), 20000, 'Google sign-in');
       if (result && result.user) {
         const u = result.user;
         onLogin({ uid: u.uid, name: u.displayName || 'นักวิ่ง', email: u.email, photo: u.photoURL, provider: 'google' });
@@ -443,7 +457,7 @@ function LoginScreen({ onLogin }) {
     if (!window.fb) { onLogin({ name: 'มิ้น', provider: 'apple' }); return; }
     setBusy(true); setError(null);
     try {
-      const result = await window.fb.signInWithApple();
+      const result = await withTimeout(window.fb.signInWithApple(), 20000, 'Apple sign-in');
       if (result && result.user) {
         const u = result.user;
         // Apple only ever hands back displayName on the very first
