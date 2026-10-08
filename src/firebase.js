@@ -114,6 +114,16 @@ if (!configured) {
     async deleteAccount() {
       if (!auth.currentUser) throw new Error('not signed in');
       await deleteUser(auth.currentUser);
+      // deleteUser() only tears down the JS SDK session. On native it left
+      // @capacitor-firebase/authentication's own native-side session (set
+      // up by signInWithGoogle/signInWithApple above) still marked signed
+      // in for the now-deleted user — the very next native sign-in attempt
+      // (e.g. picking Google right after deleting an Apple account) then
+      // hung forever with no account picker ever appearing, because the
+      // plugin was still waiting on that stale session. signOutUser()
+      // already clears this same native state on a normal logout; deleting
+      // the account needs the same cleanup.
+      if (window.trtNativeAuth && window.trtNativeAuth.isNative()) await window.trtNativeAuth.signOut();
     },
     onAuthChange: (cb) => onAuthStateChanged(auth, cb),
     // Collection helpers used by src/event-store.js and friends.
