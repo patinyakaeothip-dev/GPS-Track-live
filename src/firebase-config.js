@@ -9,7 +9,13 @@
 
 window.FIREBASE_CONFIG = {
   apiKey: 'AIzaSyC4YFyApNa8vHydeAZ_48pABgGIXmKLx3s',
-  authDomain: 'rayong-trail-live.firebaseapp.com',
+  // Same-origin as this site rather than Firebase's default
+  // rayong-trail-live.firebaseapp.com — see functions/__/auth/[[path]].js
+  // for why: redirect-based sign-in (Apple, and Google's popup-blocked
+  // fallback) needs the whole round-trip to stay on one origin or modern
+  // browsers' third-party storage partitioning silently drops the pending
+  // sign-in state on the way back.
+  authDomain: 'gps-track-live.pages.dev',
   projectId: 'rayong-trail-live',
   storageBucket: 'rayong-trail-live.firebasestorage.app',
   messagingSenderId: '404432675602',
