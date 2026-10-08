@@ -15,10 +15,26 @@
 // care whether the sign-in happened natively or via the web SDK.
 
 import { Capacitor } from '@capacitor/core';
+import { FirebaseApp } from '@capacitor-firebase/app';
 import { FirebaseAuthentication } from '@capacitor-firebase/authentication';
 
 function isNative() {
   return Capacitor.isNativePlatform();
+}
+
+// Capacitor only instantiates a plugin's native class (and runs its
+// load(), which is where @capacitor-firebase/app's iOS code calls
+// FirebaseApp.configure()) the first time something actually calls one of
+// its methods from JS — nothing in this app ever calls the `app` plugin
+// directly, only `authentication`, so FirebaseApp.configure() was never
+// triggered at all: every native sign-in attempt ran against an
+// unconfigured Firebase app and failed (seen on-device as "[FirebaseCore]
+// The default Firebase app has not yet been configured", followed by
+// FirebaseAuthentication erroring/hanging on every call). This one no-op
+// call forces that first instantiation as early as possible so Firebase
+// is already configured by the time anyone taps a sign-in button.
+if (isNative()) {
+  FirebaseApp.getName().catch(err => console.warn('[firebase-auth-native] FirebaseApp init call failed', err));
 }
 
 // Resolves to a Google ID token, or throws — src/firebase.js turns that

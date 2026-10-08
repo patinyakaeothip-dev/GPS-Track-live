@@ -541,6 +541,38 @@ var trtFirebaseAuthNative = (() => {
     }
   });
 
+  // node_modules/@capacitor-firebase/app/dist/esm/web.js
+  var web_exports = {};
+  __export(web_exports, {
+    FirebaseAppWeb: () => FirebaseAppWeb
+  });
+  var import_app, FirebaseAppWeb;
+  var init_web = __esm({
+    "node_modules/@capacitor-firebase/app/dist/esm/web.js"() {
+      init_dist();
+      import_app = __require("firebase/app");
+      FirebaseAppWeb = class extends WebPlugin {
+        async getName() {
+          const app = (0, import_app.getApp)();
+          return {
+            name: app.name
+          };
+        }
+        async getOptions() {
+          const app = (0, import_app.getApp)();
+          return {
+            apiKey: app.options.apiKey || "",
+            applicationId: app.options.appId || "",
+            databaseUrl: app.options.databaseURL || "",
+            gcmSenderId: app.options.messagingSenderId || "",
+            projectId: app.options.projectId || "",
+            storageBucket: app.options.storageBucket || ""
+          };
+        }
+      };
+    }
+  });
+
   // node_modules/@capacitor-firebase/authentication/dist/esm/definitions.js
   var Persistence, ProviderId;
   var init_definitions = __esm({
@@ -568,12 +600,12 @@ var trtFirebaseAuthNative = (() => {
   });
 
   // node_modules/@capacitor-firebase/authentication/dist/esm/web.js
-  var web_exports = {};
-  __export(web_exports, {
+  var web_exports2 = {};
+  __export(web_exports2, {
     FirebaseAuthenticationWeb: () => FirebaseAuthenticationWeb
   });
   var import_auth, FirebaseAuthenticationWeb;
-  var init_web = __esm({
+  var init_web2 = __esm({
     "node_modules/@capacitor-firebase/authentication/dist/esm/web.js"() {
       init_dist();
       import_auth = __require("firebase/auth");
@@ -1153,16 +1185,25 @@ var trtFirebaseAuthNative = (() => {
   // src/native/firebase-auth-native.js
   init_dist();
 
+  // node_modules/@capacitor-firebase/app/dist/esm/index.js
+  init_dist();
+  var FirebaseApp = registerPlugin("FirebaseApp", {
+    web: () => Promise.resolve().then(() => (init_web(), web_exports)).then((m) => new m.FirebaseAppWeb())
+  });
+
   // node_modules/@capacitor-firebase/authentication/dist/esm/index.js
   init_dist();
   init_definitions();
   var FirebaseAuthentication = registerPlugin("FirebaseAuthentication", {
-    web: () => Promise.resolve().then(() => (init_web(), web_exports)).then((m) => new m.FirebaseAuthenticationWeb())
+    web: () => Promise.resolve().then(() => (init_web2(), web_exports2)).then((m) => new m.FirebaseAuthenticationWeb())
   });
 
   // src/native/firebase-auth-native.js
   function isNative() {
     return Capacitor.isNativePlatform();
+  }
+  if (isNative()) {
+    FirebaseApp.getName().catch((err) => console.warn("[firebase-auth-native] FirebaseApp init call failed", err));
   }
   async function signInWithGoogle() {
     const result = await FirebaseAuthentication.signInWithGoogle({ skipNativeAuth: true });
