@@ -3996,7 +3996,11 @@ function ProfileScreen({ user, onLogout, onClose, onSave, onboard, onDeleteAccou
   }
   const isDirty = !onboard && editing && Object.entries(initialRef.current).some(([k, v]) => v !== { nickname, gender, phone, emgName, emgPhone, emgName2, emgPhone2, bloodType, medical, birthYear, nationality, avatarPhoto }[k]);
   function requestClose() {
-    if (isDirty) setConfirmClose(true);
+    // Onboarding always has something to lose by leaving — even a blank
+    // form means abandoning the account creation in progress — so it
+    // always confirms, unlike the returning-user profile above which only
+    // confirms when something was actually changed (isDirty).
+    if (onboard || isDirty) setConfirmClose(true);
     else onClose();
   }
   // Onboarding has nothing to view yet — always starts editable. A
@@ -4053,7 +4057,7 @@ function ProfileScreen({ user, onLogout, onClose, onSave, onboard, onDeleteAccou
           <div style={{ fontSize: 20, fontWeight: 800 }}>{onboard ? 'ยินดีต้อนรับ 👋' : 'โปรไฟล์'}</div>
           {onboard && <div style={{ fontSize: 12.5, color: C.muted, marginTop: 4 }}>กรอกข้อมูลก่อนเริ่มใช้งานครั้งแรก · ครั้งต่อไปไม่ต้องกรอกอีก</div>}
         </div>
-        {!onboard && <span onClick={requestClose} style={{ cursor: 'pointer', fontSize: 20, color: C.muted }}>×</span>}
+        <span onClick={requestClose} style={{ cursor: 'pointer', fontSize: 20, color: C.muted }}>×</span>
       </div>
       {confirmDelete && (
         <div style={{ position: 'absolute', inset: 0, zIndex: 30, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
@@ -4074,12 +4078,18 @@ function ProfileScreen({ user, onLogout, onClose, onSave, onboard, onDeleteAccou
       {confirmClose && (
         <div style={{ position: 'absolute', inset: 0, zIndex: 30, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
           <div style={{ background: '#fff', borderRadius: 16, padding: 20, width: '100%', maxWidth: 320, boxShadow: '0 20px 50px rgba(0,0,0,0.3)' }}>
-            <div style={{ fontSize: 15, fontWeight: 800 }}>ยังไม่ได้บันทึกการแก้ไข</div>
-            <div style={{ fontSize: 12.5, color: C.muted, marginTop: 6, lineHeight: 1.5 }}>ถ้าออกตอนนี้ ข้อมูลที่แก้ไว้จะหายไป</div>
+            <div style={{ fontSize: 15, fontWeight: 800 }}>{onboard ? 'ยกเลิกการกรอกโปรไฟล์?' : 'ยังไม่ได้บันทึกการแก้ไข'}</div>
+            <div style={{ fontSize: 12.5, color: C.muted, marginTop: 6, lineHeight: 1.5 }}>
+              {onboard ? 'ข้อมูลที่กรอกไว้จะไม่ถูกบันทึก และคุณจะออกจากระบบ — กรอกโปรไฟล์ให้ครบได้ใหม่ครั้งหน้าที่เข้าสู่ระบบ' : 'ถ้าออกตอนนี้ ข้อมูลที่แก้ไว้จะหายไป'}
+            </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 16 }}>
-              <Btn variant="primary" onClick={() => { setConfirmClose(false); save(); onClose(); }}>บันทึกแล้วออก</Btn>
-              <Btn variant="ghost" onClick={() => { setConfirmClose(false); onClose(); }}>ออกโดยไม่บันทึก</Btn>
-              <Btn variant="white" onClick={() => setConfirmClose(false)}>กลับไปแก้ไขต่อ</Btn>
+              {onboard
+                ? <Btn variant="ghost" onClick={() => { setConfirmClose(false); onClose(); }} style={{ color: '#9b1c10' }}>ออกจากระบบ</Btn>
+                : <>
+                    <Btn variant="primary" onClick={() => { setConfirmClose(false); save(); onClose(); }}>บันทึกแล้วออก</Btn>
+                    <Btn variant="ghost" onClick={() => { setConfirmClose(false); onClose(); }}>ออกโดยไม่บันทึก</Btn>
+                  </>}
+              <Btn variant="white" onClick={() => setConfirmClose(false)}>{onboard ? 'กลับไปกรอกต่อ' : 'กลับไปแก้ไขต่อ'}</Btn>
             </div>
           </div>
         </div>
@@ -4792,6 +4802,18 @@ function MobileApp() {
     persist({ ...session, user: completed });
     setScreen('events');
   }
+  // Escape hatch for a new sign-in who isn't ready to fill the required
+  // profile fields yet (App Store guideline 5.1.1 concerns aside, getting
+  // permanently stuck on this screen with no way out is a bad experience
+  // on its own) — signs back out rather than leaving onboarding half-done,
+  // since nothing here was ever saved to the account in the first place.
+  function cancelOnboard() {
+    profileSubmittedRef.current = true; // stop a slow pullProfileFromCloud from re-opening onboard after this
+    if (window.fb) window.fb.signOutUser().catch(() => {});
+    clearSession();
+    setSession(null);
+    setScreen('login');
+  }
   async function openRunnerSpace(ev) {
     setPendingEvent(ev);
     if (session && session.runner && session.runner.eventId === ev.id) {
@@ -5022,7 +5044,7 @@ function MobileApp() {
   if (screen === 'splash') body = <SplashScreen onDone={() => setScreen(session ? 'events' : 'login')}/>;
   else if (screen === 'login') body = <LoginScreen onLogin={handleLogin}/>;
   else if (screen === 'loading-profile') body = <LoadingProfileScreen/>;
-  else if (screen === 'onboard') body = <ProfileScreen user={session.user} onboard onSave={finishOnboard}/>;
+  else if (screen === 'onboard') body = <ProfileScreen user={session.user} onboard onSave={finishOnboard} onClose={cancelOnboard}/>;
   else if (screen === 'events') body = <EventPickerScreen user={session.user} session={session}
     onOpenApp={openRunnerSpace}
     onFollow={(ev) => { setPendingEvent(ev); setScreen('follow-picker'); }}
