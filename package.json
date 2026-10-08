@@ -6,7 +6,7 @@
   "scripts": {
     "build:native": "esbuild src/native/gps-tracker.js --bundle --format=iife --outfile=src/native/gps-tracker.bundle.js && esbuild src/native/firebase-auth-native.js --bundle --format=iife --global-name=trtFirebaseAuthNative --external:firebase/* --outfile=src/native/firebase-auth-native.bundle.js && esbuild src/native/photo-saver.js --bundle --format=iife --outfile=src/native/photo-saver.bundle.js",
     "prepare:www": "node scripts/prepare-www.js",
-    "cap:sync": "npm run build:native && npm run prepare:www && cap sync",
+    "cap:sync": "npm run build:native && npm run prepare:www && cap sync && node scripts/patch-podfile.js",
     "cap:android": "cap open android",
     "cap:ios": "cap open ios"
   },
