@@ -122,8 +122,17 @@ if (!configured) {
       // hung forever with no account picker ever appearing, because the
       // plugin was still waiting on that stale session. signOutUser()
       // already clears this same native state on a normal logout; deleting
-      // the account needs the same cleanup.
-      if (window.trtNativeAuth && window.trtNativeAuth.isNative()) await window.trtNativeAuth.signOut();
+      // the account needs the same cleanup. Capped with a timeout — this
+      // same native plugin has been observed on-device to leave a call
+      // hanging indefinitely with no error, which would otherwise make
+      // deleteAccount() itself (and the "ลบบัญชี" button) hang forever
+      // instead of finishing the deletion that already succeeded above.
+      if (window.trtNativeAuth && window.trtNativeAuth.isNative()) {
+        await Promise.race([
+          window.trtNativeAuth.signOut(),
+          new Promise(resolve => setTimeout(resolve, 5000)),
+        ]);
+      }
     },
     onAuthChange: (cb) => onAuthStateChanged(auth, cb),
     // Collection helpers used by src/event-store.js and friends.
