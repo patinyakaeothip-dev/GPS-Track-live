@@ -18,6 +18,24 @@ import {
 const cfg = window.FIREBASE_CONFIG || {};
 const configured = !!(cfg.apiKey && cfg.projectId);
 
+// signInWithPopup relies on polling the popup window's `.closed` property
+// to notice when it's done. Google's own accounts.google.com popup sets a
+// Cross-Origin-Opener-Policy that blocks that read — even with this page's
+// own COOP set to `same-origin-allow-popups` (see _headers) — so the poll
+// never observes a close and the promise just hangs forever, logging
+// "Cross-Origin-Opener-Policy policy would block the window.closed call"
+// on every poll tick instead of ever resolving or rejecting. That's silent
+// in a way the existing popupFailureCodes fallback below can't catch,
+// since there's no error at all to inspect — so give the popup a fixed
+// window to resolve, and treat a timeout exactly like those failure
+// codes: fall back to signInWithRedirect.
+function popupWithTimeout(promise, ms = 8000) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject({ code: 'auth/popup-timeout' }), ms)),
+  ]);
+}
+
 if (!configured) {
   console.warn('[firebase] FIREBASE_CONFIG not filled in — running in localStorage-only demo mode. See src/firebase-config.js.');
   window.fb = null;
@@ -65,9 +83,9 @@ if (!configured) {
         return signInWithCredential(auth, GoogleAuthProvider.credential(idToken));
       }
       try {
-        return await signInWithPopup(auth, googleProvider);
+        return await popupWithTimeout(signInWithPopup(auth, googleProvider));
       } catch (err) {
-        const popupFailureCodes = ['auth/popup-blocked', 'auth/popup-closed-by-user', 'auth/cancelled-popup-request', 'auth/operation-not-supported-in-this-environment'];
+        const popupFailureCodes = ['auth/popup-blocked', 'auth/popup-closed-by-user', 'auth/cancelled-popup-request', 'auth/operation-not-supported-in-this-environment', 'auth/popup-timeout'];
         if (popupFailureCodes.includes(err.code)) return signInWithRedirect(auth, googleProvider);
         throw err;
       }
@@ -83,9 +101,9 @@ if (!configured) {
         return signInWithCredential(auth, appleProvider.credential({ idToken, rawNonce }));
       }
       try {
-        return await signInWithPopup(auth, appleProvider);
+        return await popupWithTimeout(signInWithPopup(auth, appleProvider));
       } catch (err) {
-        const popupFailureCodes = ['auth/popup-blocked', 'auth/popup-closed-by-user', 'auth/cancelled-popup-request', 'auth/operation-not-supported-in-this-environment'];
+        const popupFailureCodes = ['auth/popup-blocked', 'auth/popup-closed-by-user', 'auth/cancelled-popup-request', 'auth/operation-not-supported-in-this-environment', 'auth/popup-timeout'];
         if (popupFailureCodes.includes(err.code)) return signInWithRedirect(auth, appleProvider);
         throw err;
       }
