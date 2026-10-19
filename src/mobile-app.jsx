@@ -1082,7 +1082,10 @@ function RegisterScreen({ event, profile, onDone, onBack }) {
   const [gender, setGender] = uS((profile && profile.gender) || 'm');
   const [emg, setEmg] = uS((profile && profile.emgPhone) || '');
   const selectedDist = distances.find(d => d.label === dist);
-  const canSubmit = nick.trim() && phone.trim() && selectedDist && selectedDist.open !== false;
+  // Phone used to be required here too — same Apple review feedback as
+  // ProfileScreen's canSubmit (guideline 5.1.1(v)): a user's own phone
+  // number isn't actually necessary to register and start tracking.
+  const canSubmit = nick.trim() && selectedDist && selectedDist.open !== false;
   const [submitting, setSubmitting] = uS(false);
   // A ref, not just the `submitting` state — two taps landing in the same
   // event-loop tick (a real double-tap, or a stray duplicate touch/click
@@ -1139,8 +1142,9 @@ function RegisterScreen({ event, profile, onDone, onBack }) {
             ))}
           </div>
         </Field>
-        <Field label="เบอร์ติดต่อฉุกเฉิน">
+        <Field label="เบอร์ติดต่อฉุกเฉิน (ไม่บังคับ)">
           <input value={emg} onChange={e => setEmg(e.target.value)} placeholder="คนใกล้ตัว · กรณีจำเป็น" style={{ ...fieldStyle(), fontFamily: C.mono }}/>
+          <div style={{ fontSize: 11, color: C.muted, marginTop: 4 }}>กรุณาแจ้งให้บุคคลนี้ทราบและยินยอมก่อนกรอกข้อมูลของเขา/เธอ</div>
           {/* The name for this phone number only ever gets asked once, in
               the full Profile screen (see ProfileScreen) — this form just
               reuses whatever's already there. Showing the number alone
@@ -3981,7 +3985,17 @@ function ProfileScreen({ user, onLogout, onClose, onSave, onboard, onDeleteAccou
   // label. A toast isn't tied to whatever the button happens to say next.
   const [savedToast, setSavedToast] = uS(null);
   const [saveError, setSaveError] = uS('');
-  const canSubmit = !onboard || (nickname.trim() && phone.trim() && emgName.trim() && emgPhone.trim() && birthYear.trim());
+  // Only nickname + birth year are actually required to start using the
+  // app — phone and emergency contact used to be required too, but Apple
+  // review (guideline 5.1.1(v) and 5.1.2(iv)) flagged requiring the user's
+  // own phone number as not relevant to the app's core function, and
+  // requiring someone else's name/phone (the emergency contact — a third
+  // party who never consented to having their info collected) as
+  // collecting third-party data without that party's knowledge. Both stay
+  // in the form — they're genuinely useful for race-day safety — just
+  // optional now, with a note by the emergency contact fields asking the
+  // runner to get that person's OK first (see below).
+  const canSubmit = !onboard || (nickname.trim() && birthYear.trim());
   // Snapshot of every editable field as it stood when this screen opened —
   // compared against current values to warn before a silent-discard ✕ tap.
   // Reported directly: editing a field, then tapping ✕ without saving, gave
@@ -4130,15 +4144,20 @@ function ProfileScreen({ user, onLogout, onClose, onSave, onboard, onDeleteAccou
             ))}
           </div>
         </Field>
-        <Field label="เบอร์โทร" required={onboard}><input readOnly={readOnly} value={phone} onChange={e => setPhone(e.target.value)} placeholder="08X-XXX-XXXX" style={{ ...fieldStyle(readOnly), fontFamily: C.mono }}/></Field>
+        <Field label="เบอร์โทร"><input readOnly={readOnly} value={phone} onChange={e => setPhone(e.target.value)} placeholder="08X-XXX-XXXX" style={{ ...fieldStyle(readOnly), fontFamily: C.mono }}/></Field>
         {/* Read-only — this always reflects whichever account is actually
             signed in. It used to be a free-text field that only initialized
             from the account email but saved as plain text, so an old value
             (or a typo) would silently stick around forever on that one
             device instead of ever being corrected by the real login. */}
         <Field label="อีเมล"><div style={{ ...fieldStyle(), fontFamily: C.mono, color: C.muted, background: '#f4f1e8' }}>{user.email || '—'}</div></Field>
-        <Field label="ผู้ติดต่อฉุกเฉิน · ชื่อ" required={onboard}><input readOnly={readOnly} value={emgName} onChange={e => setEmgName(e.target.value)} placeholder="ชื่อคนใกล้ตัว" style={fieldStyle(readOnly)}/></Field>
-        <Field label="ผู้ติดต่อฉุกเฉิน · เบอร์" required={onboard}><input readOnly={readOnly} value={emgPhone} onChange={e => setEmgPhone(e.target.value)} placeholder="08X-XXX-XXXX" style={{ ...fieldStyle(readOnly), fontFamily: C.mono }}/></Field>
+        {!readOnly && (
+          <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.5, margin: '-4px 0 2px' }}>
+            ไม่บังคับ แต่ช่วยให้ทีมงานติดต่อได้เร็วขึ้นหากเกิดเหตุฉุกเฉินระหว่างแข่ง · กรุณาแจ้งให้บุคคลนี้ทราบและยินยอมก่อนกรอกข้อมูลของเขา/เธอ
+          </div>
+        )}
+        <Field label="ผู้ติดต่อฉุกเฉิน · ชื่อ"><input readOnly={readOnly} value={emgName} onChange={e => setEmgName(e.target.value)} placeholder="ชื่อคนใกล้ตัว" style={fieldStyle(readOnly)}/></Field>
+        <Field label="ผู้ติดต่อฉุกเฉิน · เบอร์"><input readOnly={readOnly} value={emgPhone} onChange={e => setEmgPhone(e.target.value)} placeholder="08X-XXX-XXXX" style={{ ...fieldStyle(readOnly), fontFamily: C.mono }}/></Field>
         <Field label="ผู้ติดต่อฉุกเฉิน คนที่ 2 · ชื่อ (ถ้ามี)"><input readOnly={readOnly} value={emgName2} onChange={e => setEmgName2(e.target.value)} placeholder="เผื่อคนแรกติดต่อไม่ได้" style={fieldStyle(readOnly)}/></Field>
         <Field label="ผู้ติดต่อฉุกเฉิน คนที่ 2 · เบอร์ (ถ้ามี)"><input readOnly={readOnly} value={emgPhone2} onChange={e => setEmgPhone2(e.target.value)} placeholder="08X-XXX-XXXX" style={{ ...fieldStyle(readOnly), fontFamily: C.mono }}/></Field>
         <Field label="กรุ๊ปเลือด">
